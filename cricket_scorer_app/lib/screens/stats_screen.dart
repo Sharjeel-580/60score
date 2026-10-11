@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../scoring.dart';
 import '../store.dart';
@@ -49,8 +50,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final byEcon = career.values.where((c) => c.ballsBowled >= 24).toList()
       ..sort((a, b) => a.economy.compareTo(b.economy));
     final teamStats = computeTeamStats(store.matches);
-    final archive =
-        store.matches.where((m) => m.status != 'live').toList();
+    final archive = store.matches.where((m) => m.status != 'live').toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Stats & History')),
@@ -60,13 +60,19 @@ class _StatsScreenState extends State<StatsScreen> {
           _section('Leaderboard — Most Runs'),
           for (final c in byRuns.take(10))
             if (c.runs > 0)
-              _playerTile(context, c,
-                  '${c.runs} runs • Avg ${c.battingAverage.toStringAsFixed(1)} • SR ${c.battingSR.toStringAsFixed(0)}'),
+              _playerTile(
+                context,
+                c,
+                '${c.runs} runs • Avg ${c.battingAverage.toStringAsFixed(1)} • SR ${c.battingSR.toStringAsFixed(0)}',
+              ),
           _section('Leaderboard — Most Wickets'),
           for (final c in byWkts.take(10))
             if (c.wickets > 0)
-              _playerTile(context, c,
-                  '${c.wickets} wkts • Econ ${c.economy.toStringAsFixed(2)} • Best ${c.bestFigures}'),
+              _playerTile(
+                context,
+                c,
+                '${c.wickets} wkts • Econ ${c.economy.toStringAsFixed(2)} • Best ${c.bestFigures}',
+              ),
           _section('Best Batting Strike Rate (min 20 balls)'),
           for (final c in bySR.take(5))
             _playerTile(context, c, 'SR ${c.battingSR.toStringAsFixed(1)}'),
@@ -75,72 +81,88 @@ class _StatsScreenState extends State<StatsScreen> {
             _playerTile(context, c, 'Econ ${c.economy.toStringAsFixed(2)}'),
           const Divider(height: 28),
           _section('Players'),
-          Wrap(spacing: 8, children: [
-            FilledButton.tonalIcon(
-              onPressed: () => Navigator.push(
+          Wrap(
+            spacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => CompareScreen(store: store))),
-              icon: const Icon(Icons.compare_arrows),
-              label: const Text('Compare players 1-to-1'),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: () async {
-                await _addPastScore(context);
-                if (mounted) setState(() {});
-              },
-              icon: const Icon(Icons.add_chart),
-              label: const Text('Add past scores'),
-            ),
-          ]),
+                    builder: (_) => CompareScreen(store: store),
+                  ),
+                ),
+                icon: const Icon(Icons.compare_arrows),
+                label: const Text('Compare players 1-to-1'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () async {
+                  await _addPastScore(context);
+                  if (mounted) setState(() {});
+                },
+                icon: const Icon(Icons.add_chart),
+                label: const Text('Add past scores'),
+              ),
+            ],
+          ),
           for (final entry in persons.entries)
             ListTile(
               dense: true,
               leading: const CircleAvatar(child: Icon(Icons.person, size: 18)),
               title: Text(entry.value),
-              subtitle: Text(career.containsKey(entry.key)
-                  ? '${career[entry.key]!.matches} matches • ${career[entry.key]!.runs} runs • ${career[entry.key]!.wickets} wkts • MVP ${career[entry.key]!.mvpPoints.toStringAsFixed(0)}'
-                  : 'No matches yet'),
+              subtitle: Text(
+                career.containsKey(entry.key)
+                    ? '${career[entry.key]!.matches} matches • ${career[entry.key]!.runs} runs • ${career[entry.key]!.wickets} wkts • MVP ${career[entry.key]!.mvpPoints.toStringAsFixed(0)}'
+                    : 'No matches yet',
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => PlayerProfileScreen(
-                          store: store, playerId: entry.key))),
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      PlayerProfileScreen(store: store, playerId: entry.key),
+                ),
+              ),
             ),
           const Divider(height: 28),
           _section('Teams'),
           for (final t in store.teams)
-            Builder(builder: (context) {
-              final s = teamStats[t.id];
-              return ListTile(
-                dense: true,
-                title: Text(t.name),
-                subtitle: Text(s == null
-                    ? 'No matches'
-                    : 'P ${s.played} • W ${s.won} • L ${s.lost} • Win% ${s.winPct.toStringAsFixed(0)} • Bat first W ${s.wonBattingFirst}/${s.battedFirst} • Chase W ${s.wonChasing}/${s.chased} • Toss won ${s.tossWon}'),
-              );
-            }),
+            Builder(
+              builder: (context) {
+                final s = teamStats[t.id];
+                return ListTile(
+                  dense: true,
+                  title: Text(t.name),
+                  subtitle: Text(
+                    s == null
+                        ? 'No matches'
+                        : 'P ${s.played} • W ${s.won} • L ${s.lost} • Win% ${s.winPct.toStringAsFixed(0)} • Bat first W ${s.wonBattingFirst}/${s.battedFirst} • Chase W ${s.wonChasing}/${s.chased} • Toss won ${s.tossWon}',
+                  ),
+                );
+              },
+            ),
           const SizedBox(height: 6),
           FilledButton.tonalIcon(
             onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => HeadToHeadScreen(store: store))),
+              context,
+              MaterialPageRoute(builder: (_) => HeadToHeadScreen(store: store)),
+            ),
             icon: const Icon(Icons.sports),
             label: const Text('Head-to-head'),
           ),
           const Divider(height: 28),
           _section('Past score entries (manual)'),
           if (store.manualStats.isEmpty)
-            const Text('No manual entries. Use "Add past scores" to bring in old performances.',
-                style: TextStyle(color: Colors.white54)),
+            const Text(
+              'No manual entries. Use "Add past scores" to bring in old performances.',
+              style: TextStyle(color: Colors.white54),
+            ),
           for (final e in store.manualStats)
             ListTile(
               dense: true,
               title: Text('${e.playerName} — ${e.matchLabel}'),
               subtitle: Text(
-                  '${e.runs} (${e.balls}) • ${e.wickets} wkts • ${e.runsConceded} conceded • manual entry'),
+                '${e.runs} (${e.balls}) • ${e.wickets} wkts • ${e.runsConceded} conceded • manual entry',
+              ),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () async {
@@ -152,16 +174,21 @@ class _StatsScreenState extends State<StatsScreen> {
           const Divider(height: 28),
           _section('Match Archive'),
           if (archive.isEmpty)
-            const Text('No completed matches yet.',
-                style: TextStyle(color: Colors.white54)),
+            const Text(
+              'No completed matches yet.',
+              style: TextStyle(color: Colors.white54),
+            ),
           for (final m in archive)
             Card(
               child: ListTile(
                 title: Text(
-                    '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}'),
-                subtitle: Text(m.resultText.isNotEmpty
-                    ? m.resultText
-                    : '${m.dateIso} • ${m.status}'),
+                  '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}',
+                ),
+                subtitle: Text(
+                  m.resultText.isNotEmpty
+                      ? m.resultText
+                      : '${m.dateIso} • ${m.status}',
+                ),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline),
                   onPressed: () async {
@@ -170,10 +197,11 @@ class _StatsScreenState extends State<StatsScreen> {
                   },
                 ),
                 onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            ScorecardScreen(store: store, match: m))),
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ScorecardScreen(store: store, match: m),
+                  ),
+                ),
               ),
             ),
           const SizedBox(height: 24),
@@ -183,11 +211,16 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Widget _section(String title) => Padding(
-        padding: const EdgeInsets.only(top: 10, bottom: 4),
-        child: Text(title,
-            style: const TextStyle(
-                fontSize: 15, fontWeight: FontWeight.bold, color: kCopper)),
-      );
+    padding: const EdgeInsets.only(top: 10, bottom: 4),
+    child: Text(
+      title,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.bold,
+        color: kCopper,
+      ),
+    ),
+  );
 
   Widget _playerTile(BuildContext context, CareerStats c, String sub) {
     return ListTile(
@@ -196,10 +229,12 @@ class _StatsScreenState extends State<StatsScreen> {
       subtitle: Text(sub),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) =>
-                  PlayerProfileScreen(store: store, playerId: c.playerId))),
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              PlayerProfileScreen(store: store, playerId: c.playerId),
+        ),
+      ),
     );
   }
 
@@ -223,42 +258,121 @@ class _StatsScreenState extends State<StatsScreen> {
         builder: (c, setD) => AlertDialog(
           title: const Text('Add past score (manual)'),
           content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              if (persons.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: playerId,
-                  decoration: const InputDecoration(labelText: 'Player'),
-                  items: persons.entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value)))
-                      .toList(),
-                  onChanged: (v) => setD(() => playerId = v),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (persons.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    initialValue: playerId,
+                    decoration: const InputDecoration(labelText: 'Player'),
+                    items: persons.entries
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setD(() => playerId = v),
+                  ),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Or type a new player name',
+                  ),
                 ),
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Or type a new player name')),
-              TextField(controller: labelCtrl, decoration: const InputDecoration(labelText: 'Match label (e.g. Season 1 Final)')),
-              Row(children: [
-                Expanded(child: TextField(controller: runs, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Runs'))),
-                const SizedBox(width: 8),
-                Expanded(child: TextField(controller: balls, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Balls'))),
-              ]),
-              Row(children: [
-                Expanded(child: TextField(controller: fours, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '4s'))),
-                const SizedBox(width: 8),
-                Expanded(child: TextField(controller: sixes, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6s'))),
-              ]),
-              CheckboxListTile(value: notOut, title: const Text('Not out'), onChanged: (v) => setD(() => notOut = v ?? false)),
-              Row(children: [
-                Expanded(child: TextField(controller: wkts, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Wickets'))),
-                const SizedBox(width: 8),
-                Expanded(child: TextField(controller: conceded, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Runs conceded'))),
-                const SizedBox(width: 8),
-                Expanded(child: TextField(controller: ballsBowled, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Balls bowled'))),
-              ]),
-            ]),
+                TextField(
+                  controller: labelCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Match label (e.g. Season 1 Final)',
+                  ),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: runs,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Runs'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: balls,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Balls'),
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: fours,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: '4s'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: sixes,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: '6s'),
+                      ),
+                    ),
+                  ],
+                ),
+                CheckboxListTile(
+                  value: notOut,
+                  title: const Text('Not out'),
+                  onChanged: (v) => setD(() => notOut = v ?? false),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: wkts,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Wickets'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: conceded,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Runs conceded',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: ballsBowled,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Balls bowled',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Add')),
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Add'),
+            ),
           ],
         ),
       ),
@@ -272,21 +386,25 @@ class _StatsScreenState extends State<StatsScreen> {
         await store.upsertRegPlayer(RegPlayer(id: id, name: name));
       }
       if (id == null) return;
-      await store.addManualStat(ManualStatEntry(
-        id: Store.newId('manual'),
-        playerId: id,
-        playerName: name,
-        matchLabel: labelCtrl.text.trim().isEmpty ? 'Past match' : labelCtrl.text.trim(),
-        dateIso: DateTime.now().toIso8601String().substring(0, 10),
-        runs: n(runs),
-        balls: n(balls),
-        fours: n(fours),
-        sixes: n(sixes),
-        notOut: notOut,
-        wickets: n(wkts),
-        runsConceded: n(conceded),
-        ballsBowled: n(ballsBowled),
-      ));
+      await store.addManualStat(
+        ManualStatEntry(
+          id: Store.newId('manual'),
+          playerId: id,
+          playerName: name,
+          matchLabel: labelCtrl.text.trim().isEmpty
+              ? 'Past match'
+              : labelCtrl.text.trim(),
+          dateIso: DateTime.now().toIso8601String().substring(0, 10),
+          runs: n(runs),
+          balls: n(balls),
+          fours: n(fours),
+          sixes: n(sixes),
+          notOut: notOut,
+          wickets: n(wkts),
+          runsConceded: n(conceded),
+          ballsBowled: n(ballsBowled),
+        ),
+      );
     }
   }
 }
@@ -294,8 +412,11 @@ class _StatsScreenState extends State<StatsScreen> {
 class PlayerProfileScreen extends StatelessWidget {
   final Store store;
   final String playerId;
-  const PlayerProfileScreen(
-      {super.key, required this.store, required this.playerId});
+  const PlayerProfileScreen({
+    super.key,
+    required this.store,
+    required this.playerId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -304,12 +425,16 @@ class PlayerProfileScreen extends StatelessWidget {
     final reg = store.regById(playerId);
     final manual = store.manualStats.where((e) => e.playerId == playerId);
     Widget row(String k, String v) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(children: [
-            Expanded(child: Text(k, style: const TextStyle(color: Colors.white70))),
-            Text(v, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ]),
-        );
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(k, style: const TextStyle(color: Colors.white70)),
+          ),
+          Text(v, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
     return Scaffold(
       appBar: AppBar(title: Text(store.playerName(playerId))),
       body: ListView(
@@ -317,13 +442,21 @@ class PlayerProfileScreen extends StatelessWidget {
         children: [
           if (reg != null)
             Text(
-                '${reg.role} • ${reg.battingStyle} bat • ${reg.bowlingStyle}'
-                '${reg.area.isNotEmpty ? ' • ${reg.area}' : ''}'
-                '${reg.age > 0 ? ' • Age ${reg.age}' : ''}'
-                '${reg.category.isNotEmpty ? ' • ${reg.category}' : ''}',
-                style: const TextStyle(color: Colors.white70)),
+              '${reg.role} • ${reg.battingStyle} bat • ${reg.bowlingStyle}'
+              '${reg.area.isNotEmpty ? ' • ${reg.area}' : ''}'
+              '${reg.age > 0 ? ' • Age ${reg.age}' : ''}'
+              '${reg.category.isNotEmpty ? ' • ${reg.category}' : ''}',
+              style: const TextStyle(color: Colors.white70),
+            ),
           const SizedBox(height: 8),
-          const Text('Batting', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kCyan)),
+          const Text(
+            'Batting',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: kCyan,
+            ),
+          ),
           row('Matches', '${c.matches}'),
           row('Innings', '${c.inningsBatted}'),
           row('Runs', '${c.runs}'),
@@ -335,31 +468,58 @@ class PlayerProfileScreen extends StatelessWidget {
           row('4s / 6s', '${c.fours} / ${c.sixes}'),
           row('Not outs', '${c.notOuts}'),
           const Divider(height: 24),
-          const Text('Bowling', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kCyan)),
+          const Text(
+            'Bowling',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: kCyan,
+            ),
+          ),
           row('Balls bowled', '${c.ballsBowled}'),
           row('Overs', oversText(c.ballsBowled, 6)),
           row('Runs conceded', '${c.runsConceded}'),
           row('Wickets', '${c.wickets}'),
-          row('Average', c.wickets == 0 ? '-' : c.bowlingAverage.toStringAsFixed(2)),
+          row(
+            'Average',
+            c.wickets == 0 ? '-' : c.bowlingAverage.toStringAsFixed(2),
+          ),
           row('Economy', c.economy.toStringAsFixed(2)),
-          row('Strike rate', c.wickets == 0 ? '-' : c.bowlingSR.toStringAsFixed(1)),
+          row(
+            'Strike rate',
+            c.wickets == 0 ? '-' : c.bowlingSR.toStringAsFixed(1),
+          ),
           row('Best figures', c.bestFigures),
           const Divider(height: 24),
-          const Text('Fielding & MVP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kCyan)),
+          const Text(
+            'Fielding & MVP',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: kCyan,
+            ),
+          ),
           row('Catches', '${c.catches}'),
           row('Stumpings', '${c.stumpings}'),
           row('Run outs', '${c.runOuts}'),
           row('MVP points', c.mvpPoints.toStringAsFixed(0)),
           if (manual.isNotEmpty) ...[
             const Divider(height: 24),
-            const Text('Manual past-score entries',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kCopper)),
+            const Text(
+              'Manual past-score entries',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: kCopper,
+              ),
+            ),
             for (final e in manual)
               ListTile(
                 dense: true,
                 title: Text(e.matchLabel),
                 subtitle: Text(
-                    '${e.runs} (${e.balls}) • ${e.wickets} wkts • ${e.runsConceded} conceded'),
+                  '${e.runs} (${e.balls}) • ${e.wickets} wkts • ${e.runsConceded} conceded',
+                ),
               ),
           ],
         ],
@@ -400,35 +560,80 @@ class _CompareScreenState extends State<CompareScreen> {
     }
 
     Widget row(String label, String va, String vb) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(children: [
-            Expanded(child: Text(va, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
-            Expanded(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60))),
-            Expanded(child: Text(vb, style: const TextStyle(fontWeight: FontWeight.bold))),
-          ]),
-        );
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              va,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white60),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              vb,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Compare players')),
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
-          Row(children: [
-            Expanded(child: picker('Player A', aId, (v) => setState(() => aId = v))),
-            const SizedBox(width: 10),
-            Expanded(child: picker('Player B', bId, (v) => setState(() => bId = v))),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: picker('Player A', aId, (v) => setState(() => aId = v)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: picker('Player B', bId, (v) => setState(() => bId = v)),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           if (a != null && b != null) ...[
             row('Matches', '${a.matches}', '${b.matches}'),
             row('Runs', '${a.runs}', '${b.runs}'),
             row('High score', '${a.highScore}', '${b.highScore}'),
-            row('Bat average', a.battingAverage.toStringAsFixed(1), b.battingAverage.toStringAsFixed(1)),
-            row('Bat SR', a.battingSR.toStringAsFixed(1), b.battingSR.toStringAsFixed(1)),
-            row('50s / 100s', '${a.fifties}/${a.hundreds}', '${b.fifties}/${b.hundreds}'),
+            row(
+              'Bat average',
+              a.battingAverage.toStringAsFixed(1),
+              b.battingAverage.toStringAsFixed(1),
+            ),
+            row(
+              'Bat SR',
+              a.battingSR.toStringAsFixed(1),
+              b.battingSR.toStringAsFixed(1),
+            ),
+            row(
+              '50s / 100s',
+              '${a.fifties}/${a.hundreds}',
+              '${b.fifties}/${b.hundreds}',
+            ),
             row('Wickets', '${a.wickets}', '${b.wickets}'),
-            row('Economy', a.economy.toStringAsFixed(2), b.economy.toStringAsFixed(2)),
+            row(
+              'Economy',
+              a.economy.toStringAsFixed(2),
+              b.economy.toStringAsFixed(2),
+            ),
             row('Best figures', a.bestFigures, b.bestFigures),
-            row('MVP points', a.mvpPoints.toStringAsFixed(0), b.mvpPoints.toStringAsFixed(0)),
+            row(
+              'MVP points',
+              a.mvpPoints.toStringAsFixed(0),
+              b.mvpPoints.toStringAsFixed(0),
+            ),
           ],
         ],
       ),
@@ -461,37 +666,54 @@ class _HeadToHeadScreenState extends State<HeadToHeadScreen> {
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
-          Row(children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: aId,
-                decoration: const InputDecoration(labelText: 'Team A'),
-                items: teams.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
-                onChanged: (v) => setState(() => aId = v),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: aId,
+                  decoration: const InputDecoration(labelText: 'Team A'),
+                  items: teams
+                      .map(
+                        (t) =>
+                            DropdownMenuItem(value: t.id, child: Text(t.name)),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => aId = v),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: bId,
-                decoration: const InputDecoration(labelText: 'Team B'),
-                items: teams.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
-                onChanged: (v) => setState(() => bId = v),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: bId,
+                  decoration: const InputDecoration(labelText: 'Team B'),
+                  items: teams
+                      .map(
+                        (t) =>
+                            DropdownMenuItem(value: t.id, child: Text(t.name)),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => bId = v),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 20),
           if (h != null)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(children: [
-                  Text('Played: ${h.played}', style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 8),
-                  Text('${widget.store.teamName(aId!)} wins: ${h.aWins}'),
-                  Text('${widget.store.teamName(bId!)} wins: ${h.bWins}'),
-                  Text('Tied: ${h.tied} • No result: ${h.noResult}'),
-                ]),
+                child: Column(
+                  children: [
+                    Text(
+                      'Played: ${h.played}',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('${widget.store.teamName(aId!)} wins: ${h.aWins}'),
+                    Text('${widget.store.teamName(bId!)} wins: ${h.bWins}'),
+                    Text('Tied: ${h.tied} • No result: ${h.noResult}'),
+                  ],
+                ),
               ),
             ),
         ],

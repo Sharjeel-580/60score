@@ -7,76 +7,82 @@ import '../theme.dart';
 import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
 import 'scoring_screen.dart';
+import 'stats_screen.dart';
 import 'teams_screen.dart';
 import 'tournament_stats.dart';
 
+// 60Score v4 home: blue/red fire theme matching the AI mockup.
+// Header logo + hero banner are cropped from the approved artwork.
 class ScorerHomeScreen extends StatelessWidget {
   final Store store;
   const ScorerHomeScreen({super.key, required this.store});
+
+  static const _bg = Color(0xFF05080D);
+  static const _blue = Color(0xFF29B6F6);
+  static const _cyan = Color(0xFF00E5FF);
+  static const _red = Color(0xFFFF3D2E);
 
   @override
   Widget build(BuildContext context) {
     final live = store.matches.where((m) => m.status == 'live').toList();
     final done = store.matches.where((m) => m.status != 'live').toList();
+    final tournamentsKey = GlobalKey();
+    final liveKey = GlobalKey();
+
+    void scrollTo(GlobalKey key) {
+      final ctx = key.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 400));
+      }
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scorer'),
-        actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => TeamsScreen(store: store)),
-            ),
-            icon: const Icon(Icons.groups, color: kCyan),
-            label: const Text('Teams', style: TextStyle(color: kCyan)),
-          ),
-        ],
-      ),
+      backgroundColor: _bg,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => MatchSetupScreen(store: store)),
         ),
+        backgroundColor: _red,
+        foregroundColor: Colors.white,
         icon: const Icon(Icons.sports_cricket),
         label: const Text('New match'),
       ),
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
-          _brandHeader(context),
+          _header(context),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: _heroBanner(),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: _statsRow(live.length, done.length),
+            child: _actionGrid(context,
+                onTournaments: () => scrollTo(tournamentsKey),
+                onLive: () => scrollTo(liveKey)),
           ),
-          const SizedBox(height: 14),
-          _sectionTitle(context, 'Tournaments', Icons.emoji_events),
+          const SizedBox(height: 18),
+          _sectionHeader(
+            key: tournamentsKey,
+            context,
+            icon: Icons.emoji_events,
+            iconColor: const Color(0xFFFFB300),
+            title: 'Upcoming Tournaments',
+            onViewAll: () => scrollTo(tournamentsKey),
+          ),
           if (store.tournaments.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                'No tournaments yet.',
-                style: TextStyle(color: Colors.white54),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text('No tournaments yet.',
+                  style: TextStyle(color: Colors.white54)),
             ),
           for (final t in store.tournaments)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  leading: const Icon(Icons.emoji_events, color: kCopper),
-                  title: Text(t.name),
-                  subtitle: Text('${t.teamIds.length} teams'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          TournamentDetailScreen(store: store, tournament: t),
-                    ),
-                  ),
-                ),
-              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: _tournamentCard(context, t),
             ),
           Align(
             alignment: Alignment.centerLeft,
@@ -84,41 +90,52 @@ class ScorerHomeScreen extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4),
               child: TextButton.icon(
                 onPressed: () => _createTournament(context),
-                icon: const Icon(Icons.add),
-                label: const Text('Create tournament'),
+                icon: const Icon(Icons.add, color: _cyan),
+                label:
+                    const Text('Create tournament', style: TextStyle(color: _cyan)),
               ),
             ),
           ),
-          const Divider(height: 16),
-          _sectionTitle(context, 'Live matches', Icons.play_circle,
-              badge: live.isNotEmpty ? '${live.length}' : null),
+          const SizedBox(height: 8),
+          _sectionHeader(
+            key: liveKey,
+            context,
+            icon: Icons.play_circle,
+            iconColor: _cyan,
+            title: 'Live Matches',
+            badge: live.isNotEmpty ? '${live.length}' : null,
+            onViewAll: () => scrollTo(liveKey),
+          ),
           if (live.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               child: Text(
-                'No live matches.',
-                style: TextStyle(color: Colors.white54),
-              ),
+                  'No live matches right now.', style: TextStyle(color: Colors.white54)),
             ),
           for (final m in live)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: _matchTile(context, m, live: true),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: _liveMatchCard(context, m),
             ),
-          const SizedBox(height: 10),
-          _sectionTitle(context, 'Completed', Icons.check_circle),
+          const SizedBox(height: 8),
+          _sectionHeader(
+            context,
+            icon: Icons.check_circle,
+            iconColor: Colors.white54,
+            title: 'Recent Results',
+          ),
           if (done.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text(
-                'No completed matches yet.',
-                style: TextStyle(color: Colors.white54),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text('No completed matches yet.',
+                  style: TextStyle(color: Colors.white54)),
             ),
           for (final m in done)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: _matchTile(context, m, live: false),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: _matchTile(context, m),
             ),
           const SizedBox(height: 90),
         ],
@@ -126,99 +143,216 @@ class ScorerHomeScreen extends StatelessWidget {
     );
   }
 
-  /// Branded professional header: 60Score logo lockup + offline badge.
-  Widget _brandHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0A1F2C), Color(0xFF030A10)],
-        ),
-        border: Border(bottom: BorderSide(color: kTealDark, width: 1)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
-      child: Column(
+  /// Top bar: 60Score logo artwork + circular Teams button (like the mockup).
+  Widget _header(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 52, 12, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Image.asset('assets/app_logo.png', fit: BoxFit.contain, height: 170),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: kTeal.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: kTeal, width: 1),
+          Expanded(
+            child: Image.asset(
+              'assets/home_header_logo.png',
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
             ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.wifi_off, size: 14, color: kCyan),
-                SizedBox(width: 6),
-                Text(
-                  '100% Offline • Your data stays on this phone',
-                  style: TextStyle(color: kCyan, fontSize: 12),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _blue.withValues(alpha: 0.7), width: 1.5),
+                  color: _blue.withValues(alpha: 0.12),
                 ),
-              ],
-            ),
+                child: IconButton(
+                  icon: const Icon(Icons.groups, color: _cyan),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => TeamsScreen(store: store)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text('Teams',
+                  style: TextStyle(color: Colors.white70, fontSize: 11)),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Quick stats strip.
-  Widget _statsRow(int liveCount, int doneCount) {
-    return Row(
+  /// Hero banner artwork + carousel dots (decorative, like the mockup).
+  Widget _heroBanner() {
+    return Column(
       children: [
-        _statChip(
-          Icons.emoji_events,
-          '${store.tournaments.length}',
-          'Tournaments',
-          kCopper,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Image.asset('assets/hero_banner.png', fit: BoxFit.cover),
         ),
-        const SizedBox(width: 8),
-        _statChip(
-          Icons.play_circle,
-          '$liveCount',
-          'Live now',
-          kCyan,
-        ),
-        const SizedBox(width: 8),
-        _statChip(
-          Icons.sports_cricket,
-          '${liveCount + doneCount}',
-          'Matches',
-          Colors.white70,
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                    shape: BoxShape.circle, color: _cyan)),
+            const SizedBox(width: 6),
+            Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.25))),
+            const SizedBox(width: 6),
+            Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.25))),
+          ],
         ),
       ],
     );
   }
 
-  Widget _statChip(IconData icon, String value, String label, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: kPanel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: kTealDark, width: 1),
+  /// 2x2 action cards: Tournaments / Live Matches / Teams / Stats.
+  Widget _actionGrid(BuildContext context,
+      {required VoidCallback onTournaments, required VoidCallback onLive}) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      childAspectRatio: 1.55,
+      children: [
+        _actionCard(
+          title: 'Tournaments',
+          subtitle: 'Create & Manage',
+          icon: Icons.emoji_events,
+          gradient: const [Color(0xFFB26A00), Color(0xFF5C2E00)],
+          border: const Color(0xFFFFB300),
+          onTap: onTournaments,
         ),
+        _actionCard(
+          title: 'Live Matches',
+          subtitle: 'Ball by Ball Scores',
+          icon: Icons.play_circle,
+          gradient: const [Color(0xFFC62828), Color(0xFF4A0E0E)],
+          border: _red,
+          badge: 'LIVE',
+          onTap: onLive,
+        ),
+        _actionCard(
+          title: 'Teams',
+          subtitle: 'Manage Teams',
+          icon: Icons.groups,
+          gradient: const [Color(0xFF0277BD), Color(0xFF0A2A4A)],
+          border: _blue,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => TeamsScreen(store: store)),
+          ),
+        ),
+        _actionCard(
+          title: 'Stats',
+          subtitle: 'Players & Records',
+          icon: Icons.bar_chart,
+          gradient: const [Color(0xFF6A1B9A), Color(0xFF2A0A4A)],
+          border: const Color(0xFFBA68C8),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => StatsScreen(store: store)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Color> gradient,
+    required Color border,
+    required VoidCallback onTap,
+    String? badge,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: gradient,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: border.withValues(alpha: 0.55), width: 1),
+        ),
+        padding: const EdgeInsets.all(12),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 30),
+                if (badge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _red,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(badge,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
+                  ),
+              ],
             ),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold)),
+                    Text(subtitle,
+                        style: TextStyle(
+                            color:
+                                Colors.white.withValues(alpha: 0.75),
+                            fontSize: 11)),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: border.withValues(alpha: 0.8), width: 1.5),
+                  ),
+                  child: Icon(Icons.chevron_right,
+                      color: border, size: 18),
+                ),
+              ],
             ),
           ],
         ),
@@ -226,76 +360,281 @@ class ScorerHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _sectionTitle(
-    BuildContext context,
-    String title,
-    IconData icon, {
+  Widget _sectionHeader(
+    BuildContext context, {
+    Key? key,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
     String? badge,
+    VoidCallback? onViewAll,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      key: key,
+      padding: const EdgeInsets.fromLTRB(14, 4, 12, 8),
       child: Row(
         children: [
-          Container(width: 4, height: 20, color: kCyan),
+          Icon(icon, size: 20, color: iconColor),
           const SizedBox(width: 8),
-          Icon(icon, size: 18, color: kCyan),
-          const SizedBox(width: 6),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 17, fontWeight: FontWeight.bold)),
           if (badge != null) ...[
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
               decoration: BoxDecoration(
-                color: kCyan,
+                color: _red,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
-                badge,
-                style: const TextStyle(
-                  color: Color(0xFF03222B),
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text(badge,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold)),
             ),
           ],
+          const Spacer(),
+          if (onViewAll != null)
+            GestureDetector(
+              onTap: onViewAll,
+              child: const Row(
+                children: [
+                  Text('View All',
+                      style: TextStyle(color: _cyan, fontSize: 13)),
+                  Icon(Icons.chevron_right, color: _cyan, size: 18),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _matchTile(BuildContext context, Match m, {required bool live}) {
+  Widget _tournamentCard(BuildContext context, Tournament t) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: const Color(0xFF0B1220),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: _blue.withValues(alpha: 0.25), width: 1),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.asset('assets/app_icon_v4.png',
+              width: 64, height: 64, fit: BoxFit.cover),
+        ),
+        title: Text(t.name,
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.groups, size: 14, color: Colors.white54),
+                const SizedBox(width: 4),
+                Text('${t.teamIds.length} Teams',
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 12)),
+              ],
+            ),
+            if (t.venue.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Icon(Icons.location_on,
+                      size: 14, color: Colors.white54),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(t.venue,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                TournamentDetailScreen(store: store, tournament: t),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Live match card styled like the mockup: LIVE badge, tournament,
+  /// innings label, team crests + score, VS divider.
+  Widget _liveMatchCard(BuildContext context, Match m) {
+    final inn = m.innings.isNotEmpty ? m.innings.last : null;
+    final innNo = inn != null ? m.innings.indexOf(inn) + 1 : 0;
+    final t = store.tournamentById(m.tournamentId);
+    Widget crest(String teamId, Color c) {
+      final name = store.teamName(teamId);
+      final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [c, c.withValues(alpha: 0.45)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25), width: 1),
+            ),
+            alignment: Alignment.center,
+            child: Text(initial,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 84,
+            child: Text(name,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ScoringScreen(store: store, match: m)),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF3A0E0E), Color(0xFF12060A)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border:
+              Border.all(color: _red.withValues(alpha: 0.4), width: 1),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _red,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text('LIVE',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: Text(
+                    t?.name ?? '',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+                Text(
+                  inn != null ? '${_ordinal(innNo)} Innings' : '',
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                crest(m.teamAId, _red),
+                Column(
+                  children: [
+                    Text(
+                      inn != null
+                          ? '${inn.totalRuns}/${inn.wickets}'
+                          : 'vs',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    if (inn != null)
+                      Text(
+                        '(${oversText(inn.legalBalls, inn.ballsPerOver)})',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12),
+                      ),
+                    const Text('VS',
+                        style: TextStyle(
+                            color: _red,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                crest(m.teamBId, _blue),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _ordinal(int n) {
+    if (n == 1) return '1st';
+    if (n == 2) return '2nd';
+    if (n == 3) return '3rd';
+    return '${n}th';
+  }
+
+  Widget _matchTile(BuildContext context, Match m) {
     final summary = m.innings.isEmpty
         ? 'Not started'
         : m.innings
-              .map(
-                (i) =>
-                    '${store.teamName(i.battingTeamId)} ${i.totalRuns}/${i.wickets} (${oversText(i.legalBalls, i.ballsPerOver)})',
-              )
-              .join('  •  ');
+            .map(
+              (i) =>
+                  '${store.teamName(i.battingTeamId)} ${i.totalRuns}/${i.wickets} (${oversText(i.legalBalls, i.ballsPerOver)})',
+            )
+            .join('  •  ');
     return Card(
       margin: EdgeInsets.zero,
+      color: const Color(0xFF0B1220),
       child: ListTile(
-        leading: live
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade700,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'LIVE',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              )
-            : const Icon(Icons.check_circle, color: Colors.white54),
+        leading:
+            const Icon(Icons.check_circle, color: Colors.white54),
         title: Text(
           '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}',
           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -305,9 +644,7 @@ class ScorerHomeScreen extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => live
-                ? ScoringScreen(store: store, match: m)
-                : ScorecardScreen(store: store, match: m),
+            builder: (_) => ScorecardScreen(store: store, match: m),
           ),
         ),
       ),

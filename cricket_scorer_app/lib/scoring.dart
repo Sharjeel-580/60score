@@ -12,7 +12,9 @@ class BallInput {
   String wicketType;
   String outPlayerId; // defaults to striker
   String fielderId;
-  int? zone;
+  int? zone; // legacy, kept for API compat
+  double? shotX; // wagon-wheel shot point, normalized -1..1
+  double? shotY;
 
   BallInput({
     this.extraType = 'none',
@@ -23,6 +25,8 @@ class BallInput {
     this.outPlayerId = '',
     this.fielderId = '',
     this.zone,
+    this.shotX,
+    this.shotY,
   });
 }
 
@@ -188,6 +192,8 @@ bool applyBall(InningsState s, BallInput input) {
         : '',
     fielderId: input.fielderId,
     zone: input.zone,
+    shotX: input.shotX,
+    shotY: input.shotY,
     totalRuns: total,
     legalBall: legal,
   );
@@ -708,21 +714,27 @@ List<int> manhattanData(InningsState inn) {
   return out;
 }
 
-class ZoneStat {
-  int balls = 0;
-  int runs = 0;
+/// One plotted shot on the wagon wheel.
+class ShotPlot {
+  double x; // normalized -1..1 (boundary = 1.0), screen orientation
+  double y;
+  int runs; // bat runs off the shot
+  bool isWicket;
+  ShotPlot(this.x, this.y, this.runs, this.isWicket);
 }
 
-/// Wagon-wheel aggregation for one batter in one innings: zone -> stat.
-Map<int, ZoneStat> wagonWheelData(InningsState inn, String playerId) {
-  final map = <int, ZoneStat>{};
+/// Wagon-wheel shots for one batter in one innings: every plotted ball.
+List<ShotPlot> wagonWheelShots(InningsState inn, String playerId) {
+  final list = <ShotPlot>[];
   for (final ev in inn.events) {
-    if (ev.strikerId != playerId || ev.zone == null) continue;
-    final z = map.putIfAbsent(ev.zone!, () => ZoneStat());
-    z.balls++;
-    z.runs += ev.extraType == 'wide' ? 0 : ev.batRuns;
+    if (ev.strikerId != playerId) continue;
+    if (ev.extraType == 'wide') continue;
+    final x = ev.shotX;
+    final y = ev.shotY;
+    if (x == null || y == null) continue;
+    list.add(ShotPlot(x, y, ev.batRuns, ev.isWicket));
   }
-  return map;
+  return list;
 }
 
 // ---------------- Partnerships ----------------

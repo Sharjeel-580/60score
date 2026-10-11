@@ -1,6 +1,7 @@
 // Data models for CricScore Offline. Pure Dart (no Flutter imports) so the
 // scoring logic can be unit-tested easily. All classes are JSON-serializable
 // for SharedPreferences persistence.
+import 'dart:math' as math;
 
 class Player {
   String id;
@@ -133,7 +134,9 @@ class BallEvent {
   String wicketType; // '' or bowled/caught/lbw/runOut/stumped/hitWicket
   String outPlayerId; // '' if none
   String fielderId; // '' if none (catch / run-out / stumping credit)
-  int? zone; // wagon-wheel zone 1..8, null if not recorded
+  int? zone; // legacy wagon-wheel zone 1..8 (read-only, replaced by shotX/shotY)
+  double? shotX; // wagon-wheel shot point, normalized -1..1 (boundary = 1.0)
+  double? shotY; // wagon-wheel shot point, normalized -1..1 (boundary = 1.0)
   int totalRuns; // total team runs from this delivery
   bool legalBall;
 
@@ -150,6 +153,8 @@ class BallEvent {
     this.outPlayerId = '',
     this.fielderId = '',
     this.zone,
+    this.shotX,
+    this.shotY,
     this.totalRuns = 0,
     this.legalBall = true,
   });
@@ -167,6 +172,8 @@ class BallEvent {
     'outPlayerId': outPlayerId,
     'fielderId': fielderId,
     'zone': zone,
+    'shotX': shotX,
+    'shotY': shotY,
     'totalRuns': totalRuns,
     'legalBall': legalBall,
   };
@@ -184,6 +191,10 @@ class BallEvent {
     outPlayerId: j['outPlayerId'] as String? ?? '',
     fielderId: j['fielderId'] as String? ?? '',
     zone: (j['zone'] as num?)?.toInt(),
+    shotX: (j['shotX'] as num?)?.toDouble() ??
+        _legacyZonePoint((j['zone'] as num?)?.toInt()).$1,
+    shotY: (j['shotY'] as num?)?.toDouble() ??
+        _legacyZonePoint((j['zone'] as num?)?.toInt()).$2,
     totalRuns: (j['totalRuns'] as num?)?.toInt() ?? 0,
     legalBall: j['legalBall'] as bool? ?? true,
   );
@@ -204,6 +215,14 @@ class BallEvent {
         return isWicket ? (batRuns > 0 ? '$batRuns+W' : 'W') : '$batRuns';
     }
   }
+}
+
+/// Converts a legacy wagon-wheel zone (1..8) to a normalized shot point.
+/// Returns (null, null) when the zone is null.
+(double?, double?) _legacyZonePoint(int? zone) {
+  if (zone == null || zone < 1 || zone > 8) return (null, null);
+  final mid = (zone - 1) * math.pi / 4 + math.pi / 4;
+  return (0.72 * math.cos(mid), 0.72 * math.sin(mid));
 }
 
 class BatFig {

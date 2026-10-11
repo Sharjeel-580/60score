@@ -2,7 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:cricket_scorer_app/models.dart';
 import 'package:cricket_scorer_app/scoring.dart';
 
-Match makeMatch({int xi = 4, int overs = 2, bool lms = false, int totalWickets = 0}) {
+Match makeMatch({
+  int xi = 4,
+  int overs = 2,
+  bool lms = false,
+  int totalWickets = 0,
+}) {
   return Match(
     id: 'm1',
     teamAId: 'ta',
@@ -26,7 +31,11 @@ InningsState openInnings(Match m, {int n = 1}) {
 
 void ball(InningsState s, BallInput input) {
   final ok = applyBall(s, input);
-  expect(ok, isTrue, reason: 'ball should apply: ${input.extraType} ${input.batRuns}');
+  expect(
+    ok,
+    isTrue,
+    reason: 'ball should apply: ${input.extraType} ${input.batRuns}',
+  );
 }
 
 void runs(InningsState s, int r) => ball(s, BallInput(batRuns: r));
@@ -132,11 +141,15 @@ void main() {
     test('wide + stumped: wicket to bowler, wide run counts, not legal', () {
       final m = makeMatch();
       final inn = openInnings(m);
-      ball(inn, BallInput(
+      ball(
+        inn,
+        BallInput(
           extraType: 'wide',
           isWicket: true,
           wicketType: 'stumped',
-          fielderId: 'b2'));
+          fielderId: 'b2',
+        ),
+      );
       expect(inn.legalBalls, 0);
       expect(inn.totalRuns, 1); // wide penalty still counts
       expect(inn.wickets, 1);
@@ -144,27 +157,34 @@ void main() {
       expect(inn.batting['a1']!.out, isTrue);
     });
 
-    test('run out: completed runs count, bowler not credited, out end honoured', () {
-      final m = makeMatch();
-      final inn = openInnings(m);
-      // 1 run completed, non-striker run out
-      ball(inn, BallInput(
-          batRuns: 1,
-          isWicket: true,
-          wicketType: 'runOut',
-          outPlayerId: 'a2',
-          fielderId: 'b3'));
-      expect(inn.totalRuns, 1);
-      expect(inn.wickets, 1);
-      expect(inn.bowling['b1']!.wickets, 0);
-      expect(inn.batting['a2']!.out, isTrue);
-      // The pair crossed on the completed run; the dismissed batter was
-      // heading to the striker's end, so that end is the vacant one and
-      // a1 (now at the non-striker end) stays.
-      expect(inn.strikerId, '');
-      expect(inn.nonStrikerId, 'a1');
-      expect(inn.awaitingBatter, isTrue);
-    });
+    test(
+      'run out: completed runs count, bowler not credited, out end honoured',
+      () {
+        final m = makeMatch();
+        final inn = openInnings(m);
+        // 1 run completed, non-striker run out
+        ball(
+          inn,
+          BallInput(
+            batRuns: 1,
+            isWicket: true,
+            wicketType: 'runOut',
+            outPlayerId: 'a2',
+            fielderId: 'b3',
+          ),
+        );
+        expect(inn.totalRuns, 1);
+        expect(inn.wickets, 1);
+        expect(inn.bowling['b1']!.wickets, 0);
+        expect(inn.batting['a2']!.out, isTrue);
+        // The pair crossed on the completed run; the dismissed batter was
+        // heading to the striker's end, so that end is the vacant one and
+        // a1 (now at the non-striker end) stays.
+        expect(inn.strikerId, '');
+        expect(inn.nonStrikerId, 'a1');
+        expect(inn.awaitingBatter, isTrue);
+      },
+    );
 
     test('all out ends innings at XI-1 wickets', () {
       final m = makeMatch(xi: 4);
@@ -273,4 +293,3 @@ void main() {
     });
   });
 }
-

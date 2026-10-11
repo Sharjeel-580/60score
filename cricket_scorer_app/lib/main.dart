@@ -1,6 +1,7 @@
 // 60Score — offline cricket scorer, draft & registration
 // for the Super Sixty League. Made by Sharjeel.
 import 'package:flutter/material.dart';
+
 import 'store.dart';
 import 'theme.dart';
 import 'screens/registration_screen.dart';
@@ -46,15 +47,13 @@ class _SplashGateState extends State<SplashGate> {
   }
 
   Future<void> _boot() async {
-    final minSplash =
-        Future.delayed(const Duration(milliseconds: 1400));
+    final minSplash = Future.delayed(const Duration(milliseconds: 1400));
     await store.load();
     await minSplash;
     if (!mounted) return;
     setState(() => _ready = true);
     if (!store.welcomeDone) {
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _showWelcome());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcome());
     }
   }
 
@@ -65,18 +64,22 @@ class _SplashGateState extends State<SplashGate> {
       builder: (c) => AlertDialog(
         title: const Text('Welcome to 60Score'),
         content: const Text(
-            'Your offline home for the Super Sixty League.\n\n'
-            'How do you want to start?'),
+          'Your offline home for the Super Sixty League.\n\n'
+          'How do you want to start?',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(c, 'fresh'),
-              child: const Text('Fresh Start')),
+            onPressed: () => Navigator.pop(c, 'fresh'),
+            child: const Text('Fresh Start'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(c, 'import'),
-              child: const Text('Import Players (Excel / CSV)')),
+            onPressed: () => Navigator.pop(c, 'import'),
+            child: const Text('Import Players (Excel / CSV)'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(c, 'later'),
-              child: const Text('Add Past Scores Later')),
+            onPressed: () => Navigator.pop(c, 'later'),
+            child: const Text('Add Past Scores Later'),
+          ),
         ],
       ),
     );
@@ -90,9 +93,13 @@ class _SplashGateState extends State<SplashGate> {
         }
         await store.persist();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
               content: Text(
-                  'Imported ${picked.rows.length} players — see the Registration tab')));
+                'Imported ${picked.rows.length} players — see the Registration tab',
+              ),
+            ),
+          );
         }
       }
     }
@@ -102,29 +109,13 @@ class _SplashGateState extends State<SplashGate> {
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
+      // Splash: full-bleed AI artwork (60Score logo, Loading, Made by Sharjeel).
       return Scaffold(
-        backgroundColor: kBg,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Image.asset('assets/logo.png', fit: BoxFit.contain),
-              ),
-              const SizedBox(height: 18),
-              const Text('60Score',
-                  style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: kCyan,
-                      letterSpacing: 2)),
-              const SizedBox(height: 6),
-              const Text('Made by Sharjeel',
-                  style: TextStyle(fontSize: 15, color: kCopper)),
-              const SizedBox(height: 22),
-              const CircularProgressIndicator(color: kCyan),
-            ],
+        backgroundColor: Colors.black,
+        body: SizedBox.expand(
+          child: Image.asset(
+            'assets/splash.png',
+            fit: BoxFit.cover,
           ),
         ),
       );
@@ -164,13 +155,15 @@ class _HomeShellState extends State<HomeShell> {
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.how_to_reg), label: 'Registration'),
+            icon: Icon(Icons.how_to_reg),
+            label: 'Registration',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: 'Draft'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.swap_horiz), label: 'Draft'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.sports_cricket), label: 'Scorer'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart), label: 'Stats'),
+            icon: Icon(Icons.sports_cricket),
+            label: 'Scorer',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Stats'),
         ],
       ),
     );

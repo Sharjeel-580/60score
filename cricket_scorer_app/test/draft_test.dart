@@ -7,8 +7,7 @@ RegPlayer rp(String id, String name) => RegPlayer(id: id, name: name);
 void main() {
   group('draft flow', () {
     test('linear order: turns rotate through teams, rounds increment', () {
-      final d = Draft(
-          id: 'd1', name: 'D', teamIds: ['t1', 't2'], squadSize: 2);
+      final d = Draft(id: 'd1', name: 'D', teamIds: ['t1', 't2'], squadSize: 2);
       final pool = [rp('p1', 'A'), rp('p2', 'B'), rp('p3', 'C'), rp('p4', 'E')];
       var turn = nextTurn(d)!;
       expect(turn.round, 1);
@@ -52,11 +51,12 @@ void main() {
 
     test('snake order reverses in round 2', () {
       final d = Draft(
-          id: 'd1',
-          name: 'D',
-          teamIds: ['t1', 't2', 't3'],
-          squadSize: 2,
-          snakeOrder: true);
+        id: 'd1',
+        name: 'D',
+        teamIds: ['t1', 't2', 't3'],
+        squadSize: 2,
+        snakeOrder: true,
+      );
       final order = <String>[];
       for (var i = 1; i <= 6; i++) {
         order.add(nextTurn(d)!.teamId);

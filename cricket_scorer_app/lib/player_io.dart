@@ -7,7 +7,9 @@
 // Bowling Style | Captain | Wicket-Keeper | Area | Phone Number |
 // Availability | Remarks
 import 'dart:typed_data';
+
 import 'package:excel/excel.dart';
+
 import 'models.dart';
 
 const List<String> kPlayerColumns = [
@@ -55,73 +57,73 @@ class PlayerRow {
   });
 
   List<String> toCells() => [
-        teamName,
-        playerName,
-        jerseyNo > 0 ? '$jerseyNo' : '',
-        role,
-        battingStyle,
-        bowlingStyle,
-        captain ? 'Y' : 'N',
-        wicketKeeper ? 'Y' : 'N',
-        area,
-        phone,
-        availability,
-        remarks,
-      ];
+    teamName,
+    playerName,
+    jerseyNo > 0 ? '$jerseyNo' : '',
+    role,
+    battingStyle,
+    bowlingStyle,
+    captain ? 'Y' : 'N',
+    wicketKeeper ? 'Y' : 'N',
+    area,
+    phone,
+    availability,
+    remarks,
+  ];
 
   RegPlayer toRegPlayer(String id) => RegPlayer(
-        id: id,
-        name: playerName,
-        role: role,
-        availability: availability,
-        area: area,
-        phone: phone,
-        remarks: remarks,
-        battingStyle: battingStyle,
-        bowlingStyle: bowlingStyle,
-        teamName: teamName,
-        jerseyNo: jerseyNo,
-        isCaptain: captain,
-        isKeeper: wicketKeeper,
-      );
+    id: id,
+    name: playerName,
+    role: role,
+    availability: availability,
+    area: area,
+    phone: phone,
+    remarks: remarks,
+    battingStyle: battingStyle,
+    bowlingStyle: bowlingStyle,
+    teamName: teamName,
+    jerseyNo: jerseyNo,
+    isCaptain: captain,
+    isKeeper: wicketKeeper,
+  );
 
   Player toTeamPlayer(String id) => Player(
-        id: id,
-        name: playerName,
-        jerseyNo: jerseyNo,
-        role: role,
-        battingStyle: battingStyle,
-        bowlingStyle: bowlingStyle,
-        isCaptain: captain,
-        isKeeper: wicketKeeper,
-      );
+    id: id,
+    name: playerName,
+    jerseyNo: jerseyNo,
+    role: role,
+    battingStyle: battingStyle,
+    bowlingStyle: bowlingStyle,
+    isCaptain: captain,
+    isKeeper: wicketKeeper,
+  );
 }
 
 PlayerRow rowFromRegPlayer(RegPlayer p, {String teamName = ''}) => PlayerRow(
-      teamName: teamName.isNotEmpty ? teamName : p.teamName,
-      playerName: p.name,
-      jerseyNo: p.jerseyNo,
-      role: p.role,
-      battingStyle: p.battingStyle,
-      bowlingStyle: p.bowlingStyle,
-      captain: p.isCaptain,
-      wicketKeeper: p.isKeeper,
-      area: p.area,
-      phone: p.phone,
-      availability: p.availability,
-      remarks: p.remarks,
-    );
+  teamName: teamName.isNotEmpty ? teamName : p.teamName,
+  playerName: p.name,
+  jerseyNo: p.jerseyNo,
+  role: p.role,
+  battingStyle: p.battingStyle,
+  bowlingStyle: p.bowlingStyle,
+  captain: p.isCaptain,
+  wicketKeeper: p.isKeeper,
+  area: p.area,
+  phone: p.phone,
+  availability: p.availability,
+  remarks: p.remarks,
+);
 
 PlayerRow rowFromPlayer(Player p, String teamName) => PlayerRow(
-      teamName: teamName,
-      playerName: p.name,
-      jerseyNo: p.jerseyNo,
-      role: p.role,
-      battingStyle: p.battingStyle,
-      bowlingStyle: p.bowlingStyle,
-      captain: p.isCaptain,
-      wicketKeeper: p.isKeeper,
-    );
+  teamName: teamName,
+  playerName: p.name,
+  jerseyNo: p.jerseyNo,
+  role: p.role,
+  battingStyle: p.battingStyle,
+  bowlingStyle: p.bowlingStyle,
+  captain: p.isCaptain,
+  wicketKeeper: p.isKeeper,
+);
 
 // ---------------- CSV ----------------
 
@@ -192,8 +194,7 @@ List<List<String>> parseCsvMatrix(String text) {
 
 // ---------------- Header mapping + matrix -> rows ----------------
 
-String _norm(String h) =>
-    h.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+String _norm(String h) => h.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
 const Map<String, String> _headerAliases = {
   'teamname': 'team',
@@ -265,7 +266,12 @@ String normalizeBowling(String raw) {
 
 bool _toBool(String v) {
   final t = v.trim().toLowerCase();
-  return t == 'y' || t == 'yes' || t == 'true' || t == '1' || t == 'c' || t == 'wk';
+  return t == 'y' ||
+      t == 'yes' ||
+      t == 'true' ||
+      t == '1' ||
+      t == 'c' ||
+      t == 'wk';
 }
 
 class ParseResult {
@@ -302,26 +308,28 @@ ParseResult rowsFromMatrix(List<List<String>> matrix) {
     if (name.isEmpty) continue;
     final jerseyText = cell(line, 'jersey');
     final availRaw = cell(line, 'availability');
-    rows.add(PlayerRow(
-      teamName: cell(line, 'team'),
-      playerName: name,
-      jerseyNo: (double.tryParse(jerseyText) ?? 0).toInt(),
-      role: normalizeRole(cell(line, 'role')),
-      battingStyle: normalizeBatting(cell(line, 'batting')),
-      bowlingStyle: normalizeBowling(cell(line, 'bowling')),
-      captain: _toBool(cell(line, 'captain')),
-      wicketKeeper: _toBool(cell(line, 'keeper')),
-      area: cell(line, 'area'),
-      phone: cell(line, 'phone'),
-      availability: availRaw.isEmpty
-          ? 'Available'
-          : (availRaw.toLowerCase().startsWith('not') ||
-                  availRaw.toLowerCase() == 'no' ||
-                  availRaw.toLowerCase() == 'unavailable'
-              ? 'Not Available'
-              : 'Available'),
-      remarks: cell(line, 'remarks'),
-    ));
+    rows.add(
+      PlayerRow(
+        teamName: cell(line, 'team'),
+        playerName: name,
+        jerseyNo: (double.tryParse(jerseyText) ?? 0).toInt(),
+        role: normalizeRole(cell(line, 'role')),
+        battingStyle: normalizeBatting(cell(line, 'batting')),
+        bowlingStyle: normalizeBowling(cell(line, 'bowling')),
+        captain: _toBool(cell(line, 'captain')),
+        wicketKeeper: _toBool(cell(line, 'keeper')),
+        area: cell(line, 'area'),
+        phone: cell(line, 'phone'),
+        availability: availRaw.isEmpty
+            ? 'Available'
+            : (availRaw.toLowerCase().startsWith('not') ||
+                      availRaw.toLowerCase() == 'no' ||
+                      availRaw.toLowerCase() == 'unavailable'
+                  ? 'Not Available'
+                  : 'Available'),
+        remarks: cell(line, 'remarks'),
+      ),
+    );
   }
   if (rows.isEmpty && errors.isEmpty) {
     errors.add('No player rows found');

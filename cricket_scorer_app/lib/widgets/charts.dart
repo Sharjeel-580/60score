@@ -1,6 +1,8 @@
 // Simple charts drawn with CustomPainter — no chart package needed.
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../scoring.dart';
 
 /// Runs comparison (worm): cumulative runs per over for two innings.
@@ -22,22 +24,22 @@ class WormChart extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          const Icon(Icons.show_chart, size: 14, color: Colors.amber),
-          const SizedBox(width: 4),
-          Text(label1, style: const TextStyle(fontSize: 12)),
-          const SizedBox(width: 12),
-          const Icon(Icons.show_chart, size: 14, color: Colors.lightBlue),
-          const SizedBox(width: 4),
-          Text(label2, style: const TextStyle(fontSize: 12)),
-        ]),
+        Row(
+          children: [
+            const Icon(Icons.show_chart, size: 14, color: Colors.amber),
+            const SizedBox(width: 4),
+            Text(label1, style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 12),
+            const Icon(Icons.show_chart, size: 14, color: Colors.lightBlue),
+            const SizedBox(width: 4),
+            Text(label2, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
         const SizedBox(height: 6),
         SizedBox(
           height: 160,
           width: double.infinity,
-          child: CustomPaint(
-            painter: _WormPainter(innings1, innings2),
-          ),
+          child: CustomPaint(painter: _WormPainter(innings1, innings2)),
         ),
       ],
     );
@@ -49,7 +51,14 @@ class _WormPainter extends CustomPainter {
   final List<int> b;
   _WormPainter(this.a, this.b);
 
-  void _drawLine(Canvas canvas, List<int> data, Color color, double maxX, double maxY, Size size) {
+  void _drawLine(
+    Canvas canvas,
+    List<int> data,
+    Color color,
+    double maxX,
+    double maxY,
+    Size size,
+  ) {
     if (data.isEmpty) return;
     final paint = Paint()
       ..color = color
@@ -87,32 +96,45 @@ class _WormPainter extends CustomPainter {
     final maxLen = math.max(a.length, b.length);
     if (maxLen == 0) return;
     final maxY = math.max(
-        a.isEmpty ? 0 : a.reduce(math.max), b.isEmpty ? 0 : b.reduce(math.max));
-    _drawLine(canvas, a, Colors.amber, maxLen.toDouble(),
-        (maxY == 0 ? 1 : maxY).toDouble(), size);
-    _drawLine(canvas, b, Colors.lightBlue, maxLen.toDouble(),
-        (maxY == 0 ? 1 : maxY).toDouble(), size);
+      a.isEmpty ? 0 : a.reduce(math.max),
+      b.isEmpty ? 0 : b.reduce(math.max),
+    );
+    _drawLine(
+      canvas,
+      a,
+      Colors.amber,
+      maxLen.toDouble(),
+      (maxY == 0 ? 1 : maxY).toDouble(),
+      size,
+    );
+    _drawLine(
+      canvas,
+      b,
+      Colors.lightBlue,
+      maxLen.toDouble(),
+      (maxY == 0 ? 1 : maxY).toDouble(),
+      size,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _WormPainter old) =>
-      old.a != a || old.b != b;
+  bool shouldRepaint(covariant _WormPainter old) => old.a != a || old.b != b;
 }
 
 /// Over comparison (Manhattan): bars of runs per over.
 class ManhattanChart extends StatelessWidget {
   final List<int> innings1;
   final List<int> innings2;
-  const ManhattanChart({super.key, required this.innings1, required this.innings2});
+  const ManhattanChart({
+    super.key,
+    required this.innings1,
+    required this.innings2,
+  });
 
   @override
   Widget build(BuildContext context) {
     final maxLen = math.max(innings1.length, innings2.length);
-    final maxVal = [
-      ...innings1,
-      ...innings2,
-      1
-    ].reduce(math.max);
+    final maxVal = [...innings1, ...innings2, 1].reduce(math.max);
     return SizedBox(
       height: 150,
       child: Row(
@@ -145,88 +167,171 @@ class ManhattanChart extends StatelessWidget {
   }
 }
 
-/// Wagon wheel: 8 zones around the pitch with shot counts / runs.
+/// Wagon wheel: free-touch shot plot drawn as trajectory lines.
+/// The scorer taps the wheel where the ball went; each shot becomes a line
+/// from the pitch (center) in that direction. Line length/shape per outcome:
+/// - 6: green, curved (in the air), extends beyond the boundary
+/// - 4: blue, straight to the boundary (ground shot)
+/// - 1/2/3: straight line to the tapped point inside the ground
+/// - 0: grey dot at the tapped point
+/// - wicket: red line to the tapped point
+/// No score text is drawn — color carries the meaning (see [WagonLegend]).
 class WagonWheel extends StatelessWidget {
-  final Map<int, ZoneStat> zones;
-  const WagonWheel({super.key, required this.zones});
+  final List<ShotPlot> shots;
+  final double diameter;
+  const WagonWheel({super.key, required this.shots, this.diameter = 240});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 240,
-      width: 240,
-      child: CustomPaint(painter: _WagonPainter(zones)),
+      height: diameter,
+      width: diameter,
+      child: CustomPaint(painter: _WagonPainter(shots)),
+    );
+  }
+}
+
+/// Color for a wagon-wheel shot: six = green, wicket = red, others split.
+Color wagonShotColor(int runs, bool isWicket) {
+  if (isWicket) return const Color(0xFFEF5350);
+  switch (runs) {
+    case 6:
+      return const Color(0xFF66BB6A);
+    case 4:
+      return const Color(0xFF42A5F5);
+    case 3:
+      return const Color(0xFFAB47BC);
+    case 2:
+      return const Color(0xFFFFA726);
+    case 1:
+      return const Color(0xFFFFD54F);
+    default:
+      return const Color(0xFF9E9E9E);
+  }
+}
+
+/// Compact color legend for the wagon wheel.
+class WagonLegend extends StatelessWidget {
+  const WagonLegend({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget item(int runs, String label, {bool wicket = false}) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 18,
+              height: 4,
+              decoration: BoxDecoration(
+                color: wagonShotColor(runs, wicket),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(label,
+                style: const TextStyle(fontSize: 11, color: Colors.white70)),
+          ],
+        );
+    return Wrap(
+      spacing: 10,
+      runSpacing: 6,
+      alignment: WrapAlignment.center,
+      children: [
+        item(1, '1'),
+        item(2, '2'),
+        item(3, '3'),
+        item(4, '4'),
+        item(6, '6'),
+        item(0, 'W', wicket: true),
+      ],
     );
   }
 }
 
 class _WagonPainter extends CustomPainter {
-  final Map<int, ZoneStat> zones;
-  _WagonPainter(this.zones);
-
-  // Zone layout: 8 sectors; labels drawn as numbers 1-8.
+  final List<ShotPlot> shots;
+  _WagonPainter(this.shots);
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 6;
-    final maxRuns = zones.values.fold<int>(1, (m, z) => math.max(m, z.runs));
     final linePaint = Paint()
       ..color = Colors.white38
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
+    // boundary + inner circle
     canvas.drawCircle(center, radius, linePaint);
     canvas.drawCircle(center, radius * 0.45, linePaint);
-    for (var z = 1; z <= 8; z++) {
-      // zone z occupies a 45-degree sector; zone 4 (long off) at bottom-right
-      final start = (z - 1) * math.pi / 4 + math.pi / 8;
-      final path = Path()
-        ..moveTo(center.dx, center.dy)
-        ..lineTo(center.dx + radius * math.cos(start),
-            center.dy + radius * math.sin(start));
-      canvas.drawPath(path, linePaint);
-      final stat = zones[z];
-      if (stat != null && stat.balls > 0) {
-        final mid = start + math.pi / 8;
-        final intensity = 0.25 + 0.65 * (stat.runs / maxRuns);
-        final fill = Paint()
-          ..color = Colors.green.withValues(alpha: intensity)
-          ..style = PaintingStyle.fill;
-        final sector = Path()
-          ..moveTo(center.dx, center.dy)
-          ..arcTo(
-              Rect.fromCircle(center: center, radius: radius), start, math.pi / 4, false)
-          ..close();
-        canvas.drawPath(sector, fill);
-        final tx = center.dx + radius * 0.72 * math.cos(mid);
-        final ty = center.dy + radius * 0.72 * math.sin(mid);
-        final tp = TextPainter(
-          text: TextSpan(
-            text: '${stat.runs}r\n${stat.balls}b',
-            style: const TextStyle(color: Colors.white, fontSize: 10),
-          ),
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.center,
-        )..layout();
-        tp.paint(canvas, Offset(tx - tp.width / 2, ty - tp.height / 2));
-      }
-      final lx = center.dx + (radius + 2) * math.cos(start + math.pi / 8);
-      final ly = center.dy + (radius + 2) * math.sin(start + math.pi / 8);
-      final label = TextPainter(
-        text: TextSpan(
-          text: '$z',
-          style: const TextStyle(color: Colors.white70, fontSize: 9),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      label.paint(canvas, Offset(lx - label.width / 2, ly - label.height / 2));
-    }
+    // crosshair guides
+    canvas.drawLine(
+      Offset(center.dx - radius, center.dy),
+      Offset(center.dx + radius, center.dy),
+      linePaint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - radius),
+      Offset(center.dx, center.dy + radius),
+      linePaint,
+    );
     // pitch
     final pitch = Paint()..color = Colors.brown.shade300;
     canvas.drawRect(
-        Rect.fromCenter(center: center, width: 14, height: 60), pitch);
+      Rect.fromCenter(center: center, width: 14, height: 60),
+      pitch,
+    );
+    // shots as trajectory lines
+    for (final s in shots) {
+      final dist = math.sqrt(s.x * s.x + s.y * s.y);
+      final ux = dist < 0.01 ? 1.0 : s.x / dist;
+      final uy = dist < 0.01 ? 0.0 : s.y / dist;
+      final color = wagonShotColor(s.runs, s.isWicket);
+      final paint = Paint()
+        ..color = color
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      if (!s.isWicket && s.runs == 6) {
+        // six: curved line beyond the boundary (in the air)
+        final endDist = radius * 1.28;
+        final end =
+            Offset(center.dx + ux * endDist, center.dy + uy * endDist);
+        final mid = Offset(
+          center.dx + ux * endDist * 0.5,
+          center.dy + uy * endDist * 0.5,
+        );
+        final ctrl = Offset(
+          mid.dx - uy * radius * 0.4,
+          mid.dy + ux * radius * 0.4,
+        );
+        final path = Path()
+          ..moveTo(center.dx, center.dy)
+          ..quadraticBezierTo(ctrl.dx, ctrl.dy, end.dx, end.dy);
+        canvas.drawPath(path, paint);
+        // landing dot beyond the rope
+        canvas.drawCircle(end, 3.5, Paint()..color = color);
+      } else if (!s.isWicket && s.runs == 0) {
+        // dot ball: small dot where it went
+        final p = Offset(
+          center.dx + s.x.clamp(-1.0, 1.0) * radius,
+          center.dy + s.y.clamp(-1.0, 1.0) * radius,
+        );
+        canvas.drawCircle(p, 4, Paint()..color = color);
+      } else {
+        // 4 to the boundary; 1/2/3/wicket to the tapped point
+        var len = dist * radius;
+        if (s.runs == 4) len = radius;
+        if (dist < 0.05) len = radius * 0.8;
+        len = len.clamp(0.0, radius * 1.02);
+        canvas.drawLine(
+          center,
+          Offset(center.dx + ux * len, center.dy + uy * len),
+          paint,
+        );
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _WagonPainter old) => old.zones != zones;
+  bool shouldRepaint(covariant _WagonPainter old) => old.shots != shots;
 }

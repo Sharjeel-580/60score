@@ -1243,11 +1243,9 @@ class _WagonForInningsState extends State<_WagonForInnings> {
               .toList(),
           onChanged: (v) => setState(() => batterId = v),
         ),
-        Center(child: WagonWheel(zones: wagonWheelData(widget.inn, batterId!))),
-        const Text(
-          'Zones: 1 Third man | 2 Point | 3 Cover | 4 Long off | 5 Long on | 6 Mid-wicket | 7 Square leg | 8 Fine leg',
-          style: TextStyle(fontSize: 11, color: Colors.white38),
-        ),
+        Center(child: WagonWheel(shots: wagonWheelShots(widget.inn, batterId!))),
+        const SizedBox(height: 6),
+        const WagonLegend(),
       ],
     );
   }

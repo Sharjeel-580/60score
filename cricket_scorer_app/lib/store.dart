@@ -1,8 +1,10 @@
 // SharedPreferences repository for 60Score.
 // Everything is stored on the phone only — no network, no accounts.
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'models.dart';
 
 class Store extends ChangeNotifier {
@@ -45,27 +47,31 @@ class Store extends ChangeNotifier {
       ];
       teams = [
         for (var i = 0; i < seedNames.length; i++)
-          Team(id: 'seed_team_$i', name: seedNames[i])
+          Team(id: 'seed_team_$i', name: seedNames[i]),
       ];
       tournaments = [
         Tournament(
           id: 'seed_tournament_ssl2',
           name: 'Super Sixty League',
           teamIds: teams.map((t) => t.id).toList(),
-        )
+        ),
       ];
       matches = [];
       await _saveAll(prefs);
       await prefs.setBool(_kSeeded, true);
     } else {
       teams = _decodeList(prefs.getString(_kTeams), Team.fromJson);
-      tournaments =
-          _decodeList(prefs.getString(_kTournaments), Tournament.fromJson);
+      tournaments = _decodeList(
+        prefs.getString(_kTournaments),
+        Tournament.fromJson,
+      );
       matches = _decodeList(prefs.getString(_kMatches), Match.fromJson);
       regPlayers = _decodeList(prefs.getString(_kReg), RegPlayer.fromJson);
       drafts = _decodeList(prefs.getString(_kDrafts), Draft.fromJson);
-      manualStats =
-          _decodeList(prefs.getString(_kManual), ManualStatEntry.fromJson);
+      manualStats = _decodeList(
+        prefs.getString(_kManual),
+        ManualStatEntry.fromJson,
+      );
     }
     welcomeDone = prefs.getBool(_kWelcome) ?? false;
     loaded = true;
@@ -73,13 +79,13 @@ class Store extends ChangeNotifier {
   }
 
   List<T> _decodeList<T>(
-      String? raw, T Function(Map<String, dynamic>) fromJson) {
+    String? raw,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List;
-      return list
-          .map((e) => fromJson(e as Map<String, dynamic>))
-          .toList();
+      return list.map((e) => fromJson(e as Map<String, dynamic>)).toList();
     } catch (_) {
       return [];
     }
@@ -88,17 +94,29 @@ class Store extends ChangeNotifier {
   Future<void> _saveAll([SharedPreferences? prefs]) async {
     final p = prefs ?? await SharedPreferences.getInstance();
     await p.setString(
-        _kTeams, jsonEncode(teams.map((t) => t.toJson()).toList()));
-    await p.setString(_kTournaments,
-        jsonEncode(tournaments.map((t) => t.toJson()).toList()));
+      _kTeams,
+      jsonEncode(teams.map((t) => t.toJson()).toList()),
+    );
     await p.setString(
-        _kMatches, jsonEncode(matches.map((m) => m.toJson()).toList()));
+      _kTournaments,
+      jsonEncode(tournaments.map((t) => t.toJson()).toList()),
+    );
     await p.setString(
-        _kReg, jsonEncode(regPlayers.map((r) => r.toJson()).toList()));
+      _kMatches,
+      jsonEncode(matches.map((m) => m.toJson()).toList()),
+    );
     await p.setString(
-        _kDrafts, jsonEncode(drafts.map((d) => d.toJson()).toList()));
-    await p.setString(_kManual,
-        jsonEncode(manualStats.map((e) => e.toJson()).toList()));
+      _kReg,
+      jsonEncode(regPlayers.map((r) => r.toJson()).toList()),
+    );
+    await p.setString(
+      _kDrafts,
+      jsonEncode(drafts.map((d) => d.toJson()).toList()),
+    );
+    await p.setString(
+      _kManual,
+      jsonEncode(manualStats.map((e) => e.toJson()).toList()),
+    );
     await p.setBool(_kWelcome, welcomeDone);
   }
 

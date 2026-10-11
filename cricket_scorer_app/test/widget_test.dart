@@ -1,14 +1,15 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cricket_scorer_app/main.dart';
 
 void main() {
-  testWidgets('60Score boots to splash with credit', (tester) async {
+  testWidgets('60Score boots to splash artwork', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const Score60App());
     await tester.pump();
-    expect(find.text('60Score'), findsOneWidget);
-    expect(find.text('Made by Sharjeel'), findsOneWidget);
+    // Splash is now the full-bleed AI artwork (logo + Made by Sharjeel baked in).
+    expect(find.byType(Image), findsWidgets);
     // Let the splash timer finish and the welcome dialog appear.
     await tester.pump(const Duration(milliseconds: 1600));
     await tester.pump();

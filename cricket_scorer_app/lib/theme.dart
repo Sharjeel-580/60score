@@ -3,11 +3,13 @@
 // on a dark smoky near-black navy background. Shades are used as-is.
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'player_io.dart';
 
 const kBg = Color(0xFF030A10);
@@ -56,23 +58,24 @@ ThemeData buildScore60Theme() {
 }
 
 /// Write [bytes] to a temp file and open the system share sheet.
-Future<void> shareBytes(String filename, List<int> bytes,
-    {String? text}) async {
+Future<void> shareBytes(
+  String filename,
+  List<int> bytes, {
+  String? text,
+}) async {
   final dir = await getTemporaryDirectory();
   final file = File('${dir.path}/$filename');
   await file.writeAsBytes(bytes, flush: true);
-  await SharePlus.instance.share(ShareParams(
-    files: [XFile(file.path)],
-    text: text,
-  ));
+  await SharePlus.instance.share(
+    ShareParams(files: [XFile(file.path)], text: text),
+  );
 }
 
 Future<void> shareCsvFile(String filename, String csv) =>
     shareBytes(filename, utf8.encode(csv), text: '60Score player list');
 
 Future<void> shareXlsxFile(String filename, List<PlayerRow> rows) =>
-    shareBytes(filename, rowsToXlsxBytes(rows),
-        text: '60Score player list');
+    shareBytes(filename, rowsToXlsxBytes(rows), text: '60Score player list');
 
 Future<void> copyToClipboard(String text) =>
     Clipboard.setData(ClipboardData(text: text));
@@ -97,7 +100,8 @@ Future<PickedPlayers?> pickPlayerListFile() async {
   if (bytes == null) {
     return PickedPlayers([], ['Could not read the selected file'], f.name);
   }
-  final isXlsx = (f.extension ?? '').toLowerCase() == 'xlsx' ||
+  final isXlsx =
+      (f.extension ?? '').toLowerCase() == 'xlsx' ||
       f.name.toLowerCase().endsWith('.xlsx');
   final parsed = isXlsx
       ? parsePlayersXlsx(bytes)
@@ -128,17 +132,26 @@ class PlayerListIoButtons extends StatelessWidget {
           if (picked == null) return;
           if (!context.mounted) return;
           if (picked.rows.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(picked.errors.isEmpty
-                    ? 'No players found in that file'
-                    : picked.errors.join('; '))));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  picked.errors.isEmpty
+                      ? 'No players found in that file'
+                      : picked.errors.join('; '),
+                ),
+              ),
+            );
             return;
           }
           await onImport(picked.rows);
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content:
-                    Text('Imported ${picked.rows.length} players from ${picked.sourceName}')));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Imported ${picked.rows.length} players from ${picked.sourceName}',
+                ),
+              ),
+            );
           }
         } else if (v == 'export_csv') {
           await shareCsvFile('$exportName.csv', rowsToCsv(exportRows()));
@@ -148,13 +161,17 @@ class PlayerListIoButtons extends StatelessWidget {
           await copyToClipboard(rowsToCsv(exportRows()));
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('CSV copied to clipboard')));
+              const SnackBar(content: Text('CSV copied to clipboard')),
+            );
           }
         }
       },
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'import', child: Text('Import from Excel / CSV')),
-        PopupMenuItem(value: 'export_xlsx', child: Text('Export to Excel (.xlsx)')),
+        PopupMenuItem(
+          value: 'export_xlsx',
+          child: Text('Export to Excel (.xlsx)'),
+        ),
         PopupMenuItem(value: 'export_csv', child: Text('Export to CSV')),
         PopupMenuItem(value: 'copy_csv', child: Text('Copy CSV to clipboard')),
       ],

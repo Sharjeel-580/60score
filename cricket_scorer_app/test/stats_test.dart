@@ -20,9 +20,15 @@ Match playedMatch() {
   setOpeners(i1, 'a1', 'a2', 'b1');
   applyBall(i1, BallInput(batRuns: 4));
   applyBall(i1, BallInput(batRuns: 2));
-  applyBall(i1, BallInput(isWicket: true, wicketType: 'caught', fielderId: 'b2'));
+  applyBall(
+    i1,
+    BallInput(isWicket: true, wicketType: 'caught', fielderId: 'b2'),
+  );
   setNextBatter(i1, 'a3');
-  applyBall(i1, BallInput(batRuns: 1)); // a3 scores, a2 crosses? a3 on strike scores 1 -> swap
+  applyBall(
+    i1,
+    BallInput(batRuns: 1),
+  ); // a3 scores, a2 crosses? a3 on strike scores 1 -> swap
   applyBall(i1, BallInput(batRuns: 1)); // a2 scores 1
   applyBall(i1, BallInput(batRuns: 0));
   expect(i1.isComplete, isTrue);

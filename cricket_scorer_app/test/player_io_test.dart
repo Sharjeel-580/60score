@@ -45,7 +45,8 @@ void main() {
     });
 
     test('header matching is case/order tolerant', () {
-      const csv = 'phone number,PLAYER NAME,Team,jersey,ROLE\n'
+      const csv =
+          'phone number,PLAYER NAME,Team,jersey,ROLE\n'
           '03009998877,Zain Ul Abidin,US Lions,10,Bowler\n';
       final parsed = parsePlayersCsv(csv);
       expect(parsed.errors, isEmpty);
@@ -60,7 +61,8 @@ void main() {
       expect(parsePlayersCsv('').errors, isNotEmpty);
       expect(parsePlayersCsv('').rows, isEmpty);
       final headerOnly = parsePlayersCsv(
-          'Team Name,Player Name,Jersey No,Role,Batting Style,Bowling Style,Captain,Wicket-Keeper,Area,Phone Number,Availability,Remarks\n');
+        'Team Name,Player Name,Jersey No,Role,Batting Style,Bowling Style,Captain,Wicket-Keeper,Area,Phone Number,Availability,Remarks\n',
+      );
       expect(headerOnly.rows, isEmpty);
       expect(headerOnly.errors, isNotEmpty);
     });
@@ -76,13 +78,14 @@ void main() {
     test('xlsx round trip', () {
       final rows = [
         PlayerRow(
-            teamName: 'Shazi Hawks',
-            playerName: 'Hamza Tariq',
-            jerseyNo: 12,
-            role: 'Batter',
-            captain: false,
-            wicketKeeper: true,
-            area: 'Bhalwal'),
+          teamName: 'Shazi Hawks',
+          playerName: 'Hamza Tariq',
+          jerseyNo: 12,
+          role: 'Batter',
+          captain: false,
+          wicketKeeper: true,
+          area: 'Bhalwal',
+        ),
       ];
       final bytes = rowsToXlsxBytes(rows);
       expect(bytes.isNotEmpty, isTrue);

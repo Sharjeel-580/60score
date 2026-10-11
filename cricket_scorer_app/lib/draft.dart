@@ -24,8 +24,7 @@ DraftTurn? nextTurn(Draft d) {
   return DraftTurn(round, idx + 1, order[pos]);
 }
 
-Set<String> draftedPlayerIds(Draft d) =>
-    d.picks.map((p) => p.playerId).toSet();
+Set<String> draftedPlayerIds(Draft d) => d.picks.map((p) => p.playerId).toSet();
 
 int squadCount(Draft d, String teamId) =>
     d.picks.where((p) => p.teamId == teamId).length;
@@ -38,13 +37,15 @@ bool applyPick(Draft d, RegPlayer player) {
   if (turn == null) return false;
   if (draftedPlayerIds(d).contains(player.id)) return false;
   if (squadCount(d, turn.teamId) >= d.squadSize) return false;
-  d.picks.add(DraftPick(
-    round: turn.round,
-    pickNo: turn.pickNo,
-    teamId: turn.teamId,
-    playerId: player.id,
-    playerName: player.name,
-  ));
+  d.picks.add(
+    DraftPick(
+      round: turn.round,
+      pickNo: turn.pickNo,
+      teamId: turn.teamId,
+      playerId: player.id,
+      playerName: player.name,
+    ),
+  );
   if (d.isComplete) d.status = 'completed';
   return true;
 }

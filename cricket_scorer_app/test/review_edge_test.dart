@@ -1,20 +1,19 @@
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cricket_scorer_app/models.dart';
 import 'package:cricket_scorer_app/scoring.dart';
 import 'package:cricket_scorer_app/player_io.dart';
 
 Match _match({int xi = 4, int overs = 2}) => Match(
-      id: 'mx',
-      teamAId: 'ta',
-      teamBId: 'tb',
-      xiA: [for (var i = 1; i <= xi; i++) 'a$i'],
-      xiB: [for (var i = 1; i <= xi; i++) 'b$i'],
-      oversLimit: overs,
-      ballsPerOver: 6,
-      tossWinnerId: 'ta',
-      tossDecision: 'bat',
-    );
+  id: 'mx',
+  teamAId: 'ta',
+  teamBId: 'tb',
+  xiA: [for (var i = 1; i <= xi; i++) 'a$i'],
+  xiB: [for (var i = 1; i <= xi; i++) 'b$i'],
+  oversLimit: overs,
+  ballsPerOver: 6,
+  tossWinnerId: 'ta',
+  tossDecision: 'bat',
+);
 
 void main() {
   group('review-pass edge cases', () {
@@ -110,7 +109,8 @@ void main() {
 
     test('duplicate player names import as separate rows (no crash)', () {
       final parsed = parsePlayersCsv(
-          'Player Name,Team Name\nSame Name,AB Knights\nSame Name,MA Kings\n');
+        'Player Name,Team Name\nSame Name,AB Knights\nSame Name,MA Kings\n',
+      );
       expect(parsed.rows.length, 2);
       expect(parsed.rows.map((r) => r.teamName), ['AB Knights', 'MA Kings']);
     });

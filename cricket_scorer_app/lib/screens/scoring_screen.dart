@@ -19,7 +19,6 @@ class ScoringScreen extends StatefulWidget {
 class _ScoringScreenState extends State<ScoringScreen> {
   Store get store => widget.store;
   Match get match => widget.match;
-  int? selectedZone;
 
   InningsState get inn {
     if (match.innings.isEmpty) startInnings(match, 1);
@@ -306,14 +305,52 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
   Future<void> _record(BallInput input) async {
-    input.zone = selectedZone;
     final ok = applyBall(inn, input);
     if (!ok) {
       _snack('Ball could not be recorded');
       return;
     }
-    selectedZone = null;
     await _afterChange();
+  }
+
+  /// Wagon-wheel plot dialog: the scorer taps the wheel where the ball went.
+  /// Returns the normalized tap point (boundary = 1.0), Offset(0,0) when the
+  /// scorer taps "Skip" (record without plotting), or null on cancel.
+  Future<Offset?> _plotShotDialog(String title) {
+    final diameter =
+        (MediaQuery.of(context).size.width - 140).clamp(220.0, 320.0);
+    return showDialog<Offset>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Wheel par tap karo — ball kidhar gayi',
+              style: TextStyle(fontSize: 13, color: Colors.white60),
+            ),
+            const SizedBox(height: 8),
+            _PlotWheel(
+              diameter: diameter,
+              onTap: (p) => Navigator.of(c).pop(p),
+            ),
+            const SizedBox(height: 8),
+            const WagonLegend(),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(null),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(const Offset(0, 0)),
+            child: const Text('Skip'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ---------- build ----------
@@ -516,14 +553,10 @@ class _ScoringScreenState extends State<ScoringScreen> {
   Widget _liveWagonCard(InningsState inn) {
     final striker = inn.strikerId;
     if (striker.isEmpty) return const SizedBox.shrink();
-    final zones = wagonWheelData(inn, striker);
+    final shots = wagonWheelShots(inn, striker);
     final shotCounts = <int, int>{}; // runs value -> balls (striker)
     var strikerWkts = 0;
-    final wktZones = <int, int>{}; // zone -> wickets (whole innings)
     for (final e in inn.events) {
-      if (e.zone != null && e.isWicket) {
-        wktZones[e.zone!] = (wktZones[e.zone!] ?? 0) + 1;
-      }
       if (e.strikerId != striker || e.extraType == 'wide') continue;
       if (e.isWicket && e.outPlayerId == striker) strikerWkts++;
       shotCounts[e.batRuns] = (shotCounts[e.batRuns] ?? 0) + 1;
@@ -544,7 +577,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         children: [
-          Center(child: WagonWheel(zones: zones)),
+          Center(child: WagonWheel(shots: shots)),
+          const SizedBox(height: 6),
+          const WagonLegend(),
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
@@ -556,24 +591,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
               chip('W: $strikerWkts'),
             ],
           ),
-          if (wktZones.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 8),
-              child: Text(
-                'Wickets by zone: ${wktZones.entries.map((e) => 'Z${e.key}: ${e.value}').join('  ')}',
-                style: const TextStyle(fontSize: 12, color: Colors.white54),
-              ),
-            )
-          else
-            const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Zones: 1 Third man | 2 Point | 3 Cover | 4 Long off | 5 Long on | 6 Mid-wicket | 7 Square leg | 8 Fine leg',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: Colors.white38),
-            ),
-          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -660,7 +678,19 @@ class _ScoringScreenState extends State<ScoringScreen> {
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
-          onPressed: () => _record(BallInput(batRuns: runs)),
+          onPressed: () async {
+            // Scoring shots: tap the wagon wheel to plot where it went.
+            double? sx, sy;
+            if (runs > 0) {
+              final p = await _plotShotDialog('$label runs — shot plot');
+              if (p == null) return; // cancelled
+              if (p != const Offset(0, 0)) {
+                sx = p.dx;
+                sy = p.dy;
+              }
+            }
+            _record(BallInput(batRuns: runs, shotX: sx, shotY: sy));
+          },
           child: Text(label, style: const TextStyle(fontSize: 17)),
         ),
       ),
@@ -680,30 +710,6 @@ class _ScoringScreenState extends State<ScoringScreen> {
     return Column(
       children: [
         const SizedBox(height: 8),
-        // wagon-wheel zone selector
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              const Text('Zone: ', style: TextStyle(color: Colors.white60)),
-              ChoiceChip(
-                label: const Text('None'),
-                selected: selectedZone == null,
-                onSelected: (_) => setState(() => selectedZone = null),
-              ),
-              for (var z = 1; z <= 8; z++)
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: ChoiceChip(
-                    label: Text('$z'),
-                    selected: selectedZone == z,
-                    onSelected: (_) => setState(() => selectedZone = z),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
         Row(
           children: [
             runBtn('0', 0),
@@ -763,6 +769,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     );
                     if (input != null && input.isWicket) {
                       if (input.wicketType != 'runOut') input.batRuns = 0;
+                      final p = await _plotShotDialog('Wicket — shot plot');
+                      if (p == null) return;
+                      if (p != const Offset(0, 0)) {
+                        input.shotX = p.dx;
+                        input.shotY = p.dy;
+                      }
                       _record(input);
                     }
                   },
@@ -854,11 +866,40 @@ class _ScoringScreenState extends State<ScoringScreen> {
             }),
           ],
         ),
-        const Text(
-          'Zones: 1 Third man • 2 Point • 3 Cover • 4 Long off • 5 Long on • 6 Mid-wicket • 7 Square leg • 8 Fine leg',
-          style: TextStyle(fontSize: 11, color: Colors.white38),
-        ),
+        const SizedBox(height: 4),
       ],
+    );
+  }
+}
+
+/// Interactive empty wagon wheel used to plot where a shot went.
+/// Taps are converted to normalized coordinates (boundary = 1.0).
+class _PlotWheel extends StatelessWidget {
+  final double diameter;
+  final ValueChanged<Offset> onTap;
+  const _PlotWheel({required this.diameter, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: diameter,
+      height: diameter,
+      child: Builder(
+        builder: (c) => GestureDetector(
+          onTapDown: (d) {
+            final box = c.findRenderObject() as RenderBox;
+            final local = box.globalToLocal(d.globalPosition);
+            final r = diameter / 2 - 6;
+            final nx = (local.dx - diameter / 2) / r;
+            final ny = (local.dy - diameter / 2) / r;
+            onTap(Offset(
+              nx.clamp(-1.2, 1.2).toDouble(),
+              ny.clamp(-1.2, 1.2).toDouble(),
+            ));
+          },
+          child: WagonWheel(shots: const [], diameter: diameter),
+        ),
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../player_io.dart';
 import '../store.dart';
@@ -25,14 +26,17 @@ class TeamsScreen extends StatelessWidget {
           // (team W/L shown in Stats tab)
           final _ = stats;
           return ListTile(
-            leading: CircleAvatar(child: Text(t.name.isEmpty ? '?' : t.name[0])),
+            leading: CircleAvatar(
+              child: Text(t.name.isEmpty ? '?' : t.name[0]),
+            ),
             title: Text(t.name),
             subtitle: Text('${t.players.length} players'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => TeamDetailScreen(store: store, team: t)),
+                builder: (_) => TeamDetailScreen(store: store, team: t),
+              ),
             ).then((_) => store.persist()),
           );
         },
@@ -47,14 +51,18 @@ class TeamsScreen extends StatelessWidget {
       builder: (c) => AlertDialog(
         title: Text(existing == null ? 'New team' : 'Edit team'),
         content: TextField(
-            controller: ctrl,
-            decoration: const InputDecoration(labelText: 'Team name')),
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'Team name'),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(c, ctrl.text.trim()),
-              child: const Text('Save')),
+            onPressed: () => Navigator.pop(c, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -90,23 +98,24 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         actions: [
           PlayerListIoButtons(
             exportName: '60score_squad_${team.id}',
-            exportRows: () => team.players
-                .map((p) => rowFromPlayer(p, team.name))
-                .toList(),
+            exportRows: () =>
+                team.players.map((p) => rowFromPlayer(p, team.name)).toList(),
             onImport: (rows) async {
               for (final r in rows) {
                 // Reuse a registered player with the same name when one
                 // exists, so ids (and career stats) stay unified.
                 final reg = store.regPlayers
-                    .where((x) =>
-                        x.name.toLowerCase() == r.playerName.toLowerCase())
+                    .where(
+                      (x) => x.name.toLowerCase() == r.playerName.toLowerCase(),
+                    )
                     .firstOrNull;
                 if (reg != null) {
                   if (team.playerById(reg.id) == null) {
                     team.players.add(reg.toTeamPlayer());
                   }
-                } else if (!team.players.any((x) =>
-                    x.name.toLowerCase() == r.playerName.toLowerCase())) {
+                } else if (!team.players.any(
+                  (x) => x.name.toLowerCase() == r.playerName.toLowerCase(),
+                )) {
                   team.players.add(r.toTeamPlayer(Store.newId('player')));
                 }
               }
@@ -125,11 +134,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   content: TextField(controller: ctrl),
                   actions: [
                     TextButton(
-                        onPressed: () => Navigator.pop(c),
-                        child: const Text('Cancel')),
+                      onPressed: () => Navigator.pop(c),
+                      child: const Text('Cancel'),
+                    ),
                     FilledButton(
-                        onPressed: () => Navigator.pop(c, ctrl.text.trim()),
-                        child: const Text('Save')),
+                      onPressed: () => Navigator.pop(c, ctrl.text.trim()),
+                      child: const Text('Save'),
+                    ),
                   ],
                 ),
               );
@@ -149,11 +160,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   content: const Text('This removes the team and its squad.'),
                   actions: [
                     TextButton(
-                        onPressed: () => Navigator.pop(c, false),
-                        child: const Text('Cancel')),
+                      onPressed: () => Navigator.pop(c, false),
+                      child: const Text('Cancel'),
+                    ),
                     FilledButton(
-                        onPressed: () => Navigator.pop(c, true),
-                        child: const Text('Delete')),
+                      onPressed: () => Navigator.pop(c, true),
+                      child: const Text('Delete'),
+                    ),
                   ],
                 ),
               );
@@ -183,10 +196,12 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 ].join(' · ');
                 return ListTile(
                   leading: CircleAvatar(
-                      child: Text(p.jerseyNo > 0 ? '${p.jerseyNo}' : '?')),
+                    child: Text(p.jerseyNo > 0 ? '${p.jerseyNo}' : '?'),
+                  ),
                   title: Text(p.name),
-                  subtitle:
-                      Text('${p.role} · ${p.battingStyle} bat · ${p.bowlingStyle}${tags.isEmpty ? '' : ' · $tags'}'),
+                  subtitle: Text(
+                    '${p.role} · ${p.battingStyle} bat · ${p.bowlingStyle}${tags.isEmpty ? '' : ' · $tags'}',
+                  ),
                   onTap: () => _editPlayer(context, p),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline),
@@ -202,11 +217,12 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _editPlayer(BuildContext context, Player? existing) async {
-    final p = existing ??
-        Player(id: Store.newId('player'), name: '', jerseyNo: 0);
+    final p =
+        existing ?? Player(id: Store.newId('player'), name: '', jerseyNo: 0);
     final nameCtrl = TextEditingController(text: p.name);
-    final jerseyCtrl =
-        TextEditingController(text: p.jerseyNo > 0 ? '${p.jerseyNo}' : '');
+    final jerseyCtrl = TextEditingController(
+      text: p.jerseyNo > 0 ? '${p.jerseyNo}' : '',
+    );
     var role = p.role;
     var bat = p.battingStyle;
     var bowl = p.bowlingStyle;
@@ -234,13 +250,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Name')),
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
                 TextField(
-                    controller: jerseyCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Jersey no.')),
+                  controller: jerseyCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Jersey no.'),
+                ),
                 DropdownButtonFormField<String>(
                   initialValue: role,
                   decoration: const InputDecoration(labelText: 'Role'),
@@ -251,8 +268,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: bat,
-                  decoration:
-                      const InputDecoration(labelText: 'Batting style'),
+                  decoration: const InputDecoration(labelText: 'Batting style'),
                   items: bats
                       .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                       .toList(),
@@ -260,8 +276,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 ),
                 DropdownButtonFormField<String>(
                   initialValue: bowl,
-                  decoration:
-                      const InputDecoration(labelText: 'Bowling style'),
+                  decoration: const InputDecoration(labelText: 'Bowling style'),
                   items: bowls
                       .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                       .toList(),
@@ -287,11 +302,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(c, false),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
-                onPressed: () => Navigator.pop(c, true),
-                child: const Text('Save')),
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Save'),
+            ),
           ],
         ),
       ),
