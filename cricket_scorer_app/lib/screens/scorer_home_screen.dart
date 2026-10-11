@@ -41,83 +41,227 @@ class ScorerHomeScreen extends StatelessWidget {
         label: const Text('New match'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.zero,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.asset('assets/logo.png', fit: BoxFit.cover),
-          ),
-          const SizedBox(height: 6),
-          const Center(
-            child: Text(
-              '60Score • Super Sixty League • fully offline',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
-            ),
+          _brandHeader(context),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: _statsRow(live.length, done.length),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Tournaments',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
+          _sectionTitle(context, 'Tournaments', Icons.emoji_events),
           if (store.tournaments.isEmpty)
-            const Text(
-              'No tournaments yet.',
-              style: TextStyle(color: Colors.white54),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'No tournaments yet.',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
           for (final t in store.tournaments)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.emoji_events, color: kCopper),
-                title: Text(t.name),
-                subtitle: Text('${t.teamIds.length} teams'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        TournamentDetailScreen(store: store, tournament: t),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.emoji_events, color: kCopper),
+                  title: Text(t.name),
+                  subtitle: Text('${t.teamIds.length} teams'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          TournamentDetailScreen(store: store, tournament: t),
+                    ),
                   ),
                 ),
               ),
             ),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () => _createTournament(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Create tournament'),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: TextButton.icon(
+                onPressed: () => _createTournament(context),
+                icon: const Icon(Icons.add),
+                label: const Text('Create tournament'),
+              ),
             ),
           ),
-          const Divider(height: 24),
-          const Text(
-            'Live matches',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
+          const Divider(height: 16),
+          _sectionTitle(context, 'Live matches', Icons.play_circle,
+              badge: live.isNotEmpty ? '${live.length}' : null),
           if (live.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Text(
                 'No live matches.',
                 style: TextStyle(color: Colors.white54),
               ),
             ),
-          for (final m in live) _matchTile(context, m, live: true),
+          for (final m in live)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: _matchTile(context, m, live: true),
+            ),
           const SizedBox(height: 10),
-          const Text(
-            'Completed',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
+          _sectionTitle(context, 'Completed', Icons.check_circle),
           if (done.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Text(
                 'No completed matches yet.',
                 style: TextStyle(color: Colors.white54),
               ),
             ),
-          for (final m in done) _matchTile(context, m, live: false),
-          const SizedBox(height: 70),
+          for (final m in done)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: _matchTile(context, m, live: false),
+            ),
+          const SizedBox(height: 90),
+        ],
+      ),
+    );
+  }
+
+  /// Branded professional header: 60Score logo lockup + offline badge.
+  Widget _brandHeader(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0A1F2C), Color(0xFF030A10)],
+        ),
+        border: Border(bottom: BorderSide(color: kTealDark, width: 1)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
+      child: Column(
+        children: [
+          Image.asset('assets/app_logo.png', fit: BoxFit.contain, height: 170),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: kTeal.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kTeal, width: 1),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.wifi_off, size: 14, color: kCyan),
+                SizedBox(width: 6),
+                Text(
+                  '100% Offline • Your data stays on this phone',
+                  style: TextStyle(color: kCyan, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Quick stats strip.
+  Widget _statsRow(int liveCount, int doneCount) {
+    return Row(
+      children: [
+        _statChip(
+          Icons.emoji_events,
+          '${store.tournaments.length}',
+          'Tournaments',
+          kCopper,
+        ),
+        const SizedBox(width: 8),
+        _statChip(
+          Icons.play_circle,
+          '$liveCount',
+          'Live now',
+          kCyan,
+        ),
+        const SizedBox(width: 8),
+        _statChip(
+          Icons.sports_cricket,
+          '${liveCount + doneCount}',
+          'Matches',
+          Colors.white70,
+        ),
+      ],
+    );
+  }
+
+  Widget _statChip(IconData icon, String value, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: kPanel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kTealDark, width: 1),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(
+    BuildContext context,
+    String title,
+    IconData icon, {
+    String? badge,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: Row(
+        children: [
+          Container(width: 4, height: 20, color: kCyan),
+          const SizedBox(width: 8),
+          Icon(icon, size: 18, color: kCyan),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          if (badge != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: kCyan,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                badge,
+                style: const TextStyle(
+                  color: Color(0xFF03222B),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -133,13 +277,28 @@ class ScorerHomeScreen extends StatelessWidget {
               )
               .join('  •  ');
     return Card(
+      margin: EdgeInsets.zero,
       child: ListTile(
-        leading: Icon(
-          live ? Icons.play_circle : Icons.check_circle,
-          color: live ? kCyan : Colors.white54,
-        ),
+        leading: live
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'LIVE',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            : const Icon(Icons.check_circle, color: Colors.white54),
         title: Text(
           '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}',
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(m.resultText.isNotEmpty ? m.resultText : summary),
         trailing: const Icon(Icons.chevron_right),
