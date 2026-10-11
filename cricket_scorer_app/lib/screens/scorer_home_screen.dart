@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../scoring.dart';
 import '../store.dart';
@@ -7,6 +8,7 @@ import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
 import 'scoring_screen.dart';
 import 'teams_screen.dart';
+import 'tournament_stats.dart';
 
 class ScorerHomeScreen extends StatelessWidget {
   final Store store;
@@ -15,15 +17,16 @@ class ScorerHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final live = store.matches.where((m) => m.status == 'live').toList();
-    final done =
-        store.matches.where((m) => m.status != 'live').toList();
+    final done = store.matches.where((m) => m.status != 'live').toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Scorer'),
         actions: [
           TextButton.icon(
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => TeamsScreen(store: store))),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => TeamsScreen(store: store)),
+            ),
             icon: const Icon(Icons.groups, color: kCyan),
             label: const Text('Teams', style: TextStyle(color: kCyan)),
           ),
@@ -31,9 +34,9 @@ class ScorerHomeScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => MatchSetupScreen(store: store))),
+          context,
+          MaterialPageRoute(builder: (_) => MatchSetupScreen(store: store)),
+        ),
         icon: const Icon(Icons.sports_cricket),
         label: const Text('New match'),
       ),
@@ -46,15 +49,22 @@ class ScorerHomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Center(
-              child: Text('60Score • Super Sixty League • fully offline',
-                  style: TextStyle(color: Colors.white54, fontSize: 12))),
+            child: Text(
+              '60Score • Super Sixty League • fully offline',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
           const SizedBox(height: 14),
-          const Text('Tournaments',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text(
+            'Tournaments',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 6),
           if (store.tournaments.isEmpty)
-            const Text('No tournaments yet.',
-                style: TextStyle(color: Colors.white54)),
+            const Text(
+              'No tournaments yet.',
+              style: TextStyle(color: Colors.white54),
+            ),
           for (final t in store.tournaments)
             Card(
               child: ListTile(
@@ -63,10 +73,12 @@ class ScorerHomeScreen extends StatelessWidget {
                 subtitle: Text('${t.teamIds.length} teams'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            TournamentDetailScreen(store: store, tournament: t))),
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        TournamentDetailScreen(store: store, tournament: t),
+                  ),
+                ),
               ),
             ),
           Align(
@@ -78,23 +90,31 @@ class ScorerHomeScreen extends StatelessWidget {
             ),
           ),
           const Divider(height: 24),
-          const Text('Live matches',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text(
+            'Live matches',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           if (live.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('No live matches.',
-                  style: TextStyle(color: Colors.white54)),
+              child: Text(
+                'No live matches.',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
           for (final m in live) _matchTile(context, m, live: true),
           const SizedBox(height: 10),
-          const Text('Completed',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text(
+            'Completed',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           if (done.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('No completed matches yet.',
-                  style: TextStyle(color: Colors.white54)),
+              child: Text(
+                'No completed matches yet.',
+                style: TextStyle(color: Colors.white54),
+              ),
             ),
           for (final m in done) _matchTile(context, m, live: false),
           const SizedBox(height: 70),
@@ -107,15 +127,20 @@ class ScorerHomeScreen extends StatelessWidget {
     final summary = m.innings.isEmpty
         ? 'Not started'
         : m.innings
-            .map((i) =>
-                '${store.teamName(i.battingTeamId)} ${i.totalRuns}/${i.wickets} (${oversText(i.legalBalls, i.ballsPerOver)})')
-            .join('  •  ');
+              .map(
+                (i) =>
+                    '${store.teamName(i.battingTeamId)} ${i.totalRuns}/${i.wickets} (${oversText(i.legalBalls, i.ballsPerOver)})',
+              )
+              .join('  •  ');
     return Card(
       child: ListTile(
-        leading: Icon(live ? Icons.play_circle : Icons.check_circle,
-            color: live ? kCyan : Colors.white54),
+        leading: Icon(
+          live ? Icons.play_circle : Icons.check_circle,
+          color: live ? kCyan : Colors.white54,
+        ),
         title: Text(
-            '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}'),
+          '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}',
+        ),
         subtitle: Text(m.resultText.isNotEmpty ? m.resultText : summary),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.push(
@@ -139,43 +164,60 @@ class ScorerHomeScreen extends StatelessWidget {
         builder: (c, setD) => AlertDialog(
           title: const Text('Create tournament'),
           content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
                   controller: nameCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Tournament name')),
-              const SizedBox(height: 8),
-              const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Teams', style: TextStyle(fontWeight: FontWeight.bold))),
-              for (final t in store.teams)
-                CheckboxListTile(
-                  dense: true,
-                  value: selected.contains(t.id),
-                  title: Text(t.name),
-                  onChanged: (v) => setD(() {
-                    if (v == true) {
-                      selected.add(t.id);
-                    } else {
-                      selected.remove(t.id);
-                    }
-                  }),
+                  decoration: const InputDecoration(
+                    labelText: 'Tournament name',
+                  ),
                 ),
-            ]),
+                const SizedBox(height: 8),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Teams',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                for (final t in store.teams)
+                  CheckboxListTile(
+                    dense: true,
+                    value: selected.contains(t.id),
+                    title: Text(t.name),
+                    onChanged: (v) => setD(() {
+                      if (v == true) {
+                        selected.add(t.id);
+                      } else {
+                        selected.remove(t.id);
+                      }
+                    }),
+                  ),
+              ],
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Create')),
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Create'),
+            ),
           ],
         ),
       ),
     );
     if (ok == true && nameCtrl.text.trim().isNotEmpty) {
-      await store.upsertTournament(Tournament(
-        id: Store.newId('tournament'),
-        name: nameCtrl.text.trim(),
-        teamIds: selected.toList(),
-      ));
+      await store.upsertTournament(
+        Tournament(
+          id: Store.newId('tournament'),
+          name: nameCtrl.text.trim(),
+          teamIds: selected.toList(),
+        ),
+      );
     }
   }
 }
@@ -183,12 +225,14 @@ class ScorerHomeScreen extends StatelessWidget {
 class TournamentDetailScreen extends StatefulWidget {
   final Store store;
   final Tournament tournament;
-  const TournamentDetailScreen(
-      {super.key, required this.store, required this.tournament});
+  const TournamentDetailScreen({
+    super.key,
+    required this.store,
+    required this.tournament,
+  });
 
   @override
-  State<TournamentDetailScreen> createState() =>
-      _TournamentDetailScreenState();
+  State<TournamentDetailScreen> createState() => _TournamentDetailScreenState();
 }
 
 class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
@@ -206,11 +250,6 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
     final fixtures = store.matches
         .where((m) => m.tournamentId == tournament.id)
         .toList();
-    final tStats = computeCareerStats(store.matches, tournamentId: tournament.id);
-    final topRuns = tStats.values.toList()
-      ..sort((a, b) => b.runs.compareTo(a.runs));
-    final topWkts = tStats.values.toList()
-      ..sort((a, b) => b.wickets.compareTo(a.wickets));
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -225,130 +264,129 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
               },
             ),
           ],
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Points Table'),
-            Tab(text: 'Fixtures'),
-            Tab(text: 'Stats'),
-          ]),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Points Table'),
+              Tab(text: 'Fixtures'),
+              Tab(text: 'Stats'),
+            ],
+          ),
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => MatchSetupScreen(
-                      store: store, tournamentId: tournament.id)))
-              .then((_) => setState(() {})),
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  MatchSetupScreen(store: store, tournamentId: tournament.id),
+            ),
+          ).then((_) => setState(() {})),
           icon: const Icon(Icons.add),
           label: const Text('New fixture'),
         ),
-        body: TabBarView(children: [
-          // Points table (ICC NRR)
-          ListView(
-            padding: const EdgeInsets.all(10),
-            children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: 12,
-                  columns: const [
-                    DataColumn(label: Text('Team')),
-                    DataColumn(label: Text('P')),
-                    DataColumn(label: Text('W')),
-                    DataColumn(label: Text('L')),
-                    DataColumn(label: Text('T')),
-                    DataColumn(label: Text('NR')),
-                    DataColumn(label: Text('Pts')),
-                    DataColumn(label: Text('NRR')),
-                    DataColumn(label: Text('Adj')),
-                  ],
-                  rows: [
-                    for (final r in rows)
-                      DataRow(cells: [
-                        DataCell(Text(store.teamName(r.teamId))),
-                        DataCell(Text('${r.played}')),
-                        DataCell(Text('${r.won}')),
-                        DataCell(Text('${r.lost}')),
-                        DataCell(Text('${r.tied}')),
-                        DataCell(Text('${r.noResult}')),
-                        DataCell(Text('${r.points}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, color: kCyan))),
-                        DataCell(Text(r.nrr.toStringAsFixed(3))),
-                        DataCell(IconButton(
-                          icon: const Icon(Icons.edit, size: 18),
-                          tooltip: 'Custom points adjustment',
-                          onPressed: () =>
-                              _editAdjustment(context, r.teamId),
-                        )),
-                      ]),
-                  ],
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                    'NRR uses the ICC rule: aggregate runs per over scored minus conceded across the tournament; a team bowled out is deemed to have faced its full overs quota.',
-                    style: TextStyle(fontSize: 11, color: Colors.white38)),
-              ),
-            ],
-          ),
-          // Fixtures
-          ListView(
-            padding: const EdgeInsets.all(10),
-            children: [
-              if (fixtures.isEmpty) const Text('No fixtures yet.'),
-              for (final m in fixtures)
-                Card(
-                  child: ListTile(
-                    title: Text(
-                        '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}'),
-                    subtitle: Text(m.resultText.isNotEmpty
-                        ? m.resultText
-                        : (m.status == 'live' ? 'Live' : m.status)),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => m.status == 'live'
-                            ? ScoringScreen(store: store, match: m)
-                            : ScorecardScreen(store: store, match: m),
-                      ),
-                    ).then((_) => setState(() {})),
+        body: TabBarView(
+          children: [
+            // Points table (ICC NRR)
+            ListView(
+              padding: const EdgeInsets.all(10),
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columnSpacing: 12,
+                    columns: const [
+                      DataColumn(label: Text('Team')),
+                      DataColumn(label: Text('P')),
+                      DataColumn(label: Text('W')),
+                      DataColumn(label: Text('L')),
+                      DataColumn(label: Text('T')),
+                      DataColumn(label: Text('NR')),
+                      DataColumn(label: Text('Pts')),
+                      DataColumn(label: Text('NRR')),
+                      DataColumn(label: Text('Adj')),
+                    ],
+                    rows: [
+                      for (final r in rows)
+                        DataRow(
+                          cells: [
+                            DataCell(Text(store.teamName(r.teamId))),
+                            DataCell(Text('${r.played}')),
+                            DataCell(Text('${r.won}')),
+                            DataCell(Text('${r.lost}')),
+                            DataCell(Text('${r.tied}')),
+                            DataCell(Text('${r.noResult}')),
+                            DataCell(
+                              Text(
+                                '${r.points}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: kCyan,
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(r.nrr.toStringAsFixed(3))),
+                            DataCell(
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 18),
+                                tooltip: 'Custom points adjustment',
+                                onPressed: () =>
+                                    _editAdjustment(context, r.teamId),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
                   ),
                 ),
-              const SizedBox(height: 70),
-            ],
-          ),
-          // Tournament stats
-          ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              const Text('Most runs',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              for (final c in topRuns.take(10))
-                if (c.runs > 0)
-                  ListTile(
-                      dense: true,
-                      title: Text(store.playerName(c.playerId)),
-                      trailing: Text('${c.runs} runs')),
-              const Divider(),
-              const Text('Most wickets',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              for (final c in topWkts.take(10))
-                if (c.wickets > 0)
-                  ListTile(
-                      dense: true,
-                      title: Text(store.playerName(c.playerId)),
-                      trailing: Text('${c.wickets} wkts')),
-            ],
-          ),
-        ]),
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'NRR uses the ICC rule: aggregate runs per over scored minus conceded across the tournament; a team bowled out is deemed to have faced its full overs quota.',
+                    style: TextStyle(fontSize: 11, color: Colors.white38),
+                  ),
+                ),
+              ],
+            ),
+            // Fixtures
+            ListView(
+              padding: const EdgeInsets.all(10),
+              children: [
+                if (fixtures.isEmpty) const Text('No fixtures yet.'),
+                for (final m in fixtures)
+                  Card(
+                    child: ListTile(
+                      title: Text(
+                        '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}',
+                      ),
+                      subtitle: Text(
+                        m.resultText.isNotEmpty
+                            ? m.resultText
+                            : (m.status == 'live' ? 'Live' : m.status),
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => m.status == 'live'
+                              ? ScoringScreen(store: store, match: m)
+                              : ScorecardScreen(store: store, match: m),
+                        ),
+                      ).then((_) => setState(() {})),
+                    ),
+                  ),
+                const SizedBox(height: 70),
+              ],
+            ),
+            // Tournament stats (Stumps-style leaderboards)
+            TournamentStatsTab(store: store, tournament: tournament),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _editAdjustment(BuildContext context, String teamId) async {
     final ctrl = TextEditingController(
-        text: '${tournament.pointsAdjustments[teamId] ?? 0}');
+      text: '${tournament.pointsAdjustments[teamId] ?? 0}',
+    );
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -357,11 +395,18 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
           controller: ctrl,
           keyboardType: const TextInputType.numberWithOptions(signed: true),
           decoration: const InputDecoration(
-              labelText: 'Adjustment (added to earned points)'),
+            labelText: 'Adjustment (added to earned points)',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );

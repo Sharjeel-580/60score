@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../store.dart';
 import 'scoring_screen.dart';
@@ -25,6 +26,9 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
   bool noBallPenalty = true;
   int ballsPerOver = 6;
   final venueCtrl = TextEditingController();
+  final titleCtrl = TextEditingController();
+  final seasonCtrl = TextEditingController();
+  String ballType = 'Tennis Ball';
   DateTime date = DateTime.now();
   String? tossWinnerId;
   String tossDecision = 'bat';
@@ -69,14 +73,18 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       builder: (c) => AlertDialog(
         title: Text('Quick-add player to ${team.name}'),
         content: TextField(
-            controller: ctrl,
-            decoration: const InputDecoration(labelText: 'Player name')),
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'Player name'),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(c, ctrl.text.trim()),
-              child: const Text('Add')),
+            onPressed: () => Navigator.pop(c, ctrl.text.trim()),
+            child: const Text('Add'),
+          ),
         ],
       ),
     );
@@ -98,9 +106,11 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         Row(
           children: [
             Expanded(
-                child: Text(
-                    '${team.name} — Playing XI (${xi.length}/11)${xi.length >= 11 ? ' — full' : ''}',
-                    style: const TextStyle(fontWeight: FontWeight.bold))),
+              child: Text(
+                '${team.name} — Playing XI (${xi.length}/11)${xi.length >= 11 ? ' — full' : ''}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
             TextButton(
               onPressed: () => _quickAdd(teamId, xi),
               child: const Text('Quick-add'),
@@ -108,23 +118,27 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
           ],
         ),
         if (team.players.isEmpty)
-          const Text('No squad players yet — use Quick-add.',
-              style: TextStyle(color: Colors.orange)),
-        ...team.players.map((p) => CheckboxListTile(
-              dense: true,
-              value: xi.contains(p.id),
-              title: Text(p.name),
-              subtitle: Text(p.role),
-              onChanged: (v) {
-                setState(() {
-                  if (v == true) {
-                    if (xi.length < 11) xi.add(p.id);
-                  } else {
-                    xi.remove(p.id);
-                  }
-                });
-              },
-            )),
+          const Text(
+            'No squad players yet — use Quick-add.',
+            style: TextStyle(color: Colors.orange),
+          ),
+        ...team.players.map(
+          (p) => CheckboxListTile(
+            dense: true,
+            value: xi.contains(p.id),
+            title: Text(p.name),
+            subtitle: Text(p.role),
+            onChanged: (v) {
+              setState(() {
+                if (v == true) {
+                  if (xi.length < 11) xi.add(p.id);
+                } else {
+                  xi.remove(p.id);
+                }
+              });
+            },
+          ),
+        ),
       ],
     );
   }
@@ -140,6 +154,10 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
   @override
   Widget build(BuildContext context) {
     final teams = store.teams;
+    // Always include the current value: a custom-typed overs count must
+    // never crash the dropdown (value-not-in-items assertion).
+    final overOptions = <int>{5, 8, 10, 15, 20, 25, 30, 40, 50, overs}.toList()
+      ..sort();
     return Scaffold(
       appBar: AppBar(title: const Text('New match')),
       body: ListView(
@@ -147,11 +165,17 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         children: [
           DropdownButtonFormField<String>(
             initialValue: tournamentId,
-            decoration: const InputDecoration(labelText: 'Tournament (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Tournament (optional)',
+            ),
             items: [
-              const DropdownMenuItem<String>(value: null, child: Text('Friendly / none')),
-              ...store.tournaments.map((t) =>
-                  DropdownMenuItem(value: t.id, child: Text(t.name))),
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('Friendly / none'),
+              ),
+              ...store.tournaments.map(
+                (t) => DropdownMenuItem(value: t.id, child: Text(t.name)),
+              ),
             ],
             onChanged: (v) => setState(() => tournamentId = v),
           ),
@@ -160,10 +184,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: teamAId,
                   decoration: const InputDecoration(labelText: 'Team A'),
                   items: teams
-                      .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+                      .map(
+                        (t) =>
+                            DropdownMenuItem(value: t.id, child: Text(t.name)),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() {
                     teamAId = v;
@@ -179,13 +207,21 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
               ),
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: teamBId,
                   decoration: const InputDecoration(labelText: 'Team B'),
                   items: teams
-                      .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+                      .map(
+                        (t) =>
+                            DropdownMenuItem(value: t.id, child: Text(t.name)),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() {
                     teamBId = v;
+                    // Keep the toss-winner value inside the dropdown items.
+                    if (tossWinnerId != teamAId && tossWinnerId != teamBId) {
+                      tossWinnerId = teamAId;
+                    }
                     _preselect();
                   }),
                 ),
@@ -197,10 +233,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: overs,
                   decoration: const InputDecoration(labelText: 'Overs'),
-                  items: [5, 10, 15, 20, 25, 30, 40, 50]
-                      .map((o) => DropdownMenuItem(value: o, child: Text('$o overs')))
+                  items: overOptions
+                      .map(
+                        (o) =>
+                            DropdownMenuItem(value: o, child: Text('$o overs')),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => overs = v ?? 10),
                 ),
@@ -220,10 +260,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<int>(
+                  isExpanded: true,
                   initialValue: ballsPerOver,
                   decoration: const InputDecoration(labelText: 'Balls / over'),
                   items: [4, 5, 6, 8]
-                      .map((o) => DropdownMenuItem(value: o, child: Text('$o balls')))
+                      .map(
+                        (o) =>
+                            DropdownMenuItem(value: o, child: Text('$o balls')),
+                      )
                       .toList(),
                   onChanged: (v) => setState(() => ballsPerOver = v ?? 6),
                 ),
@@ -232,8 +276,50 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
           ),
           const SizedBox(height: 10),
           TextField(
-              controller: venueCtrl,
-              decoration: const InputDecoration(labelText: 'Venue')),
+            controller: venueCtrl,
+            decoration: const InputDecoration(labelText: 'Venue'),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: titleCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Match title (optional, e.g. Final)',
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: ballType,
+                  decoration: const InputDecoration(labelText: 'Ball type'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Tennis Ball',
+                      child: Text('Tennis Ball'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Leather Ball',
+                      child: Text('Leather Ball'),
+                    ),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => ballType = v ?? 'Tennis Ball'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: seasonCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Season / Year (e.g. 2025)',
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -251,12 +337,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
             },
           ),
           const Divider(),
-          const Text('Match settings',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text(
+            'Match settings',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<int>(
             initialValue: totalWickets,
-            decoration:
-                const InputDecoration(labelText: 'Total wickets'),
+            decoration: const InputDecoration(labelText: 'Total wickets'),
             items: const [
               DropdownMenuItem(value: 0, child: Text('Auto (players - 1)')),
               DropdownMenuItem(value: 10, child: Text('10 wickets')),
@@ -283,6 +371,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
           ),
           const Divider(),
           const Text('Toss', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -292,10 +381,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                   items: [
                     if (teamAId != null)
                       DropdownMenuItem(
-                          value: teamAId, child: Text(store.teamName(teamAId!))),
+                        value: teamAId,
+                        child: Text(store.teamName(teamAId!)),
+                      ),
                     if (teamBId != null)
                       DropdownMenuItem(
-                          value: teamBId, child: Text(store.teamName(teamBId!))),
+                        value: teamBId,
+                        child: Text(store.teamName(teamBId!)),
+                      ),
                   ],
                   onChanged: (v) => setState(() => tossWinnerId = v),
                 ),
@@ -328,8 +421,9 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                  'Pick two different teams and at least 2 players per XI to start.',
-                  style: TextStyle(color: Colors.orange)),
+                'Pick two different teams and at least 2 players per XI to start.',
+                style: TextStyle(color: Colors.orange),
+              ),
             ),
         ],
       ),
@@ -348,6 +442,9 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       ballsPerOver: ballsPerOver,
       venue: venueCtrl.text.trim(),
       dateIso: date.toIso8601String().substring(0, 10),
+      matchTitle: titleCtrl.text.trim(),
+      ballType: ballType,
+      season: seasonCtrl.text.trim(),
       tossWinnerId: tossWinnerId!,
       tossDecision: tossDecision,
       status: 'live',
@@ -360,7 +457,9 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => ScoringScreen(store: store, match: m)),
+      MaterialPageRoute(
+        builder: (_) => ScoringScreen(store: store, match: m),
+      ),
     );
   }
 }

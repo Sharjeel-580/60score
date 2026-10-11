@@ -1,6 +1,7 @@
 // Pure-Dart scoring engine + statistics for CricScore Offline.
 // No Flutter imports: everything here is unit-testable.
 import 'dart:convert';
+
 import 'models.dart';
 
 class BallInput {
@@ -61,7 +62,12 @@ void _restore(InningsState s, String snap) {
 }
 
 /// Set the two openers and first bowler for a fresh innings.
-void setOpeners(InningsState s, String striker, String nonStriker, String bowler) {
+void setOpeners(
+  InningsState s,
+  String striker,
+  String nonStriker,
+  String bowler,
+) {
   s.strikerId = striker;
   s.nonStrikerId = nonStriker;
   s.currentBowlerId = bowler;
@@ -203,8 +209,14 @@ bool applyBall(InningsState s, BallInput input) {
     outFig.batted = true;
     outFig.out = true;
     outFig.howOut = howOutText(input.wicketType, bowlerId, input.fielderId);
-    s.fallOfWickets.add(FallOfWicket(
-        s.wickets, s.totalRuns, oversText(s.legalBalls, s.ballsPerOver), outId));
+    s.fallOfWickets.add(
+      FallOfWicket(
+        s.wickets,
+        s.totalRuns,
+        oversText(s.legalBalls, s.ballsPerOver),
+        outId,
+      ),
+    );
     if (s.wickets < s.effectiveMaxWickets) {
       if (s.strikerId == outId) s.strikerId = '';
       if (s.nonStrikerId == outId) s.nonStrikerId = '';
@@ -331,7 +343,8 @@ String computeResult(Match m, String Function(String teamId) teamName) {
         '${ballsLeft > 0 ? ' ($ballsLeft ball${ballsLeft == 1 ? '' : 's'} left)' : ''}';
   } else if (i1.totalRuns > i2.totalRuns) {
     final margin = i1.totalRuns - i2.totalRuns;
-    text = '${teamName(i1.battingTeamId)} won by $margin run${margin == 1 ? '' : 's'}';
+    text =
+        '${teamName(i1.battingTeamId)} won by $margin run${margin == 1 ? '' : 's'}';
   } else {
     text = 'Match tied';
   }
@@ -370,8 +383,11 @@ int _adjustedBalls(InningsState inn) {
 }
 
 List<PointsRow> computePointsTable(
-    String tournamentId, List<String> teamIds, List<Match> matches,
-    {Map<String, int> pointsAdjustments = const {}}) {
+  String tournamentId,
+  List<String> teamIds,
+  List<Match> matches, {
+  Map<String, int> pointsAdjustments = const {},
+}) {
   final rows = {for (final id in teamIds) id: PointsRow(id)};
   for (final m in matches) {
     if (m.tournamentId != tournamentId) continue;
@@ -411,8 +427,9 @@ List<PointsRow> computePointsTable(
       a.points += 1;
       b.points += 1;
     } else {
-      final winnerId =
-          i1.totalRuns > i2.totalRuns ? i1.battingTeamId : i2.battingTeamId;
+      final winnerId = i1.totalRuns > i2.totalRuns
+          ? i1.battingTeamId
+          : i2.battingTeamId;
       final loserId = winnerId == m.teamAId ? m.teamBId : m.teamAId;
       rows[winnerId]!.won++;
       rows[winnerId]!.points += 2;
@@ -456,7 +473,8 @@ class CareerStats {
   CareerStats(this.playerId);
 
   int get dismissals => inningsBatted - notOuts;
-  double get battingAverage => dismissals == 0 ? runs.toDouble() : runs / dismissals;
+  double get battingAverage =>
+      dismissals == 0 ? runs.toDouble() : runs / dismissals;
   double get battingSR => ballsFaced == 0 ? 0 : runs * 100 / ballsFaced;
   double get bowlingAverage => wickets == 0 ? 0 : runsConceded / wickets;
   double get economy => ballsBowled == 0 ? 0 : runsConceded * 6 / ballsBowled;
@@ -466,8 +484,10 @@ class CareerStats {
       runs + 20.0 * wickets + 10.0 * (catches + stumpings) + 5.0 * runOuts;
 }
 
-Map<String, CareerStats> computeCareerStats(List<Match> matches,
-    {String? tournamentId}) {
+Map<String, CareerStats> computeCareerStats(
+  List<Match> matches, {
+  String? tournamentId,
+}) {
   final map = <String, CareerStats>{};
   CareerStats get(String id) => map.putIfAbsent(id, () => CareerStats(id));
 
@@ -502,7 +522,9 @@ Map<String, CareerStats> computeCareerStats(List<Match> matches,
         c.runsConceded += fig.runs;
         c.wickets += fig.wickets;
         if (fig.wickets > c.bestWickets ||
-            (fig.wickets == c.bestWickets && fig.wickets > 0 && fig.runs < c.bestRuns)) {
+            (fig.wickets == c.bestWickets &&
+                fig.wickets > 0 &&
+                fig.runs < c.bestRuns)) {
           c.bestWickets = fig.wickets;
           c.bestRuns = fig.runs;
         }
@@ -521,7 +543,9 @@ Map<String, CareerStats> computeCareerStats(List<Match> matches,
 
 /// Fold manually-entered past scores into career totals.
 void applyManualStats(
-    Map<String, CareerStats> map, List<ManualStatEntry> entries) {
+  Map<String, CareerStats> map,
+  List<ManualStatEntry> entries,
+) {
   for (final e in entries) {
     final c = map.putIfAbsent(e.playerId, () => CareerStats(e.playerId));
     c.matches++;
@@ -544,7 +568,9 @@ void applyManualStats(
       c.runsConceded += e.runsConceded;
       c.wickets += e.wickets;
       if (e.wickets > c.bestWickets ||
-          (e.wickets == c.bestWickets && e.wickets > 0 && e.runsConceded < c.bestRuns)) {
+          (e.wickets == c.bestWickets &&
+              e.wickets > 0 &&
+              e.runsConceded < c.bestRuns)) {
         c.bestWickets = e.wickets;
         c.bestRuns = e.runsConceded;
       }
@@ -591,8 +617,9 @@ Map<String, TeamStats> computeTeamStats(List<Match> matches) {
       a.tied++;
       b.tied++;
     } else {
-      final winnerId =
-          i1.totalRuns > i2.totalRuns ? i1.battingTeamId : i2.battingTeamId;
+      final winnerId = i1.totalRuns > i2.totalRuns
+          ? i1.battingTeamId
+          : i2.battingTeamId;
       final loserId = winnerId == m.teamAId ? m.teamBId : m.teamAId;
       get(winnerId).won++;
       get(loserId).lost++;
@@ -623,8 +650,9 @@ HeadToHead headToHead(List<Match> matches, String teamA, String teamB) {
     if (i1.totalRuns == i2.totalRuns) {
       h.tied++;
     } else {
-      final winnerId =
-          i1.totalRuns > i2.totalRuns ? i1.battingTeamId : i2.battingTeamId;
+      final winnerId = i1.totalRuns > i2.totalRuns
+          ? i1.battingTeamId
+          : i2.battingTeamId;
       if (winnerId == teamA) {
         h.aWins++;
       } else {
@@ -727,28 +755,151 @@ List<Partnership> partnerships(InningsState inn) {
   return list;
 }
 
+/// Fastest fifties / hundreds (balls taken to reach the milestone) in a
+/// set of matches, optionally scoped to one tournament.
+class Milestone {
+  String playerId;
+  int balls;
+  int runs; // final runs in that innings
+  Milestone(this.playerId, this.balls, this.runs);
+}
+
+class FastestResult {
+  List<Milestone> fifties;
+  List<Milestone> hundreds;
+  FastestResult(this.fifties, this.hundreds);
+}
+
+FastestResult fastestMilestones(List<Match> matches, {String? tournamentId}) {
+  final fifties = <Milestone>[];
+  final hundreds = <Milestone>[];
+  for (final m in matches) {
+    if (tournamentId != null && m.tournamentId != tournamentId) continue;
+    if (m.status != 'completed') continue;
+    for (final inn in m.innings) {
+      final ballsMap = <String, int>{};
+      final runsMap = <String, int>{};
+      final fiftyDone = <String>{};
+      final hundredDone = <String>{};
+      for (final ev in inn.events) {
+        final s = ev.strikerId;
+        if (ev.extraType == 'wide') continue;
+        ballsMap[s] = (ballsMap[s] ?? 0) + 1;
+        // Only runs off the bat count toward milestones (not byes/leg-byes).
+        final r = (ev.extraType == 'bye' || ev.extraType == 'legBye')
+            ? 0
+            : ev.batRuns;
+        runsMap[s] = (runsMap[s] ?? 0) + r;
+        final runs = runsMap[s]!;
+        final balls = ballsMap[s]!;
+        if (runs >= 50 && fiftyDone.add(s)) {
+          fifties.add(Milestone(s, balls, runs));
+        }
+        if (runs >= 100 && hundredDone.add(s)) {
+          hundreds.add(Milestone(s, balls, runs));
+        }
+      }
+    }
+  }
+  fifties.sort((a, b) => a.balls.compareTo(b.balls));
+  hundreds.sort((a, b) => a.balls.compareTo(b.balls));
+  return FastestResult(fifties, hundreds);
+}
+
+/// Most sixes / most fours in a single innings (one row per innings).
+class InningsBest {
+  String playerId;
+  int count;
+  int runs;
+  InningsBest(this.playerId, this.count, this.runs);
+}
+
+class InningsPowerLeaders {
+  List<InningsBest> sixes;
+  List<InningsBest> fours;
+  InningsPowerLeaders(this.sixes, this.fours);
+}
+
+InningsPowerLeaders inningsPowerLeaders(
+  List<Match> matches, {
+  String? tournamentId,
+}) {
+  final sixes = <InningsBest>[];
+  final fours = <InningsBest>[];
+  for (final m in matches) {
+    if (tournamentId != null && m.tournamentId != tournamentId) continue;
+    if (m.status != 'completed') continue;
+    for (final inn in m.innings) {
+      inn.batting.forEach((pid, fig) {
+        if (!fig.batted) return;
+        if (fig.sixes > 0) sixes.add(InningsBest(pid, fig.sixes, fig.runs));
+        if (fig.fours > 0) fours.add(InningsBest(pid, fig.fours, fig.runs));
+      });
+    }
+  }
+  sixes.sort((a, b) => b.count.compareTo(a.count));
+  fours.sort((a, b) => b.count.compareTo(a.count));
+  return InningsPowerLeaders(sixes, fours);
+}
+
+/// Best partnerships in a set of matches (one row per partnership).
+class PartnershipBest {
+  String batter1Id;
+  String batter2Id;
+  int runs;
+  int balls;
+  PartnershipBest(this.batter1Id, this.batter2Id, this.runs, this.balls);
+}
+
+List<PartnershipBest> bestPartnerships(
+  List<Match> matches, {
+  String? tournamentId,
+}) {
+  final out = <PartnershipBest>[];
+  for (final m in matches) {
+    if (tournamentId != null && m.tournamentId != tournamentId) continue;
+    if (m.status != 'completed') continue;
+    for (final inn in m.innings) {
+      for (final p in partnerships(inn)) {
+        out.add(PartnershipBest(p.batter1Id, p.batter2Id, p.runs, p.balls));
+      }
+    }
+  }
+  out.sort((a, b) => b.runs.compareTo(a.runs));
+  return out;
+}
+
 /// Plain-text scorecard summary (for clipboard export).
-String scorecardText(Match m, String Function(String id) nameOf,
-    String Function(String teamId) teamName) {
+String scorecardText(
+  Match m,
+  String Function(String id) nameOf,
+  String Function(String teamId) teamName,
+) {
   final buf = StringBuffer();
   buf.writeln(
-      '${teamName(m.teamAId)} vs ${teamName(m.teamBId)} — ${m.oversLimit} overs');
+    '${teamName(m.teamAId)} vs ${teamName(m.teamBId)} — ${m.oversLimit} overs',
+  );
   if (m.venue.isNotEmpty) buf.writeln('Venue: ${m.venue}');
   if (m.dateIso.isNotEmpty) buf.writeln('Date: ${m.dateIso}');
   buf.writeln(
-      'Toss: ${teamName(m.tossWinnerId)} chose to ${m.tossDecision} first');
+    'Toss: ${teamName(m.tossWinnerId)} chose to ${m.tossDecision} first',
+  );
   for (var idx = 0; idx < m.innings.length; idx++) {
     final inn = m.innings[idx];
     buf.writeln('');
     buf.writeln(
-        '${teamName(inn.battingTeamId)} innings: ${inn.totalRuns}/${inn.wickets} '
-        '(${oversText(inn.legalBalls, inn.ballsPerOver)} ov)');
-    final batters = inn.battingXI.where((id) => inn.batting[id]?.batted ?? false);
+      '${teamName(inn.battingTeamId)} innings: ${inn.totalRuns}/${inn.wickets} '
+      '(${oversText(inn.legalBalls, inn.ballsPerOver)} ov)',
+    );
+    final batters = inn.battingXI.where(
+      (id) => inn.batting[id]?.batted ?? false,
+    );
     for (final pid in batters) {
       final f = inn.batting[pid]!;
       final how = f.out ? resolveHowOut(f.howOut, nameOf) : 'not out';
       buf.writeln(
-          '  ${nameOf(pid)}  $how  ${f.runs} (${f.balls}b, ${f.fours}x4, ${f.sixes}x6)');
+        '  ${nameOf(pid)}  $how  ${f.runs} (${f.balls}b, ${f.fours}x4, ${f.sixes}x6)',
+      );
     }
     final dnb = inn.battingXI
         .where((id) => !(inn.batting[id]?.batted ?? false))
@@ -756,16 +907,19 @@ String scorecardText(Match m, String Function(String id) nameOf,
         .toList();
     if (dnb.isNotEmpty) buf.writeln('  Did not bat: ${dnb.join(', ')}');
     buf.writeln(
-        '  Extras: ${inn.extrasTotal} (wd ${inn.widesRuns}, nb ${inn.noBallRuns}, b ${inn.byeRuns}, lb ${inn.legByeRuns})');
+      '  Extras: ${inn.extrasTotal} (wd ${inn.widesRuns}, nb ${inn.noBallRuns}, b ${inn.byeRuns}, lb ${inn.legByeRuns})',
+    );
     for (final pid in inn.bowling.keys) {
       final f = inn.bowling[pid]!;
       if (f.legalBalls == 0 && f.wides == 0 && f.noBalls == 0) continue;
       buf.writeln(
-          '  Bowling: ${nameOf(pid)}  ${oversText(f.legalBalls, inn.ballsPerOver)}-${f.maidens}-${f.runs}-${f.wickets}');
+        '  Bowling: ${nameOf(pid)}  ${oversText(f.legalBalls, inn.ballsPerOver)}-${f.maidens}-${f.runs}-${f.wickets}',
+      );
     }
     if (inn.fallOfWickets.isNotEmpty) {
       buf.writeln(
-          '  FoW: ${inn.fallOfWickets.map((w) => '${w.runs}-${w.wicketNo} (${nameOf(w.playerId)}, ${w.overText})').join(', ')}');
+        '  FoW: ${inn.fallOfWickets.map((w) => '${w.runs}-${w.wicketNo} (${nameOf(w.playerId)}, ${w.overText})').join(', ')}',
+      );
     }
   }
   if (m.resultText.isNotEmpty) {
