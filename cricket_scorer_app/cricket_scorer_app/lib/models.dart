@@ -1,0 +1,784 @@
+// Data models for CricScore Offline. Pure Dart (no Flutter imports) so the
+// scoring logic can be unit-tested easily. All classes are JSON-serializable
+// for SharedPreferences persistence.
+
+class Player {
+  String id;
+  String name;
+  int jerseyNo;
+  String role; // Batter / Bowler / All-Rounder / Wicket-Keeper
+  String battingStyle; // Right-hand / Left-hand
+  String bowlingStyle; // e.g. Right-arm fast, Left-arm spin, None
+  bool isCaptain;
+  bool isViceCaptain;
+  bool isKeeper;
+
+  Player({
+    required this.id,
+    required this.name,
+    this.jerseyNo = 0,
+    this.role = 'Batter',
+    this.battingStyle = 'Right-hand',
+    this.bowlingStyle = 'None',
+    this.isCaptain = false,
+    this.isViceCaptain = false,
+    this.isKeeper = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'jerseyNo': jerseyNo,
+        'role': role,
+        'battingStyle': battingStyle,
+        'bowlingStyle': bowlingStyle,
+        'isCaptain': isCaptain,
+        'isViceCaptain': isViceCaptain,
+        'isKeeper': isKeeper,
+      };
+
+  factory Player.fromJson(Map<String, dynamic> j) => Player(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        jerseyNo: (j['jerseyNo'] as num?)?.toInt() ?? 0,
+        role: j['role'] as String? ?? 'Batter',
+        battingStyle: j['battingStyle'] as String? ?? 'Right-hand',
+        bowlingStyle: j['bowlingStyle'] as String? ?? 'None',
+        isCaptain: j['isCaptain'] as bool? ?? false,
+        isViceCaptain: j['isViceCaptain'] as bool? ?? false,
+        isKeeper: j['isKeeper'] as bool? ?? false,
+      );
+}
+
+class Team {
+  String id;
+  String name;
+  List<Player> players;
+
+  Team({required this.id, required this.name, List<Player>? players})
+      : players = players ?? [];
+
+  Player? playerById(String pid) {
+    for (final p in players) {
+      if (p.id == pid) return p;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'players': players.map((p) => p.toJson()).toList(),
+      };
+
+  factory Team.fromJson(Map<String, dynamic> j) => Team(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        players: ((j['players'] as List?) ?? [])
+            .map((e) => Player.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class Tournament {
+  String id;
+  String name;
+  List<String> teamIds;
+  String venue;
+  Map<String, int> pointsAdjustments; // teamId -> extra (custom) points
+
+  Tournament({
+    required this.id,
+    required this.name,
+    List<String>? teamIds,
+    this.venue = '',
+    Map<String, int>? pointsAdjustments,
+  })  : teamIds = teamIds ?? [],
+        pointsAdjustments = pointsAdjustments ?? {};
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'teamIds': teamIds,
+        'venue': venue,
+        'pointsAdjustments': pointsAdjustments,
+      };
+
+  factory Tournament.fromJson(Map<String, dynamic> j) {
+    final adj = <String, int>{};
+    ((j['pointsAdjustments'] as Map?) ?? {}).forEach((k, v) {
+      adj[k as String] = (v as num).toInt();
+    });
+    return Tournament(
+      id: j['id'] as String,
+      name: j['name'] as String,
+      teamIds: ((j['teamIds'] as List?) ?? []).map((e) => e as String).toList(),
+      venue: j['venue'] as String? ?? '',
+      pointsAdjustments: adj,
+    );
+  }
+}
+
+/// One delivered ball.
+class BallEvent {
+  int inningsNo;
+  String strikerId;
+  String nonStrikerId;
+  String bowlerId;
+  String extraType; // none / wide / noBall / bye / legBye
+  int batRuns; // runs credited to bat (or run for bye/leg-bye/wide extras below)
+  int extraRuns; // additional runs beyond the wide penalty (wide only)
+  bool isWicket;
+  String wicketType; // '' or bowled/caught/lbw/runOut/stumped/hitWicket
+  String outPlayerId; // '' if none
+  String fielderId; // '' if none (catch / run-out / stumping credit)
+  int? zone; // wagon-wheel zone 1..8, null if not recorded
+  int totalRuns; // total team runs from this delivery
+  bool legalBall;
+
+  BallEvent({
+    this.inningsNo = 1,
+    required this.strikerId,
+    required this.nonStrikerId,
+    required this.bowlerId,
+    this.extraType = 'none',
+    this.batRuns = 0,
+    this.extraRuns = 0,
+    this.isWicket = false,
+    this.wicketType = '',
+    this.outPlayerId = '',
+    this.fielderId = '',
+    this.zone,
+    this.totalRuns = 0,
+    this.legalBall = true,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'inningsNo': inningsNo,
+        'strikerId': strikerId,
+        'nonStrikerId': nonStrikerId,
+        'bowlerId': bowlerId,
+        'extraType': extraType,
+        'batRuns': batRuns,
+        'extraRuns': extraRuns,
+        'isWicket': isWicket,
+        'wicketType': wicketType,
+        'outPlayerId': outPlayerId,
+        'fielderId': fielderId,
+        'zone': zone,
+        'totalRuns': totalRuns,
+        'legalBall': legalBall,
+      };
+
+  factory BallEvent.fromJson(Map<String, dynamic> j) => BallEvent(
+        inningsNo: (j['inningsNo'] as num?)?.toInt() ?? 1,
+        strikerId: j['strikerId'] as String,
+        nonStrikerId: j['nonStrikerId'] as String,
+        bowlerId: j['bowlerId'] as String,
+        extraType: j['extraType'] as String? ?? 'none',
+        batRuns: (j['batRuns'] as num?)?.toInt() ?? 0,
+        extraRuns: (j['extraRuns'] as num?)?.toInt() ?? 0,
+        isWicket: j['isWicket'] as bool? ?? false,
+        wicketType: j['wicketType'] as String? ?? '',
+        outPlayerId: j['outPlayerId'] as String? ?? '',
+        fielderId: j['fielderId'] as String? ?? '',
+        zone: (j['zone'] as num?)?.toInt(),
+        totalRuns: (j['totalRuns'] as num?)?.toInt() ?? 0,
+        legalBall: j['legalBall'] as bool? ?? true,
+      );
+
+  /// Short display, e.g. "4", "W", "1wd", "1nb", "2b".
+  String get display {
+    if (isWicket && batRuns == 0 && extraType == 'none') return 'W';
+    switch (extraType) {
+      case 'wide':
+        return '${1 + extraRuns}wd';
+      case 'noBall':
+        return batRuns == 0 ? 'nb' : '$batRuns+nb';
+      case 'bye':
+        return '${batRuns}b';
+      case 'legBye':
+        return '${batRuns}lb';
+      default:
+        return isWicket ? (batRuns > 0 ? '$batRuns+W' : 'W') : '$batRuns';
+    }
+  }
+}
+
+class BatFig {
+  int runs = 0;
+  int balls = 0;
+  int fours = 0;
+  int sixes = 0;
+  bool out = false;
+  bool batted = false;
+  String howOut = '';
+
+  BatFig();
+
+  Map<String, dynamic> toJson() => {
+        'runs': runs,
+        'balls': balls,
+        'fours': fours,
+        'sixes': sixes,
+        'out': out,
+        'batted': batted,
+        'howOut': howOut,
+      };
+
+  factory BatFig.fromJson(Map<String, dynamic> j) {
+    final f = BatFig();
+    f.runs = (j['runs'] as num?)?.toInt() ?? 0;
+    f.balls = (j['balls'] as num?)?.toInt() ?? 0;
+    f.fours = (j['fours'] as num?)?.toInt() ?? 0;
+    f.sixes = (j['sixes'] as num?)?.toInt() ?? 0;
+    f.out = j['out'] as bool? ?? false;
+    f.batted = j['batted'] as bool? ?? false;
+    f.howOut = j['howOut'] as String? ?? '';
+    return f;
+  }
+}
+
+class BowlFig {
+  int legalBalls = 0;
+  int runs = 0; // runs conceded (bat + wides + no-ball penalties; not byes)
+  int wickets = 0;
+  int maidens = 0;
+  int wides = 0;
+  int noBalls = 0;
+
+  BowlFig();
+
+  Map<String, dynamic> toJson() => {
+        'legalBalls': legalBalls,
+        'runs': runs,
+        'wickets': wickets,
+        'maidens': maidens,
+        'wides': wides,
+        'noBalls': noBalls,
+      };
+
+  factory BowlFig.fromJson(Map<String, dynamic> j) {
+    final f = BowlFig();
+    f.legalBalls = (j['legalBalls'] as num?)?.toInt() ?? 0;
+    f.runs = (j['runs'] as num?)?.toInt() ?? 0;
+    f.wickets = (j['wickets'] as num?)?.toInt() ?? 0;
+    f.maidens = (j['maidens'] as num?)?.toInt() ?? 0;
+    f.wides = (j['wides'] as num?)?.toInt() ?? 0;
+    f.noBalls = (j['noBalls'] as num?)?.toInt() ?? 0;
+    return f;
+  }
+}
+
+class FallOfWicket {
+  int wicketNo;
+  int runs;
+  String overText;
+  String playerId;
+
+  FallOfWicket(this.wicketNo, this.runs, this.overText, this.playerId);
+
+  Map<String, dynamic> toJson() =>
+      {'wicketNo': wicketNo, 'runs': runs, 'overText': overText, 'playerId': playerId};
+
+  factory FallOfWicket.fromJson(Map<String, dynamic> j) => FallOfWicket(
+        (j['wicketNo'] as num).toInt(),
+        (j['runs'] as num).toInt(),
+        j['overText'] as String,
+        j['playerId'] as String,
+      );
+}
+
+class InningsState {
+  String battingTeamId;
+  String bowlingTeamId;
+  List<String> battingXI;
+  List<String> bowlingXI;
+  int oversLimit;
+  int ballsPerOver;
+  int totalRuns = 0;
+  int wickets = 0;
+  int legalBalls = 0;
+  String strikerId = '';
+  String nonStrikerId = '';
+  String currentBowlerId = '';
+  String lastBowlerId = '';
+  bool awaitingBatter = false;
+  bool awaitingBowler = false;
+  Map<String, BatFig> batting = {};
+  Map<String, BowlFig> bowling = {};
+  int widesRuns = 0;
+  int noBallRuns = 0; // penalty runs only (count of no-balls * 1)
+  int byeRuns = 0;
+  int legByeRuns = 0;
+  int noBallCount = 0;
+  int wideCount = 0;
+  List<BallEvent> events = [];
+  List<FallOfWicket> fallOfWickets = [];
+  List<String> undoStack = []; // JSON snapshots of this innings before each ball
+  int currentOverBowlerRuns = 0; // for maiden detection
+  int currentOverTeamRuns = 0; // all team runs this over (maiden detection)
+  int target = 0; // 0 = no target (first innings)
+  int maxWickets = 0; // 0 = default (XI - 1); set from match settings
+  bool widePenalty = true;
+  bool noBallPenalty = true;
+
+  int get effectiveMaxWickets =>
+      maxWickets > 0 ? maxWickets : battingXI.length - 1;
+
+  bool get isComplete =>
+      legalBalls >= oversLimit * ballsPerOver ||
+      wickets >= effectiveMaxWickets ||
+      (target > 0 && totalRuns >= target);
+
+  int get extrasTotal => widesRuns + noBallRuns + byeRuns + legByeRuns;
+
+  InningsState({
+    required this.battingTeamId,
+    required this.bowlingTeamId,
+    required this.battingXI,
+    required this.bowlingXI,
+    required this.oversLimit,
+    this.ballsPerOver = 6,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'battingTeamId': battingTeamId,
+        'bowlingTeamId': bowlingTeamId,
+        'battingXI': battingXI,
+        'bowlingXI': bowlingXI,
+        'oversLimit': oversLimit,
+        'ballsPerOver': ballsPerOver,
+        'totalRuns': totalRuns,
+        'wickets': wickets,
+        'legalBalls': legalBalls,
+        'strikerId': strikerId,
+        'nonStrikerId': nonStrikerId,
+        'currentBowlerId': currentBowlerId,
+        'lastBowlerId': lastBowlerId,
+        'awaitingBatter': awaitingBatter,
+        'awaitingBowler': awaitingBowler,
+        'batting': batting.map((k, v) => MapEntry(k, v.toJson())),
+        'bowling': bowling.map((k, v) => MapEntry(k, v.toJson())),
+        'widesRuns': widesRuns,
+        'noBallRuns': noBallRuns,
+        'byeRuns': byeRuns,
+        'legByeRuns': legByeRuns,
+        'noBallCount': noBallCount,
+        'wideCount': wideCount,
+        'events': events.map((e) => e.toJson()).toList(),
+        'fallOfWickets': fallOfWickets.map((f) => f.toJson()).toList(),
+        'undoStack': undoStack,
+        'currentOverBowlerRuns': currentOverBowlerRuns,
+        'currentOverTeamRuns': currentOverTeamRuns,
+        'maxWickets': maxWickets,
+        'widePenalty': widePenalty,
+        'noBallPenalty': noBallPenalty,
+        'target': target,
+      };
+
+  factory InningsState.fromJson(Map<String, dynamic> j) {
+    final s = InningsState(
+      battingTeamId: j['battingTeamId'] as String,
+      bowlingTeamId: j['bowlingTeamId'] as String,
+      battingXI: ((j['battingXI'] as List?) ?? []).map((e) => e as String).toList(),
+      bowlingXI: ((j['bowlingXI'] as List?) ?? []).map((e) => e as String).toList(),
+      oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 20,
+      ballsPerOver: (j['ballsPerOver'] as num?)?.toInt() ?? 6,
+    );
+    s.totalRuns = (j['totalRuns'] as num?)?.toInt() ?? 0;
+    s.wickets = (j['wickets'] as num?)?.toInt() ?? 0;
+    s.legalBalls = (j['legalBalls'] as num?)?.toInt() ?? 0;
+    s.strikerId = j['strikerId'] as String? ?? '';
+    s.nonStrikerId = j['nonStrikerId'] as String? ?? '';
+    s.currentBowlerId = j['currentBowlerId'] as String? ?? '';
+    s.lastBowlerId = j['lastBowlerId'] as String? ?? '';
+    s.awaitingBatter = j['awaitingBatter'] as bool? ?? false;
+    s.awaitingBowler = j['awaitingBowler'] as bool? ?? false;
+    final bat = (j['batting'] as Map?) ?? {};
+    bat.forEach((k, v) =>
+        s.batting[k as String] = BatFig.fromJson(v as Map<String, dynamic>));
+    final bowl = (j['bowling'] as Map?) ?? {};
+    bowl.forEach((k, v) =>
+        s.bowling[k as String] = BowlFig.fromJson(v as Map<String, dynamic>));
+    s.widesRuns = (j['widesRuns'] as num?)?.toInt() ?? 0;
+    s.noBallRuns = (j['noBallRuns'] as num?)?.toInt() ?? 0;
+    s.byeRuns = (j['byeRuns'] as num?)?.toInt() ?? 0;
+    s.legByeRuns = (j['legByeRuns'] as num?)?.toInt() ?? 0;
+    s.noBallCount = (j['noBallCount'] as num?)?.toInt() ?? 0;
+    s.wideCount = (j['wideCount'] as num?)?.toInt() ?? 0;
+    s.events = ((j['events'] as List?) ?? [])
+        .map((e) => BallEvent.fromJson(e as Map<String, dynamic>))
+        .toList();
+    s.fallOfWickets = ((j['fallOfWickets'] as List?) ?? [])
+        .map((e) => FallOfWicket.fromJson(e as Map<String, dynamic>))
+        .toList();
+    s.undoStack = ((j['undoStack'] as List?) ?? []).map((e) => e as String).toList();
+    s.currentOverBowlerRuns = (j['currentOverBowlerRuns'] as num?)?.toInt() ?? 0;
+    s.currentOverTeamRuns = (j['currentOverTeamRuns'] as num?)?.toInt() ?? 0;
+    s.maxWickets = (j['maxWickets'] as num?)?.toInt() ?? 0;
+    s.widePenalty = j['widePenalty'] as bool? ?? true;
+    s.noBallPenalty = j['noBallPenalty'] as bool? ?? true;
+    s.target = (j['target'] as num?)?.toInt() ?? 0;
+    return s;
+  }
+}
+
+class Match {
+  String id;
+  String? tournamentId;
+  String teamAId;
+  String teamBId;
+  List<String> xiA;
+  List<String> xiB;
+  int oversLimit;
+  int ballsPerOver;
+  String venue;
+  String dateIso;
+  String tossWinnerId;
+  String tossDecision; // bat / bowl (for toss winner)
+  String status; // live / completed / noResult
+  List<InningsState> innings;
+  String resultText;
+  int totalWickets; // 0 = default XI-1
+  bool lastManStands;
+  bool widePenalty;
+  bool noBallPenalty;
+  String manOfMatchId;
+
+  Match({
+    required this.id,
+    this.tournamentId,
+    required this.teamAId,
+    required this.teamBId,
+    required this.xiA,
+    required this.xiB,
+    this.oversLimit = 20,
+    this.ballsPerOver = 6,
+    this.venue = '',
+    this.dateIso = '',
+    required this.tossWinnerId,
+    this.tossDecision = 'bat',
+    this.status = 'live',
+    List<InningsState>? innings,
+    this.resultText = '',
+    this.totalWickets = 0,
+    this.lastManStands = false,
+    this.widePenalty = true,
+    this.noBallPenalty = true,
+    this.manOfMatchId = '',
+  }) : innings = innings ?? [];
+
+  String get battingFirstId {
+    // team that bats first based on toss
+    if (tossWinnerId == teamAId) {
+      return tossDecision == 'bat' ? teamAId : teamBId;
+    }
+    return tossDecision == 'bat' ? teamBId : teamAId;
+  }
+
+  String get battingSecondId => battingFirstId == teamAId ? teamBId : teamAId;
+
+  List<String> xiFor(String teamId) => teamId == teamAId ? xiA : xiB;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'tournamentId': tournamentId,
+        'teamAId': teamAId,
+        'teamBId': teamBId,
+        'xiA': xiA,
+        'xiB': xiB,
+        'oversLimit': oversLimit,
+        'ballsPerOver': ballsPerOver,
+        'venue': venue,
+        'dateIso': dateIso,
+        'tossWinnerId': tossWinnerId,
+        'tossDecision': tossDecision,
+        'status': status,
+        'innings': innings.map((i) => i.toJson()).toList(),
+        'resultText': resultText,
+        'totalWickets': totalWickets,
+        'lastManStands': lastManStands,
+        'widePenalty': widePenalty,
+        'noBallPenalty': noBallPenalty,
+        'manOfMatchId': manOfMatchId,
+      };
+
+  factory Match.fromJson(Map<String, dynamic> j) => Match(
+        id: j['id'] as String,
+        tournamentId: j['tournamentId'] as String?,
+        teamAId: j['teamAId'] as String,
+        teamBId: j['teamBId'] as String,
+        xiA: ((j['xiA'] as List?) ?? []).map((e) => e as String).toList(),
+        xiB: ((j['xiB'] as List?) ?? []).map((e) => e as String).toList(),
+        oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 20,
+        ballsPerOver: (j['ballsPerOver'] as num?)?.toInt() ?? 6,
+        venue: j['venue'] as String? ?? '',
+        dateIso: j['dateIso'] as String? ?? '',
+        tossWinnerId: j['tossWinnerId'] as String,
+        tossDecision: j['tossDecision'] as String? ?? 'bat',
+        status: j['status'] as String? ?? 'live',
+        innings: ((j['innings'] as List?) ?? [])
+            .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        resultText: j['resultText'] as String? ?? '',
+        totalWickets: (j['totalWickets'] as num?)?.toInt() ?? 0,
+        lastManStands: j['lastManStands'] as bool? ?? false,
+        widePenalty: j['widePenalty'] as bool? ?? true,
+        noBallPenalty: j['noBallPenalty'] as bool? ?? true,
+        manOfMatchId: j['manOfMatchId'] as String? ?? '',
+      );
+}
+
+String oversText(int legalBalls, int ballsPerOver) {
+  if (ballsPerOver <= 0) return '0.0';
+  return '${legalBalls ~/ ballsPerOver}.${legalBalls % ballsPerOver}';
+}
+
+
+/// A player registered for the league (Registration section). The
+/// registration list is the source of the draft pool. When a registered
+/// player is drafted / added to a team squad, a [Player] with the SAME id
+/// is created so career stats unify across modules.
+class RegPlayer {
+  String id;
+  String name;
+  String role;
+  String availability; // Available / Not Available
+  String area;
+  String phone;
+  String remarks;
+  String battingStyle;
+  String bowlingStyle;
+  int age;
+  String category;
+  String regStatus; // Confirmed / Pending
+  String teamName; // optional intended team (from import), '' if none
+  int jerseyNo;
+  bool isCaptain;
+  bool isKeeper;
+
+  RegPlayer({
+    required this.id,
+    required this.name,
+    this.role = 'Batter',
+    this.availability = 'Available',
+    this.area = '',
+    this.phone = '',
+    this.remarks = '',
+    this.battingStyle = 'Right-hand',
+    this.bowlingStyle = 'None',
+    this.age = 0,
+    this.category = '',
+    this.regStatus = 'Confirmed',
+    this.teamName = '',
+    this.jerseyNo = 0,
+    this.isCaptain = false,
+    this.isKeeper = false,
+  });
+
+  Player toTeamPlayer() => Player(
+        id: id,
+        name: name,
+        jerseyNo: jerseyNo,
+        role: role,
+        battingStyle: battingStyle,
+        bowlingStyle: bowlingStyle,
+        isCaptain: isCaptain,
+        isKeeper: isKeeper,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'role': role,
+        'availability': availability,
+        'area': area,
+        'phone': phone,
+        'remarks': remarks,
+        'battingStyle': battingStyle,
+        'bowlingStyle': bowlingStyle,
+        'age': age,
+        'category': category,
+        'regStatus': regStatus,
+        'teamName': teamName,
+        'jerseyNo': jerseyNo,
+        'isCaptain': isCaptain,
+        'isKeeper': isKeeper,
+      };
+
+  factory RegPlayer.fromJson(Map<String, dynamic> j) => RegPlayer(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        role: j['role'] as String? ?? 'Batter',
+        availability: j['availability'] as String? ?? 'Available',
+        area: j['area'] as String? ?? '',
+        phone: j['phone'] as String? ?? '',
+        remarks: j['remarks'] as String? ?? '',
+        battingStyle: j['battingStyle'] as String? ?? 'Right-hand',
+        bowlingStyle: j['bowlingStyle'] as String? ?? 'None',
+        age: (j['age'] as num?)?.toInt() ?? 0,
+        category: j['category'] as String? ?? '',
+        regStatus: j['regStatus'] as String? ?? 'Confirmed',
+        teamName: j['teamName'] as String? ?? '',
+        jerseyNo: (j['jerseyNo'] as num?)?.toInt() ?? 0,
+        isCaptain: j['isCaptain'] as bool? ?? false,
+        isKeeper: j['isKeeper'] as bool? ?? false,
+      );
+}
+
+/// One manually-entered past performance ("Add past scores"). Adds into
+/// career totals and is labelled manual.
+class ManualStatEntry {
+  String id;
+  String playerId;
+  String playerName;
+  String matchLabel;
+  String dateIso;
+  int runs;
+  int balls;
+  int fours;
+  int sixes;
+  bool notOut;
+  int wickets;
+  int runsConceded;
+  int ballsBowled;
+  int catches;
+  int stumpings;
+
+  ManualStatEntry({
+    required this.id,
+    required this.playerId,
+    required this.playerName,
+    this.matchLabel = '',
+    this.dateIso = '',
+    this.runs = 0,
+    this.balls = 0,
+    this.fours = 0,
+    this.sixes = 0,
+    this.notOut = false,
+    this.wickets = 0,
+    this.runsConceded = 0,
+    this.ballsBowled = 0,
+    this.catches = 0,
+    this.stumpings = 0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'playerId': playerId,
+        'playerName': playerName,
+        'matchLabel': matchLabel,
+        'dateIso': dateIso,
+        'runs': runs,
+        'balls': balls,
+        'fours': fours,
+        'sixes': sixes,
+        'notOut': notOut,
+        'wickets': wickets,
+        'runsConceded': runsConceded,
+        'ballsBowled': ballsBowled,
+        'catches': catches,
+        'stumpings': stumpings,
+      };
+
+  factory ManualStatEntry.fromJson(Map<String, dynamic> j) => ManualStatEntry(
+        id: j['id'] as String,
+        playerId: j['playerId'] as String,
+        playerName: j['playerName'] as String? ?? '',
+        matchLabel: j['matchLabel'] as String? ?? '',
+        dateIso: j['dateIso'] as String? ?? '',
+        runs: (j['runs'] as num?)?.toInt() ?? 0,
+        balls: (j['balls'] as num?)?.toInt() ?? 0,
+        fours: (j['fours'] as num?)?.toInt() ?? 0,
+        sixes: (j['sixes'] as num?)?.toInt() ?? 0,
+        notOut: j['notOut'] as bool? ?? false,
+        wickets: (j['wickets'] as num?)?.toInt() ?? 0,
+        runsConceded: (j['runsConceded'] as num?)?.toInt() ?? 0,
+        ballsBowled: (j['ballsBowled'] as num?)?.toInt() ?? 0,
+        catches: (j['catches'] as num?)?.toInt() ?? 0,
+        stumpings: (j['stumpings'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class DraftPick {
+  int round;
+  int pickNo; // overall pick number, 1-based
+  String teamId;
+  String playerId; // RegPlayer id
+  String playerName;
+
+  DraftPick({
+    required this.round,
+    required this.pickNo,
+    required this.teamId,
+    required this.playerId,
+    required this.playerName,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'round': round,
+        'pickNo': pickNo,
+        'teamId': teamId,
+        'playerId': playerId,
+        'playerName': playerName,
+      };
+
+  factory DraftPick.fromJson(Map<String, dynamic> j) => DraftPick(
+        round: (j['round'] as num).toInt(),
+        pickNo: (j['pickNo'] as num).toInt(),
+        teamId: j['teamId'] as String,
+        playerId: j['playerId'] as String,
+        playerName: j['playerName'] as String? ?? '',
+      );
+}
+
+/// An offline manual-pick draft. Simple rounds, no categories.
+class Draft {
+  String id;
+  String name;
+  List<String> teamIds; // pick order (linear repeating)
+  int squadSize;
+  bool snakeOrder;
+  List<DraftPick> picks;
+  String status; // active / completed
+  bool appliedToTeams; // squads copied into Scorer teams
+
+  Draft({
+    required this.id,
+    required this.name,
+    required this.teamIds,
+    this.squadSize = 14,
+    this.snakeOrder = false,
+    List<DraftPick>? picks,
+    this.status = 'active',
+    this.appliedToTeams = false,
+  }) : picks = picks ?? [];
+
+  int get totalPicks => squadSize * teamIds.length;
+  bool get isComplete => picks.length >= totalPicks;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'teamIds': teamIds,
+        'squadSize': squadSize,
+        'snakeOrder': snakeOrder,
+        'picks': picks.map((p) => p.toJson()).toList(),
+        'status': status,
+        'appliedToTeams': appliedToTeams,
+      };
+
+  factory Draft.fromJson(Map<String, dynamic> j) => Draft(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        teamIds: ((j['teamIds'] as List?) ?? []).map((e) => e as String).toList(),
+        squadSize: (j['squadSize'] as num?)?.toInt() ?? 14,
+        snakeOrder: j['snakeOrder'] as bool? ?? false,
+        picks: ((j['picks'] as List?) ?? [])
+            .map((e) => DraftPick.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        status: j['status'] as String? ?? 'active',
+        appliedToTeams: j['appliedToTeams'] as bool? ?? false,
+      );
+}
