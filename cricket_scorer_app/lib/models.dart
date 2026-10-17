@@ -87,6 +87,12 @@ class Tournament {
   List<String> teamIds;
   String venue;
   Map<String, int> pointsAdjustments; // teamId -> extra (custom) points
+  /// Final (locked) playoff qualification: ordered team IDs, rank 1..4.
+  /// Empty until the league stage is finalized. Derived by the playoff
+  /// engine — never edited by hand.
+  List<String> qualifiedTeamIds;
+  /// True once league standings are final and seeds are locked.
+  bool qualificationFinalized;
 
   Tournament({
     required this.id,
@@ -94,8 +100,11 @@ class Tournament {
     List<String>? teamIds,
     this.venue = '',
     Map<String, int>? pointsAdjustments,
+    List<String>? qualifiedTeamIds,
+    this.qualificationFinalized = false,
   }) : teamIds = teamIds ?? [],
-       pointsAdjustments = pointsAdjustments ?? {};
+       pointsAdjustments = pointsAdjustments ?? {},
+       qualifiedTeamIds = qualifiedTeamIds ?? [];
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -103,6 +112,8 @@ class Tournament {
     'teamIds': teamIds,
     'venue': venue,
     'pointsAdjustments': pointsAdjustments,
+    'qualifiedTeamIds': qualifiedTeamIds,
+    'qualificationFinalized': qualificationFinalized,
   };
 
   factory Tournament.fromJson(Map<String, dynamic> j) {
@@ -116,6 +127,11 @@ class Tournament {
       teamIds: ((j['teamIds'] as List?) ?? []).map((e) => e as String).toList(),
       venue: j['venue'] as String? ?? '',
       pointsAdjustments: adj,
+      qualifiedTeamIds:
+          ((j['qualifiedTeamIds'] as List?) ?? [])
+              .map((e) => e as String)
+              .toList(),
+      qualificationFinalized: j['qualificationFinalized'] as bool? ?? false,
     );
   }
 }
@@ -473,7 +489,13 @@ class Match {
   String dateIso;
   String tossWinnerId;
   String tossDecision; // bat / bowl (for toss winner)
-  String status; // live / completed / noResult
+  /// Fixture/match lifecycle: upcoming (scheduled fixture) / live /
+  /// completed / noResult / cancelled.
+  String status; // upcoming / live / completed / noResult / cancelled
+  /// Tournament stage: league / semifinal1 / semifinal2 / final.
+  /// League fixtures and playoff fixtures share this model; the stage
+  /// tells the playoff engine which matches it owns.
+  String stage;
   List<InningsState> innings;
   String resultText;
   int totalWickets; // 0 = default XI-1
@@ -499,6 +521,7 @@ class Match {
     required this.tossWinnerId,
     this.tossDecision = 'bat',
     this.status = 'live',
+    this.stage = 'league',
     List<InningsState>? innings,
     this.resultText = '',
     this.totalWickets = 0,
@@ -537,6 +560,7 @@ class Match {
     'tossWinnerId': tossWinnerId,
     'tossDecision': tossDecision,
     'status': status,
+    'stage': stage,
     'innings': innings.map((i) => i.toJson()).toList(),
     'resultText': resultText,
     'totalWickets': totalWickets,
@@ -563,6 +587,7 @@ class Match {
     tossWinnerId: j['tossWinnerId'] as String,
     tossDecision: j['tossDecision'] as String? ?? 'bat',
     status: j['status'] as String? ?? 'live',
+    stage: j['stage'] as String? ?? 'league',
     innings: ((j['innings'] as List?) ?? [])
         .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
         .toList(),
