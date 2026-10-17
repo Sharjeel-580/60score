@@ -14,6 +14,7 @@ import 'scorecard_screen.dart';
 import 'scoring_screen.dart';
 import 'settings_screen.dart';
 import 'fixture_detail_screen.dart';
+import '../widgets/app_logo.dart';
 import 'teams_screen.dart';
 
 /// Formats a stored dateIso like '2026-10-22T14:00:00' as
@@ -98,7 +99,7 @@ class HomeScreen extends StatelessWidget {
           icon: const Icon(Icons.menu, color: kWhite),
           onPressed: onOpenDrawer,
         ),
-        Image.asset('assets/60score_logo.png', height: 40),
+        const AppLogo(height: 40),
         const SizedBox(width: 10),
         const Expanded(
           child: Column(

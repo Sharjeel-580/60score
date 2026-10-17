@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/app_logo.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -17,11 +18,7 @@ class AboutScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset(
-                'assets/60score_logo.png',
-                height: 120,
-                fit: BoxFit.contain,
-              ),
+              const AppLogo(height: 120),
               const SizedBox(height: 20),
               const Text(
                 '60Score',

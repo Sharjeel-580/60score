@@ -16,6 +16,7 @@ import 'screens/teams_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/backup_screen.dart';
 import 'screens/about_screen.dart';
+import 'widgets/app_logo.dart';
 
 void main() {
   runApp(const Score60App());
@@ -257,7 +258,7 @@ class _HomeShellState extends State<HomeShell> {
               ),
               child: Row(
                 children: [
-                  Image.asset('assets/60score_logo.png', height: 44),
+                  const AppLogo(height: 44),
                   const SizedBox(width: 12),
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
