@@ -21,6 +21,9 @@ class Store extends ChangeNotifier {
   static const _kTournaments = 'cricscore_tournaments_v1';
   static const _kMatches = 'cricscore_matches_v1';
   static const _kSeeded = 'cricscore_seeded_v1';
+  static const _kSchema = 'cricscore_schema_v';
+  // Bump when seed/migration logic changes; migrations are idempotent.
+  static const _kSchemaVersion = 2;
   static const _kReg = 'score60_regplayers_v1';
   static const _kDrafts = 'score60_drafts_v1';
   static const _kManual = 'score60_manualstats_v1';
@@ -36,49 +39,311 @@ class Store extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final seeded = prefs.getBool(_kSeeded) ?? false;
     if (!seeded) {
-      // First launch: seed Super Sixty League Season 2 teams (empty squads).
-      const seedNames = [
-        'AB Knights',
-        'MA Kings',
-        'US Lions',
-        'Shazi Hawks',
-        'Adi Dolphins',
-        'Ali Panthers',
-      ];
-      teams = [
-        for (var i = 0; i < seedNames.length; i++)
-          Team(id: 'seed_team_$i', name: seedNames[i]),
-      ];
-      tournaments = [
-        Tournament(
-          id: 'seed_tournament_ssl2',
-          name: 'Super Sixty League',
-          teamIds: teams.map((t) => t.id).toList(),
-        ),
-      ];
-      matches = [];
+      _seedFreshInstall();
       await _saveAll(prefs);
       await prefs.setBool(_kSeeded, true);
+      await prefs.setInt(_kSchema, _kSchemaVersion);
     } else {
-      teams = _decodeList(prefs.getString(_kTeams), Team.fromJson);
-      tournaments = _decodeList(
-        prefs.getString(_kTournaments),
-        Tournament.fromJson,
-      );
-      matches = _decodeList(prefs.getString(_kMatches), Match.fromJson);
-      regPlayers = _decodeList(prefs.getString(_kReg), RegPlayer.fromJson);
-      drafts = _decodeList(prefs.getString(_kDrafts), Draft.fromJson);
-      manualStats = _decodeList(
-        prefs.getString(_kManual),
-        ManualStatEntry.fromJson,
-      );
+      // Decode defensively: a corrupt entry keeps the previous in-memory
+      // list instead of wiping it (the old code replaced it with [] and
+      // the next persist() then overwrote storage with the empty list).
+      teams = _decodeList(prefs.getString(_kTeams), Team.fromJson) ?? teams;
+      tournaments =
+          _decodeList(prefs.getString(_kTournaments), Tournament.fromJson) ??
+          tournaments;
+      matches = _decodeList(prefs.getString(_kMatches), Match.fromJson) ??
+          matches;
+      regPlayers =
+          _decodeList(prefs.getString(_kReg), RegPlayer.fromJson) ??
+          regPlayers;
+      drafts = _decodeList(prefs.getString(_kDrafts), Draft.fromJson) ??
+          drafts;
+      manualStats =
+          _decodeList(prefs.getString(_kManual), ManualStatEntry.fromJson) ??
+          manualStats;
+      await _migrateIfNeeded(prefs);
     }
     welcomeDone = prefs.getBool(_kWelcome) ?? false;
     loaded = true;
     notifyListeners();
   }
 
-  List<T> _decodeList<T>(
+  /// Default tournament identity (stable across installs).
+  static const defaultTournamentId = 'seed_tournament_ssl2';
+  static const defaultTournamentName = 'Super Sixty League Season 2K26';
+  static const defaultVenue = '75 LOKRI CLUB';
+
+  /// Spec team order. IDs are stable: seed_team_0..5.
+  static const defaultTeamNames = [
+    'AB Knights',
+    'Shazi Hawks',
+    'MA Kings',
+    'Ali Panthers',
+    'Adi Dolphins',
+    'US Lions',
+  ];
+
+  /// Previous seed order (v1) for safe migration of existing installs.
+  static const _v1TeamNames = [
+    'AB Knights',
+    'MA Kings',
+    'US Lions',
+    'Shazi Hawks',
+    'Adi Dolphins',
+    'Ali Panthers',
+  ];
+
+  void _seedFreshInstall() {
+    teams = [
+      for (var i = 0; i < defaultTeamNames.length; i++)
+        Team(id: 'seed_team_$i', name: defaultTeamNames[i]),
+    ];
+    tournaments = [
+      Tournament(
+        id: defaultTournamentId,
+        name: defaultTournamentName,
+        teamIds: teams.map((t) => t.id).toList(),
+        venue: defaultVenue,
+      ),
+    ];
+    matches = [];
+    regPlayers = [];
+    drafts = [];
+    manualStats = [];
+    _seedDefaultFixtures();
+  }
+
+  /// Idempotent migration for installs seeded by older app versions.
+  /// Never overwrites user-customized data: teams are renamed only when
+  /// they still carry the untouched v1 default name, have no players,
+  /// and are not referenced by any match.
+  Future<void> _migrateIfNeeded(SharedPreferences prefs) async {
+    final v = prefs.getInt(_kSchema) ?? 1;
+    if (v >= _kSchemaVersion) return;
+    var changed = false;
+
+    final t = tournamentById(defaultTournamentId);
+    if (t != null) {
+      if (t.name != defaultTournamentName) {
+        t.name = defaultTournamentName;
+        changed = true;
+      }
+      if (t.venue.isEmpty) {
+        t.venue = defaultVenue;
+        changed = true;
+      }
+      // v1 -> v2 team rename (safe only, see doc comment above).
+      for (var i = 0; i < _v1TeamNames.length; i++) {
+        final team = teamById('seed_team_$i');
+        if (team == null) continue;
+        final wanted = defaultTeamNames[i];
+        if (team.name == wanted) continue;
+        final untouchedDefault = team.name == _v1TeamNames[i];
+        final hasPlayers = team.players.isNotEmpty;
+        final referenced = matches.any(
+          (m) => m.teamAId == team.id || m.teamBId == team.id,
+        );
+        if (untouchedDefault && !hasPlayers && !referenced) {
+          team.name = wanted;
+          changed = true;
+        }
+      }
+      t.teamIds = [
+        for (var i = 0; i < defaultTeamNames.length; i++) 'seed_team_$i',
+      ];
+    }
+    // Seed the 18 default fixtures if they are missing (per-fixture check).
+    final before = matches.length;
+    _seedDefaultFixtures();
+    if (matches.length != before) changed = true;
+
+    if (changed) await _saveAll(prefs);
+    await prefs.setInt(_kSchema, _kSchemaVersion);
+  }
+
+  /// Creates the 15 league + 3 playoff fixtures of the default tournament.
+  /// Idempotent: existing fixture IDs are never duplicated.
+  /// Pure (no I/O) so it is unit-testable — pass the current match list.
+  static List<Match> buildDefaultFixtures(List<Match> existing) {
+    bool has(String id) => existing.any((m) => m.id == id);
+    final out = <Match>[];
+    String tid(String name) {
+      final i = defaultTeamNames.indexOf(name);
+      return 'seed_team_$i';
+    }
+
+    // (matchNo, date yyyy-MM-dd, time HH:mm 24h, teamA, teamB)
+    const league = [
+      ['01', '2026-10-22', '14:00', 'Shazi Hawks', 'Adi Dolphins'],
+      ['02', '2026-10-23', '15:00', 'AB Knights', 'Ali Panthers'],
+      ['03', '2026-10-24', '14:00', 'Shazi Hawks', 'MA Kings'],
+      ['04', '2026-10-25', '14:00', 'AB Knights', 'US Lions'],
+      ['05', '2026-10-26', '14:00', 'MA Kings', 'Adi Dolphins'],
+      ['06', '2026-10-27', '14:00', 'Shazi Hawks', 'Ali Panthers'],
+      ['07', '2026-10-28', '14:00', 'MA Kings', 'US Lions'],
+      ['08', '2026-10-29', '14:00', 'AB Knights', 'Shazi Hawks'],
+      ['09', '2026-10-30', '15:00', 'MA Kings', 'Ali Panthers'],
+      ['10', '2026-10-31', '14:00', 'Adi Dolphins', 'US Lions'],
+      ['11', '2026-11-01', '14:00', 'AB Knights', 'MA Kings'],
+      ['12', '2026-11-02', '14:00', 'Ali Panthers', 'Adi Dolphins'],
+      ['13', '2026-11-03', '14:00', 'Shazi Hawks', 'US Lions'],
+      ['14', '2026-11-04', '14:00', 'AB Knights', 'Adi Dolphins'],
+      ['15', '2026-11-05', '14:00', 'Ali Panthers', 'US Lions'],
+    ];
+    for (final f in league) {
+      final id = 'ssl2_m${f[0]}';
+      if (has(id)) continue;
+      out.add(
+        Match(
+          id: id,
+          tournamentId: defaultTournamentId,
+          teamAId: tid(f[3]),
+          teamBId: tid(f[4]),
+          xiA: const [],
+          xiB: const [],
+          tossWinnerId: '',
+          status: 'upcoming',
+          stage: 'league',
+          oversLimit: 10,
+          ballsPerOver: 6,
+          venue: defaultVenue,
+          // Local match time as a plain string — never parsed as UTC,
+          // so dates cannot shift across timezones.
+          dateIso: '${f[1]}T${f[2]}:00',
+          matchTitle: 'Match ${f[0]}',
+          season: '2K26',
+        ),
+      );
+    }
+    // Playoff fixtures — teams stay TBD until qualification seeds them.
+    const playoffs = [
+      // id, stage, title, date, time
+      ['ssl2_sf1', 'semifinal1', 'Semi Final 1', '2026-11-06', '15:00'],
+      ['ssl2_sf2', 'semifinal2', 'Semi Final 2', '2026-11-07', '14:00'],
+      ['ssl2_final', 'final', 'Grand Final', '2026-11-08', '14:00'],
+    ];
+    for (final p in playoffs) {
+      if (has(p[0])) continue;
+      out.add(
+        Match(
+          id: p[0],
+          tournamentId: defaultTournamentId,
+          teamAId: '',
+          teamBId: '',
+          xiA: const [],
+          xiB: const [],
+          tossWinnerId: '',
+          status: 'upcoming',
+          stage: p[1],
+          oversLimit: 10,
+          ballsPerOver: 6,
+          venue: defaultVenue,
+          dateIso: '${p[3]}T${p[4]}:00',
+          matchTitle: p[2],
+          season: '2K26',
+        ),
+      );
+    }
+    return out;
+  }
+
+  void _seedDefaultFixtures() {
+    matches.addAll(buildDefaultFixtures(matches));
+  }
+
+  /// Full data export for backups (§31). Versioned JSON map.
+  Map<String, dynamic> exportJson() => {
+    'app': '60Score',
+    'schema': _kSchemaVersion,
+    'exportedAt': DateTime.now().toIso8601String(),
+    'teams': teams.map((t) => t.toJson()).toList(),
+    'tournaments': tournaments.map((t) => t.toJson()).toList(),
+    'matches': matches.map((m) => m.toJson()).toList(),
+    'regPlayers': regPlayers.map((r) => r.toJson()).toList(),
+    'drafts': drafts.map((d) => d.toJson()).toList(),
+    'manualStats': manualStats.map((e) => e.toJson()).toList(),
+  };
+
+  /// Restore by MERGING backup data (§31): same-id records are replaced,
+  /// new records are added, nothing is deleted. Returns counts per entity.
+  Future<Map<String, int>> importJson(
+    Map<String, dynamic> data, {
+    bool merge = true,
+  }) async {
+    List<T> dec<T>(String key, T Function(Map<String, dynamic>) f) {
+      final raw = data[key] as List?;
+      if (raw == null) return [];
+      return raw.map((e) => f(e as Map<String, dynamic>)).toList();
+    }
+
+    int mergeList<T>(List<T> current, List<T> incoming, String Function(T) id) {
+      var replaced = 0;
+      var added = 0;
+      for (final item in incoming) {
+        final i = current.indexWhere((x) => id(x) == id(item));
+        if (i >= 0) {
+          current[i] = item;
+          replaced++;
+        } else {
+          current.add(item);
+          added++;
+        }
+      }
+      return replaced + added;
+    }
+
+    final counts = <String, int>{};
+    if (!merge) {
+      teams = [];
+      tournaments = [];
+      matches = [];
+      regPlayers = [];
+      drafts = [];
+      manualStats = [];
+    }
+    counts['teams'] = mergeList(
+      teams,
+      dec('teams', Team.fromJson),
+      (t) => t.id,
+    );
+    counts['tournaments'] = mergeList(
+      tournaments,
+      dec('tournaments', Tournament.fromJson),
+      (t) => t.id,
+    );
+    counts['matches'] = mergeList(
+      matches,
+      dec('matches', Match.fromJson),
+      (m) => m.id,
+    );
+    counts['regPlayers'] = mergeList(
+      regPlayers,
+      dec('regPlayers', RegPlayer.fromJson),
+      (r) => r.id,
+    );
+    counts['drafts'] = mergeList(
+      drafts,
+      dec('drafts', Draft.fromJson),
+      (d) => d.id,
+    );
+    counts['manualStats'] = mergeList(
+      manualStats,
+      dec('manualStats', ManualStatEntry.fromJson),
+      (e) => e.id,
+    );
+    await persist();
+    return counts;
+  }
+
+  /// Reset App (§29): explain → confirm (UI) → wipe user data → reseed
+  /// defaults exactly once. Backups and exported files are left untouched.
+  Future<void> resetApp() async {
+    _seedFreshInstall();
+    welcomeDone = false;
+    await persist();
+  }
+
+  List<T>? _decodeList<T>(
     String? raw,
     T Function(Map<String, dynamic>) fromJson,
   ) {
@@ -87,7 +352,7 @@ class Store extends ChangeNotifier {
       final list = jsonDecode(raw) as List;
       return list.map((e) => fromJson(e as Map<String, dynamic>)).toList();
     } catch (_) {
-      return [];
+      return null; // corrupt entry: caller keeps the previous list
     }
   }
 
@@ -148,7 +413,10 @@ class Store extends ChangeNotifier {
     return null;
   }
 
-  String teamName(String id) => teamById(id)?.name ?? 'Unknown team';
+  String teamName(String id) {
+    if (id.isEmpty) return 'TBD'; // playoff slot not yet assigned
+    return teamById(id)?.name ?? 'Unknown team';
+  }
 
   String playerName(String id) {
     for (final t in teams) {

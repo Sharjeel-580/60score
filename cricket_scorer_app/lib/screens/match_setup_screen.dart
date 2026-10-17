@@ -7,7 +7,18 @@ import 'scoring_screen.dart';
 class MatchSetupScreen extends StatefulWidget {
   final Store store;
   final String? tournamentId;
-  const MatchSetupScreen({super.key, required this.store, this.tournamentId});
+
+  /// When set, the setup edits this existing fixture in place (e.g. an
+  /// upcoming fixture opened from the fixture detail screen) instead of
+  /// creating a brand-new match. Starting the match flips it to live.
+  final Match? existingMatch;
+
+  const MatchSetupScreen({
+    super.key,
+    required this.store,
+    this.tournamentId,
+    this.existingMatch,
+  });
 
   @override
   State<MatchSetupScreen> createState() => _MatchSetupScreenState();
@@ -53,6 +64,36 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       }
     }
     tossWinnerId = teamAId;
+    // Pre-fill from an existing fixture (Start Setup flow). Only adopt team
+    // IDs that actually exist, so TBD playoff slots ('') never break the
+    // dropdowns with a value-not-in-items assertion.
+    final em = widget.existingMatch;
+    if (em != null) {
+      tournamentId = em.tournamentId ?? tournamentId;
+      if (em.teamAId.isNotEmpty && store.teamById(em.teamAId) != null) {
+        teamAId = em.teamAId;
+      }
+      if (em.teamBId.isNotEmpty && store.teamById(em.teamBId) != null) {
+        teamBId = em.teamBId;
+      }
+      overs = em.oversLimit;
+      ballsPerOver = em.ballsPerOver;
+      venueCtrl.text = em.venue;
+      titleCtrl.text = em.matchTitle;
+      seasonCtrl.text = em.season;
+      final parsedDate = DateTime.tryParse(em.dateIso);
+      if (parsedDate != null) date = parsedDate;
+      _preselect();
+      if (em.xiA.isNotEmpty) {
+        xiA.clear();
+        xiA.addAll(em.xiA);
+      }
+      if (em.xiB.isNotEmpty) {
+        xiB.clear();
+        xiB.addAll(em.xiB);
+      }
+      tossWinnerId = teamAId;
+    }
   }
 
   void _preselect() {
@@ -159,7 +200,11 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
     final overOptions = <int>{5, 8, 10, 15, 20, 25, 30, 40, 50, overs}.toList()
       ..sort();
     return Scaffold(
-      appBar: AppBar(title: const Text('New match')),
+      appBar: AppBar(
+        title: Text(
+          widget.existingMatch != null ? 'Fixture setup' : 'New match',
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -431,6 +476,46 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
   }
 
   Future<void> _start() async {
+    final em = widget.existingMatch;
+    if (em != null) {
+      // Start setup for the existing fixture: update it in place so no
+      // duplicate match is created.
+      em.tournamentId = tournamentId;
+      em.teamAId = teamAId!;
+      em.teamBId = teamBId!;
+      em.xiA = xiA.toList();
+      em.xiB = xiB.toList();
+      em.oversLimit = overs;
+      em.ballsPerOver = ballsPerOver;
+      em.venue = venueCtrl.text.trim();
+      // Keep the fixture's local time; the setup screen picks a date only.
+      // Stored as a plain local string (never UTC) so dates can't shift.
+      final existingTime = em.dateIso.contains('T')
+          ? em.dateIso.split('T')[1]
+          : '14:00:00';
+      String p2(int v) => v.toString().padLeft(2, '0');
+      em.dateIso =
+          '${date.year}-${p2(date.month)}-${p2(date.day)}T$existingTime';
+      em.matchTitle = titleCtrl.text.trim();
+      em.ballType = ballType;
+      em.season = seasonCtrl.text.trim();
+      em.tossWinnerId = tossWinnerId!;
+      em.tossDecision = tossDecision;
+      em.status = 'live';
+      em.totalWickets = totalWickets;
+      em.lastManStands = lastManStands;
+      em.widePenalty = widePenalty;
+      em.noBallPenalty = noBallPenalty;
+      await store.upsertMatch(em);
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ScoringScreen(store: store, match: em),
+        ),
+      );
+      return;
+    }
     final m = Match(
       id: Store.newId('match'),
       tournamentId: tournamentId,
