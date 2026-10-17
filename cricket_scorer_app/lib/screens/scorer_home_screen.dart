@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
-import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../tournament_engine.dart';
+import 'fixture_detail_screen.dart';
 import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
 import 'scoring_screen.dart';
@@ -735,17 +736,146 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
   Store get store => widget.store;
   Tournament get tournament => widget.tournament;
 
+  /// Latest playoff recalculation outcome (idempotent engine pass).
+  /// Fetched once on open and re-run whenever a fixture screen pops back.
+  PlayoffUpdate? _playoffUpdate;
+
+  @override
+  void initState() {
+    super.initState();
+    _runPlayoffUpdate();
+  }
+
+  Future<void> _runPlayoffUpdate() async {
+    final update = await applyPlayoffUpdate(store, tournament.id);
+    if (mounted) setState(() => _playoffUpdate = update);
+  }
+
+  /// Team IDs currently shown with a Q badge. Final qualifiers when the
+  /// league stage is locked, otherwise mathematically guaranteed
+  /// provisional qualifiers.
+  Set<String> get _qualifierIds {
+    final finalQ = _playoffUpdate?.finalQualifiers ?? tournament.qualifiedTeamIds;
+    if (tournament.qualificationFinalized && finalQ.isNotEmpty) {
+      return finalQ.toSet();
+    }
+    return (_playoffUpdate?.provisionalQualifiers ?? const <String>[]).toSet();
+  }
+
+  bool get _qualificationFinal =>
+      tournament.qualificationFinalized &&
+      ((_playoffUpdate?.finalQualifiers ?? tournament.qualifiedTeamIds)
+          .isNotEmpty);
+
+  Future<void> _openFixture(Match m) async {
+    late final Widget screen;
+    switch (m.status) {
+      case 'live':
+        screen = ScoringScreen(store: store, match: m);
+        break;
+      case 'completed':
+        screen = ScorecardScreen(store: store, match: m);
+        break;
+      default:
+        // upcoming / noResult / cancelled -> detail screen (never the
+        // scorecard; that was the red-screen routing bug).
+        screen = FixtureDetailScreen(store: store, matchId: m.id);
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+    if (!mounted) return;
+    setState(() {});
+    await _runPlayoffUpdate();
+  }
+
+  /// Branded fixture card used by both the league and playoff sections.
+  Widget _fixtureCard(Match m, {String? stageOverride}) {
+    final title = m.matchTitle.isNotEmpty
+        ? m.matchTitle
+        : (stageOverride ?? 'League Fixture');
+    final subtitle = m.resultText.isNotEmpty
+        ? m.resultText
+        : '${formatFixtureDate(m.dateIso)}'
+              '${m.venue.isNotEmpty ? ' · ${m.venue}' : ''}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: ScoreCard(
+        onTap: () => _openFixture(m),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: kCyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+                StatusPill(m.status),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                TeamAvatar(store.teamName(m.teamAId)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    store.teamName(m.teamAId),
+                    style: const TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const Text(
+                  'vs',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+                Expanded(
+                  child: Text(
+                    store.teamName(m.teamBId),
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                TeamAvatar(store.teamName(m.teamBId)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = computePointsTable(
-      tournament.id,
-      tournament.teamIds,
-      store.matches,
-      pointsAdjustments: tournament.pointsAdjustments,
-    );
-    final fixtures = store.matches
-        .where((m) => m.tournamentId == tournament.id)
-        .toList();
+    final rows = leaguePointsTable(tournament, store.matches);
+    final qualifierIds = _qualifierIds;
+    final leagueFixtures = store.matches
+        .where((m) => m.tournamentId == tournament.id && m.stage == 'league')
+        .toList()
+      ..sort((a, b) => a.dateIso.compareTo(b.dateIso));
+    final playoffFixtures = playoffMatchesOf(tournament.id, store.matches);
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -781,15 +911,38 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
         ),
         body: TabBarView(
           children: [
-            // Points table (ICC NRR)
+            // Points table (ICC NRR) with playoff qualification badges
             ListView(
               padding: const EdgeInsets.all(10),
               children: [
+                if (qualifierIds.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8, left: 4),
+                    child: Row(
+                      children: [
+                        _qualificationFinal
+                            ? const QBadge()
+                            : const QBadge(provisional: true),
+                        const SizedBox(width: 8),
+                        Text(
+                          _qualificationFinal
+                              ? 'Qualified for the playoffs'
+                              : 'Q* = provisional qualification (mathematically guaranteed)',
+                          style: const TextStyle(
+                            color: kGold,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     columnSpacing: 12,
                     columns: const [
+                      DataColumn(label: Text('#')),
                       DataColumn(label: Text('Team')),
                       DataColumn(label: Text('P')),
                       DataColumn(label: Text('W')),
@@ -801,31 +954,53 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                       DataColumn(label: Text('Adj')),
                     ],
                     rows: [
-                      for (final r in rows)
+                      for (var i = 0; i < rows.length; i++)
                         DataRow(
+                          color: qualifierIds.contains(rows[i].teamId)
+                              ? WidgetStateProperty.all(
+                                  kGold.withValues(alpha: 0.10),
+                                )
+                              : null,
                           cells: [
-                            DataCell(Text(store.teamName(r.teamId))),
-                            DataCell(Text('${r.played}')),
-                            DataCell(Text('${r.won}')),
-                            DataCell(Text('${r.lost}')),
-                            DataCell(Text('${r.tied}')),
-                            DataCell(Text('${r.noResult}')),
+                            DataCell(Text('${i + 1}')),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(store.teamName(rows[i].teamId)),
+                                  if (qualifierIds
+                                      .contains(rows[i].teamId)) ...[
+                                    const SizedBox(width: 6),
+                                    _qualificationFinal
+                                        ? const QBadge()
+                                        : const QBadge(provisional: true),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            DataCell(Text('${rows[i].played}')),
+                            DataCell(Text('${rows[i].won}')),
+                            DataCell(Text('${rows[i].lost}')),
+                            DataCell(Text('${rows[i].tied}')),
+                            DataCell(Text('${rows[i].noResult}')),
                             DataCell(
                               Text(
-                                '${r.points}',
+                                '${rows[i].points}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: kCyan,
                                 ),
                               ),
                             ),
-                            DataCell(Text(r.nrr.toStringAsFixed(3))),
+                            DataCell(
+                              Text(rows[i].nrr.toStringAsFixed(3)),
+                            ),
                             DataCell(
                               IconButton(
                                 icon: const Icon(Icons.edit, size: 18),
                                 tooltip: 'Custom points adjustment',
                                 onPressed: () =>
-                                    _editAdjustment(context, r.teamId),
+                                    _editAdjustment(context, rows[i].teamId),
                               ),
                             ),
                           ],
@@ -842,32 +1017,28 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                 ),
               ],
             ),
-            // Fixtures
+            // Fixtures — league and playoffs, with status-based routing
             ListView(
               padding: const EdgeInsets.all(10),
               children: [
-                if (fixtures.isEmpty) const Text('No fixtures yet.'),
-                for (final m in fixtures)
-                  Card(
-                    child: ListTile(
-                      title: Text(
-                        '${store.teamName(m.teamAId)} vs ${store.teamName(m.teamBId)}',
-                      ),
-                      subtitle: Text(
-                        m.resultText.isNotEmpty
-                            ? m.resultText
-                            : (m.status == 'live' ? 'Live' : m.status),
-                      ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => m.status == 'live'
-                              ? ScoringScreen(store: store, match: m)
-                              : ScorecardScreen(store: store, match: m),
-                        ),
-                      ).then((_) => setState(() {})),
-                    ),
+                const SectionHeader('League Fixtures'),
+                if (leagueFixtures.isEmpty)
+                  const EmptyState(
+                    icon: Icons.event_note,
+                    title: 'No league fixtures',
+                    subtitle: 'Use the + button to add fixtures.',
                   ),
+                for (final m in leagueFixtures) _fixtureCard(m),
+                const SectionHeader('Playoffs'),
+                if (playoffFixtures.isEmpty)
+                  const EmptyState(
+                    icon: Icons.emoji_events_outlined,
+                    title: 'No playoff fixtures',
+                    subtitle:
+                        'Semifinals and the final appear here once added.',
+                  ),
+                for (final m in playoffFixtures)
+                  _fixtureCard(m, stageOverride: stageLabel(m.stage)),
                 const SizedBox(height: 70),
               ],
             ),

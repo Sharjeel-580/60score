@@ -4,6 +4,7 @@ import '../models.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../tournament_engine.dart';
 import '../widgets/charts.dart';
 import 'scorecard_screen.dart';
 
@@ -31,7 +32,40 @@ class _ScoringScreenState extends State<ScoringScreen> {
   Future<void> _afterChange() async {
     computeResult(match, store.teamName);
     await store.persist();
+    await _runPlayoffUpdate();
     if (mounted) setState(() {});
+  }
+
+  /// Recompute playoff qualification/seeding after any scoring change.
+  /// The engine is idempotent and only persists when something changed.
+  /// Consequential corrections (after qualification was locked) ask for
+  /// explicit confirmation instead of being applied silently.
+  Future<void> _runPlayoffUpdate() async {
+    final tid = match.tournamentId;
+    if (tid == null) return;
+    final update = await applyPlayoffUpdate(store, tid);
+    if (update.needsConfirmation && mounted) {
+      final apply = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Playoff reseeding needed'),
+          content: Text(update.message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Keep current'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      );
+      if (apply == true && mounted) {
+        await applyPlayoffUpdate(store, tid, force: true);
+      }
+    }
   }
 
   // ---------- dialogs ----------
@@ -402,6 +436,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 match.status = 'noResult';
                 match.resultText = 'No result';
                 await store.persist();
+                // A no-result finalizes the fixture: refresh qualification.
+                // (No confirmation dialog here — the screen is closing;
+                // any needsConfirmation case surfaces on the next scoring
+                // change or when the tournament screen re-runs the engine.)
+                final tid = match.tournamentId;
+                if (tid != null) await applyPlayoffUpdate(store, tid);
                 nav.pop();
               } else if (v == 'delete') {
                 await store.deleteMatch(match.id);
