@@ -55,7 +55,7 @@ class AboutScreen extends StatelessWidget {
                       style: TextStyle(color: kSilver, fontSize: 14),
                     ),
                     Text(
-                      '1.0.0',
+                      '1.1.0',
                       style: TextStyle(
                         color: kWhite,
                         fontSize: 14,

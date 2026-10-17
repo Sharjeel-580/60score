@@ -6,10 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import 'tournament_engine.dart';
 
-class Store extends ChangeNotifier {
+class Store extends ChangeNotifier implements PlayoffStore {
   List<Team> teams = [];
   List<Tournament> tournaments = [];
+  @override
   List<Match> matches = [];
   List<RegPlayer> regPlayers = [];
   List<Draft> drafts = [];
@@ -385,6 +387,7 @@ class Store extends ChangeNotifier {
     await p.setBool(_kWelcome, welcomeDone);
   }
 
+  @override
   Future<void> persist() async {
     await _saveAll();
     notifyListeners();
@@ -398,6 +401,7 @@ class Store extends ChangeNotifier {
     return null;
   }
 
+  @override
   Tournament? tournamentById(String? id) {
     if (id == null) return null;
     for (final t in tournaments) {
@@ -413,6 +417,7 @@ class Store extends ChangeNotifier {
     return null;
   }
 
+  @override
   String teamName(String id) {
     if (id.isEmpty) return 'TBD'; // playoff slot not yet assigned
     return teamById(id)?.name ?? 'Unknown team';

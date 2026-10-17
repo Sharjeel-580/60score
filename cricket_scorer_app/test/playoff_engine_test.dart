@@ -14,8 +14,8 @@ class FakeStore implements PlayoffStore {
   FakeStore({
     required this.teams,
     required this.tournaments,
-    required List<Match> matches,
-  }) : _matches = matches;
+    required this._matches,
+  });
 
   @override
   Tournament? tournamentById(String? id) {
@@ -248,8 +248,8 @@ void main() {
   group('Automatic qualification', () {
     FakeStore setup(List<Match> league) {
       final fixtures = Store.buildDefaultFixtures([]);
-      // Mark every league fixture completed unless the test overrode it.
-      for (final f in fixtures.where((m) => m.stage == 'league')) {
+      // Add every seeded fixture unless the test overrode it.
+      for (final f in fixtures) {
         if (league.every((m) => m.id != f.id)) league.add(f);
       }
       return FakeStore(
@@ -262,7 +262,7 @@ void main() {
     test('top 4 qualify; SF1 = 1v4, SF2 = 2v3', () async {
       // Complete every seeded league fixture with teamA winning.
       final store = setup([]);
-      for (final m in store.matches.where((m) => m.stage == 'league')) {
+      for (final m in store.matches.where((m) => m.stage == 'league').toList()) {
         final res = leagueResult(
           id: m.id,
           a: m.teamAId,
@@ -295,7 +295,7 @@ void main() {
     test('semifinal winners enter the grand final slots', () async {
       final store = setup([]);
       // Finalize league quickly: mark all completed via noResult-free wins.
-      for (final m in store.matches.where((m) => m.stage == 'league')) {
+      for (final m in store.matches.where((m) => m.stage == 'league').toList()) {
         m.status = 'completed';
         m.innings.addAll([
           InningsState(
@@ -352,7 +352,7 @@ void main() {
 
     test('started playoffs are never reseeded', () async {
       final store = setup([]);
-      for (final m in store.matches.where((m) => m.stage == 'league')) {
+      for (final m in store.matches.where((m) => m.stage == 'league').toList()) {
         m.status = 'completed';
       }
       await applyPlayoffUpdate(store, Store.defaultTournamentId);
@@ -366,7 +366,6 @@ void main() {
     });
 
     test('provisional qualifiers are conservative', () {
-      final t = _tournament();
       // Team 0 has max points already; others can still catch up on points
       // except team 5 which cannot reach top 4.
       final table = [

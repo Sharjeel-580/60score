@@ -4,19 +4,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cricket_scorer_app/main.dart';
 
 void main() {
-  testWidgets('60Score boots to splash artwork', (tester) async {
+  testWidgets('60Score boots to splash then home', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const Score60App());
     await tester.pump();
-    // Splash is now the full-bleed AI artwork (logo + Made by Sharjeel baked in).
+    // Splash shows the embedded logo artwork.
     expect(find.byType(Image), findsWidgets);
-    // Let the splash timer finish and the welcome dialog appear.
-    await tester.pump(const Duration(milliseconds: 1600));
-    await tester.pump();
-    expect(find.text('Welcome to 60Score'), findsOneWidget);
-    await tester.tap(find.text('Fresh Start'));
+    // Let the splash timer finish and the home dashboard appear.
+    await tester.pump(const Duration(milliseconds: 2500));
     await tester.pumpAndSettle();
-    expect(find.text('Registration'), findsWidgets);
-    expect(find.text('Scorer'), findsWidgets);
+    // Home dashboard: featured tournament + bottom nav.
+    expect(find.textContaining('Super Sixty League'), findsWidgets);
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text('Matches'), findsWidgets);
   });
 }

@@ -196,6 +196,7 @@ class SectionHeader extends StatelessWidget {
               ),
             ),
           ),
+          // ignore: use_null_aware_elements
           if (action != null) action!,
         ],
       ),
