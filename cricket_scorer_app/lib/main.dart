@@ -10,6 +10,7 @@ import 'backup_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/match_setup_screen.dart';
 import 'screens/scorer_home_screen.dart';
+import 'screens/tournaments_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/teams_screen.dart';
 import 'screens/settings_screen.dart';
@@ -398,27 +399,9 @@ class _HomeShellState extends State<HomeShell> {
                   _drawerCard(
                     icon: Icons.emoji_events,
                     label: 'Tournaments',
-                    onTap: () {
-                      final t = store.tournamentById(
-                        Store.defaultTournamentId,
-                      );
-                      if (t == null) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Default tournament not found'),
-                          ),
-                        );
-                        return;
-                      }
-                      _closeDrawerAndPush(
-                        TournamentDetailScreen(
-                          store: store,
-                          tournament: t,
-                        ),
-                      );
-                    },
+                    onTap: () => _closeDrawerAndPush(
+                      TournamentsScreen(store: store),
+                    ),
                   ),
                   _drawerCard(
                     icon: Icons.groups,

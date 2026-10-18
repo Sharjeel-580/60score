@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../player_io.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../widgets/player_avatar.dart';
 
 const kRoles = ['Batter', 'Bowler', 'All-Rounder', 'Wicket-Keeper'];
 const kBatStyles = ['Right-hand', 'Left-hand'];
@@ -147,11 +151,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     itemBuilder: (context, i) {
                       final p = list[i];
                       return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: p.availability == 'Available'
-                              ? kTeal
-                              : kPanel2,
-                          child: Text(p.name.isEmpty ? '?' : p.name[0]),
+                        leading: PlayerAvatar(
+                          photoBase64: p.photoBase64.isEmpty ? null : p.photoBase64,
+                          role: p.role,
+                          name: p.name,
+                          radius: 22,
                         ),
                         title: Text(p.name),
                         subtitle: Text(
@@ -258,9 +262,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       builder: (c) => AlertDialog(
         title: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: p.availability == 'Available' ? kTeal : kPanel2,
-              child: Text(p.name.isEmpty ? '?' : p.name[0]),
+            PlayerAvatar(
+              photoBase64: p.photoBase64.isEmpty ? null : p.photoBase64,
+              role: p.role,
+              name: p.name,
+              radius: 22,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -412,6 +418,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     var status = p.regStatus;
     var cap = p.isCaptain;
     var wk = p.isKeeper;
+    var photoBase64 = p.photoBase64;
     final saved = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -421,6 +428,61 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Photo picker
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final img = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 512,
+                      maxHeight: 512,
+                      imageQuality: 75,
+                    );
+                    if (img != null) {
+                      final bytes = await img.readAsBytes();
+                      setD(() {
+                        photoBase64 = base64Encode(bytes);
+                      });
+                    }
+                  },
+                  child: Stack(
+                    children: [
+                      PlayerAvatar(
+                        photoBase64: photoBase64.isEmpty ? null : photoBase64,
+                        role: role,
+                        name: name.text,
+                        radius: 40,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: kCyan,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Tap to add photo',
+                  style: TextStyle(fontSize: 11, color: Colors.white54),
+                ),
+                const SizedBox(height: 8),
+                if (photoBase64.isNotEmpty)
+                  TextButton(
+                    onPressed: () => setD(() => photoBase64 = ''),
+                    child: const Text('Remove photo'),
+                  ),
                 TextField(
                   controller: name,
                   decoration: const InputDecoration(labelText: 'Name *'),
@@ -566,6 +628,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       p.regStatus = status;
       p.isCaptain = cap;
       p.isKeeper = wk;
+      p.photoBase64 = photoBase64;
       await store.upsertRegPlayer(p);
       if (mounted) setState(() {});
     }

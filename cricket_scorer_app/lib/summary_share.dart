@@ -11,6 +11,7 @@ import 'models.dart';
 import 'scoring.dart';
 import 'store.dart';
 import 'theme.dart';
+import 'widgets/player_avatar.dart';
 
 Future<void> shareMatchSummaryImage(
   BuildContext context,
@@ -232,6 +233,18 @@ class _SummaryCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
+                  Builder(builder: (_) {
+                    final pl = store.findPlayer(match.manOfMatchId);
+                    return PlayerAvatar(
+                      photoBase64: (pl?.photoBase64 ?? '').isEmpty
+                          ? null
+                          : pl!.photoBase64,
+                      role: pl?.role ?? 'Batter',
+                      name: store.playerName(match.manOfMatchId),
+                      radius: 18,
+                    );
+                  }),
+                  const SizedBox(width: 10),
                   const Text(
                     'Player of the Match',
                     style: TextStyle(color: Colors.white70, fontSize: 12),

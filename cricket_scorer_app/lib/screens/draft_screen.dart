@@ -628,8 +628,9 @@ class _DraftSettingsScreenState extends State<DraftSettingsScreen> {
       };
     } else {
       tournamentId = Store.defaultTournamentId;
-      _nameCtrl.text = 'Super Sixty Draft';
       final t = store.tournamentById(tournamentId);
+      // Draft name follows the selected tournament — not hardcoded.
+      _nameCtrl.text = t != null ? '${t.name} Draft' : 'New Draft';
       if (t != null) selectedTeamIds = List.of(t.teamIds);
     }
     if (tournamentId.isEmpty && store.tournaments.isNotEmpty) {
@@ -707,6 +708,9 @@ class _DraftSettingsScreenState extends State<DraftSettingsScreen> {
                       final t = store.tournamentById(v);
                       selectedTeamIds = t == null ? [] : List.of(t.teamIds);
                       manualRounds.clear();
+                      // Suggest draft name from the newly selected tournament
+                      // (user can still edit it freely).
+                      if (t != null) _nameCtrl.text = '${t.name} Draft';
                     });
                   },
                 ),

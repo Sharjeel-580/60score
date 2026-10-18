@@ -64,6 +64,8 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
   bool _customOvers = false; // Custom Overs toggle in the format section.
   bool _showTossDetail = false; // 'Set Now' reveals winner/decision pickers.
   bool _starting = false; // double-tap guard on the Create button.
+  bool _tossSpinning = false; // coin-spin animation in progress.
+  double _tossSpinTurns = 0; // animated rotation for the coin.
 
   Store get store => widget.store;
 
@@ -974,6 +976,24 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
 
   // ---------- Section 5: Toss ----------
 
+  /// Spins the toss coin: ~2.5s animation, then a random team wins.
+  Future<void> _spinTossCoin() async {
+    if (teamAId == null || teamBId == null || _tossSpinning) return;
+    setState(() {
+      _tossSpinning = true;
+      _tossSpinTurns += 6; // several full rotations
+    });
+    await Future.delayed(const Duration(milliseconds: 2500));
+    if (!mounted) return;
+    final winner =
+        (DateTime.now().microsecondsSinceEpoch % 2 == 0) ? teamAId : teamBId;
+    setState(() {
+      _tossSpinning = false;
+      tossWinnerId = winner;
+      _showTossDetail = true; // reveal "Chose to" Bat/Bowl picker
+    });
+  }
+
   Widget _tossSection() {
     final t1 = tossWinnerId == teamAId && tossWinnerId != null;
     final t2 = tossWinnerId == teamBId && tossWinnerId != null;
@@ -1033,6 +1053,123 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                 }),
               ),
             ],
+          ),
+          // Coin toss simulator — tap to spin, random winner, then choose.
+          const SizedBox(height: 10),
+          Center(
+            child: Column(
+              children: [
+                AnimatedRotation(
+                  turns: _tossSpinTurns,
+                  duration: const Duration(milliseconds: 2500),
+                  curve: Curves.easeOut,
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [kGold, Color(0xFFB8860B)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      border: Border.all(color: Colors.white54, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: kGold.withOpacity(0.4),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: _tossSpinning
+                        ? const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'TOSS',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_tossSpinning)
+                  const Text(
+                    'Spinning...',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  )
+                else if (tossWinnerId != null && !_showTossDetail)
+                  Text(
+                    '${store.teamName(tossWinnerId!)} won the toss!',
+                    style: const TextStyle(
+                      color: kGold,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                FilledButton.icon(
+                  onPressed: (teamAId == null || teamBId == null || _tossSpinning)
+                      ? null
+                      : _spinTossCoin,
+                  icon: const Icon(Icons.monetization_on_outlined),
+                  label: Text(_tossSpinning ? 'Spinning...' : 'Toss Coin'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kGold,
+                    foregroundColor: Colors.black,
+                  ),
+                ),
+                if (tossWinnerId != null && !_showTossDetail) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Choose:',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OptionCard(
+                          title: 'Bat',
+                          icon: Icons.sports_cricket,
+                          selected: tossDecision == 'bat',
+                          onTap: () => setState(() {
+                            tossDecision = 'bat';
+                            _showTossDetail = true;
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OptionCard(
+                          title: 'Bowl',
+                          icon: Icons.sports_baseball,
+                          selected: tossDecision == 'bowl',
+                          onTap: () => setState(() {
+                            tossDecision = 'bowl';
+                            _showTossDetail = true;
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
           if (_showTossDetail) ...[
             const SizedBox(height: 10),

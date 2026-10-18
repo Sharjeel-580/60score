@@ -737,6 +737,20 @@ List<ShotPlot> wagonWheelShots(InningsState inn, String playerId) {
   return list;
 }
 
+/// All shots in an innings across every batter — for the "Whole Team"
+/// wagon wheel view.
+List<ShotPlot> wagonWheelShotsTeam(InningsState inn) {
+  final list = <ShotPlot>[];
+  for (final ev in inn.events) {
+    if (ev.extraType == 'wide') continue;
+    final x = ev.shotX;
+    final y = ev.shotY;
+    if (x == null || y == null) continue;
+    list.add(ShotPlot(x, y, ev.batRuns, ev.isWicket));
+  }
+  return list;
+}
+
 // ---------------- Partnerships ----------------
 
 class Partnership {

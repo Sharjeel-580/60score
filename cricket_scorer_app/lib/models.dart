@@ -13,6 +13,7 @@ class Player {
   bool isCaptain;
   bool isViceCaptain;
   bool isKeeper;
+  String photoBase64; // optional player photo (base64 JPEG), '' if none
 
   Player({
     required this.id,
@@ -24,6 +25,7 @@ class Player {
     this.isCaptain = false,
     this.isViceCaptain = false,
     this.isKeeper = false,
+    this.photoBase64 = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -36,6 +38,7 @@ class Player {
     'isCaptain': isCaptain,
     'isViceCaptain': isViceCaptain,
     'isKeeper': isKeeper,
+    'photoBase64': photoBase64,
   };
 
   factory Player.fromJson(Map<String, dynamic> j) => Player(
@@ -48,6 +51,7 @@ class Player {
     isCaptain: j['isCaptain'] as bool? ?? false,
     isViceCaptain: j['isViceCaptain'] as bool? ?? false,
     isKeeper: j['isKeeper'] as bool? ?? false,
+    photoBase64: j['photoBase64'] as String? ?? '',
   );
 }
 
@@ -629,6 +633,7 @@ class RegPlayer {
   int jerseyNo;
   bool isCaptain;
   bool isKeeper;
+  String photoBase64; // optional player photo (base64 JPEG), '' if none
 
   RegPlayer({
     required this.id,
@@ -647,6 +652,7 @@ class RegPlayer {
     this.jerseyNo = 0,
     this.isCaptain = false,
     this.isKeeper = false,
+    this.photoBase64 = '',
   });
 
   Player toTeamPlayer() => Player(
@@ -658,6 +664,7 @@ class RegPlayer {
     bowlingStyle: bowlingStyle,
     isCaptain: isCaptain,
     isKeeper: isKeeper,
+    photoBase64: photoBase64,
   );
 
   Map<String, dynamic> toJson() => {
@@ -677,6 +684,7 @@ class RegPlayer {
     'jerseyNo': jerseyNo,
     'isCaptain': isCaptain,
     'isKeeper': isKeeper,
+    'photoBase64': photoBase64,
   };
 
   factory RegPlayer.fromJson(Map<String, dynamic> j) => RegPlayer(
@@ -696,6 +704,7 @@ class RegPlayer {
     jerseyNo: (j['jerseyNo'] as num?)?.toInt() ?? 0,
     isCaptain: j['isCaptain'] as bool? ?? false,
     isKeeper: j['isKeeper'] as bool? ?? false,
+    photoBase64: j['photoBase64'] as String? ?? '',
   );
 }
 

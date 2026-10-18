@@ -8,6 +8,7 @@ import '../store.dart';
 import '../summary_share.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
+import '../widgets/player_avatar.dart';
 
 class ScorecardScreen extends StatelessWidget {
   final Store store;
@@ -396,7 +397,17 @@ class _SummaryTab extends StatelessWidget {
         if (match.manOfMatchId.isNotEmpty)
           Card(
             child: ListTile(
-              leading: const Icon(Icons.star, color: Colors.amber),
+              leading: Builder(builder: (context) {
+                final pl = store.findPlayer(match.manOfMatchId);
+                return PlayerAvatar(
+                  photoBase64: (pl?.photoBase64 ?? '').isEmpty
+                      ? null
+                      : pl!.photoBase64,
+                  role: pl?.role ?? 'Batter',
+                  name: nameOf(match.manOfMatchId),
+                  radius: 22,
+                );
+              }),
               title: const Text(
                 'Player of the Match',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
@@ -1221,6 +1232,7 @@ class _WagonForInnings extends StatefulWidget {
 
 class _WagonForInningsState extends State<_WagonForInnings> {
   String? batterId;
+  static const _wholeTeam = '__whole_team__';
 
   @override
   Widget build(BuildContext context) {
@@ -1230,20 +1242,33 @@ class _WagonForInningsState extends State<_WagonForInnings> {
         .toList();
     batterId ??= batters.isNotEmpty ? batters.first : null;
     if (batterId == null) return const Text('No batting data.');
-    if (!batters.contains(batterId)) batterId = batters.first;
+    if (batterId != _wholeTeam && !batters.contains(batterId)) {
+      batterId = batters.first;
+    }
+    final isWholeTeam = batterId == _wholeTeam;
     return Column(
       children: [
         DropdownButton<String>(
           value: batterId,
-          items: batters
-              .map(
-                (id) =>
-                    DropdownMenuItem(value: id, child: Text(widget.nameOf(id))),
-              )
-              .toList(),
+          items: [
+            const DropdownMenuItem(
+              value: _wholeTeam,
+              child: Text('Whole Team (Poori Team)'),
+            ),
+            ...batters.map(
+              (id) =>
+                  DropdownMenuItem(value: id, child: Text(widget.nameOf(id))),
+            ),
+          ],
           onChanged: (v) => setState(() => batterId = v),
         ),
-        Center(child: WagonWheel(shots: wagonWheelShots(widget.inn, batterId!))),
+        Center(
+          child: WagonWheel(
+            shots: isWholeTeam
+                ? wagonWheelShotsTeam(widget.inn)
+                : wagonWheelShots(widget.inn, batterId!),
+          ),
+        ),
         const SizedBox(height: 6),
         const WagonLegend(),
       ],

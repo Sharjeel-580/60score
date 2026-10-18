@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../fixture_poster.dart';
 import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
 import 'scoring_screen.dart';
@@ -245,6 +246,13 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
           ),
           const SizedBox(height: 20),
           ..._actions(m),
+          const SizedBox(height: 10),
+          ScoreButton(
+            label: 'Share Poster',
+            kind: ScoreButtonKind.ghost,
+            icon: Icons.share_outlined,
+            onPressed: () => shareFixturePoster(context, store, m),
+          ),
           const SizedBox(height: 24),
         ],
       ),
