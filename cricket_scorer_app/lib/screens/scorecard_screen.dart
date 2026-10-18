@@ -505,6 +505,7 @@ class ScorecardScreen extends StatelessWidget {
         ? '-'
         : (f.runs * 100 / f.balls).toStringAsFixed(1);
     final pl = store.findPlayer(pid);
+    final rowPhoto = store.photoForPlayer(pid); // v1.1.6 shared record
     final figures = [
       '${f.runs}',
       '${f.balls}',
@@ -521,9 +522,8 @@ class ScorecardScreen extends StatelessWidget {
             child: Row(
               children: [
                 PlayerAvatar(
-                  photoBase64: (pl?.photoBase64 ?? '').isEmpty
-                      ? null
-                      : pl!.photoBase64,
+                  photoBase64:
+                      rowPhoto.isEmpty ? null : rowPhoto,
                   role: pl?.role ?? 'Batter',
                   name: nameOf(pid),
                   radius: 15,
@@ -602,6 +602,7 @@ class ScorecardScreen extends StatelessWidget {
         ? '-'
         : (f.runs * inn.ballsPerOver / f.legalBalls).toStringAsFixed(2);
     final pl = store.findPlayer(pid);
+    final rowPhoto = store.photoForPlayer(pid); // v1.1.6 shared record
     final figures = [
       oversText(f.legalBalls, inn.ballsPerOver),
       '${f.maidens}',
@@ -618,9 +619,8 @@ class ScorecardScreen extends StatelessWidget {
             child: Row(
               children: [
                 PlayerAvatar(
-                  photoBase64: (pl?.photoBase64 ?? '').isEmpty
-                      ? null
-                      : pl!.photoBase64,
+                  photoBase64:
+                      rowPhoto.isEmpty ? null : rowPhoto,
                   role: pl?.role ?? 'Bowler',
                   name: nameOf(pid),
                   radius: 15,
@@ -784,13 +784,15 @@ class _SummaryTab extends StatelessWidget {
             child: ListTile(
               leading: Builder(builder: (context) {
                 final pl = store.findPlayer(match.manOfMatchId);
+                // v1.1.6: POTM photo via the shared player record; default
+                // person icon when no photo exists (never dummy/another).
+                final potmPhoto = store.photoForPlayer(match.manOfMatchId);
                 return PlayerAvatar(
-                  photoBase64: (pl?.photoBase64 ?? '').isEmpty
-                      ? null
-                      : pl!.photoBase64,
+                  photoBase64: potmPhoto.isEmpty ? null : potmPhoto,
                   role: pl?.role ?? 'Batter',
                   name: nameOf(match.manOfMatchId),
                   radius: 22,
+                  fallbackIcon: Icons.person,
                 );
               }),
               title: const Text(

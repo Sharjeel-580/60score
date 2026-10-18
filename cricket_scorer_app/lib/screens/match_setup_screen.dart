@@ -282,6 +282,49 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                 onPressed: _canStart && !_starting ? _create : null,
               ),
             ),
+            // v1.1.6: "Add Fixture" — save the schedule now, score later.
+            // Relaxed validation: only two different teams are required
+            // (no squad, no Playing XI, no toss). Hidden when editing an
+            // existing fixture (that screen already has Start Match).
+            if (!isFixture) ...[
+              const SizedBox(height: 10),
+              Opacity(
+                opacity: _canSaveFixture && !_savingFixture ? 1 : 0.45,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.event_note, size: 20),
+                    label: Text(
+                        _savingFixture ? 'Saving…' : 'Add Fixture — score later'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kCyan,
+                      side: BorderSide(
+                          color: kCyan.withValues(alpha: 0.6), width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    onPressed: _canSaveFixture && !_savingFixture
+                        ? _saveFixture
+                        : null,
+                  ),
+                ),
+              ),
+              if (!_canSaveFixture)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Pick two different teams to save a fixture.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ),
+            ],
             if (!_canStart)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -1386,7 +1429,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
     );
   }
 
-  // ---------- Create ----------
+  // ---------- Create / Add Fixture ----------
 
   /// Double-tap guard around the unchanged [_start] flow.
   Future<void> _create() async {
@@ -1396,6 +1439,58 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       await _start();
     } finally {
       if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  bool _savingFixture = false; // double-tap guard on the Add Fixture button.
+
+  /// v1.1.6: Add Fixture needs only two different teams — no squad,
+  /// no Playing XI, no toss. Everything else is optional.
+  bool get _canSaveFixture =>
+      teamAId != null && teamBId != null && teamAId != teamBId;
+
+  /// Save a scheduled fixture (status 'upcoming') WITHOUT starting a live
+  /// match. Squad/Playing XI/toss are deferred until the user taps
+  /// "Do Scoring" on the fixture later. Never duplicates: one new match
+  /// record is inserted via the existing upsertMatch.
+  Future<void> _saveFixture() async {
+    if (_savingFixture || !_canSaveFixture) return;
+    setState(() => _savingFixture = true);
+    try {
+      String p2(int v) => v.toString().padLeft(2, '0');
+      final m = Match(
+        id: Store.newId('match'),
+        tournamentId: tournamentId,
+        teamAId: teamAId!,
+        teamBId: teamBId!,
+        xiA: const [],
+        xiB: const [],
+        oversLimit: overs,
+        ballsPerOver: ballsPerOver,
+        venue: venueCtrl.text.trim(),
+        // Local date + time as a plain string (never UTC), same format as
+        // the seeded fixtures, so the schedule survives timezone shifts.
+        dateIso:
+            '${date.year}-${p2(date.month)}-${p2(date.day)}T${p2(date.hour)}:${p2(date.minute)}:00',
+        matchTitle: titleCtrl.text.trim(),
+        ballType: ballType,
+        season: seasonCtrl.text.trim(),
+        tossWinnerId: '',
+        tossDecision: tossDecision,
+        status: 'upcoming',
+        totalWickets: totalWickets,
+        lastManStands: lastManStands,
+        widePenalty: widePenalty,
+        noBallPenalty: noBallPenalty,
+      );
+      await store.upsertMatch(m);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fixture added successfully.')),
+      );
+      Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _savingFixture = false);
     }
   }
 

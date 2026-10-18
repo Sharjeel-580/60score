@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../player_io.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../widgets/player_avatar.dart';
 
 class TeamsScreen extends StatefulWidget {
   final Store store;
@@ -259,9 +263,17 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   if (p.isViceCaptain) 'VC',
                   if (p.isKeeper) 'WK',
                 ].join(' · ');
+                // v1.1.6: photo via the shared player record — a registered
+                // player's saved photo shows here. Plain person icon when
+                // no photo exists (never a question mark).
+                final cardPhoto = store.photoForPlayer(p.id);
                 return ListTile(
-                  leading: CircleAvatar(
-                    child: Text(p.jerseyNo > 0 ? '${p.jerseyNo}' : '?'),
+                  leading: PlayerAvatar(
+                    photoBase64: cardPhoto.isEmpty ? null : cardPhoto,
+                    role: p.role,
+                    name: p.name,
+                    radius: 22,
+                    fallbackIcon: Icons.person,
                   ),
                   title: Text(p.name),
                   subtitle: Text(
@@ -294,6 +306,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     var cap = p.isCaptain;
     var vc = p.isViceCaptain;
     var wk = p.isKeeper;
+    // v1.1.6: photo management through Team Management — Add / Change /
+    // Remove Image, saved on the shared player record (see save below).
+    var photoBase64 = p.photoBase64;
     const roles = ['Batter', 'Bowler', 'All-Rounder', 'Wicket-Keeper'];
     const bats = ['Right-hand', 'Left-hand'];
     const bowls = [
@@ -314,6 +329,64 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // v1.1.6: photo picker (same gallery flow as player
+                // registration). Tap avatar to Add/Change; Remove Image
+                // clears the photo on the shared record.
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final img = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 512,
+                      maxHeight: 512,
+                      imageQuality: 75,
+                    );
+                    if (img != null) {
+                      final bytes = await img.readAsBytes();
+                      setD(() {
+                        photoBase64 = base64Encode(bytes);
+                      });
+                    }
+                  },
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      PlayerAvatar(
+                        photoBase64:
+                            photoBase64.isEmpty ? null : photoBase64,
+                        role: role,
+                        name: nameCtrl.text,
+                        radius: 40,
+                        fallbackIcon: Icons.person,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: kCyan,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  onPressed: photoBase64.isEmpty
+                      ? null
+                      : () => setD(() => photoBase64 = ''),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Remove Image'),
+                ),
+                const SizedBox(height: 4),
                 TextField(
                   controller: nameCtrl,
                   decoration: const InputDecoration(labelText: 'Name'),
@@ -384,6 +457,15 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       p.role = role;
       p.battingStyle = bat;
       p.bowlingStyle = bowl;
+      // v1.1.6: photo lives on the shared player record — when this team
+      // player links to a registered player (same ID), update the
+      // canonical record too so every screen shows the same photo.
+      p.photoBase64 = photoBase64;
+      final reg = store.regById(p.id);
+      if (reg != null) {
+        reg.photoBase64 = photoBase64;
+        await store.upsertRegPlayer(reg);
+      }
       // only one captain / vice-captain / keeper flag set per team
       if (cap) {
         for (final x in team.players) {

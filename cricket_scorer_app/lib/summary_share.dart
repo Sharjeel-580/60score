@@ -497,6 +497,9 @@ class _SummaryCard extends StatelessWidget {
     final pid = match.manOfMatchId;
     final pl = _playerOf(pid);
     final name = store.playerName(pid);
+    // v1.1.6: POTM photo via the shared player record; default person
+    // icon when no photo exists (never dummy/another player's photo).
+    final potmPhoto = store.photoForPlayer(pid);
     final team = pl != null ? (store.teamById(_teamOfPlayer(pid))?.name ?? '') : '';
     final s = _potmStats(pid);
     final sr = s['balls']! == 0
@@ -553,11 +556,11 @@ class _SummaryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               PlayerAvatar(
-                photoBase64:
-                    (pl?.photoBase64 ?? '').isEmpty ? null : pl!.photoBase64,
+                photoBase64: potmPhoto.isEmpty ? null : potmPhoto,
                 role: pl?.role ?? 'Batter',
                 name: name,
                 radius: 34,
+                fallbackIcon: Icons.person,
               ),
               const SizedBox(width: 12),
               Expanded(

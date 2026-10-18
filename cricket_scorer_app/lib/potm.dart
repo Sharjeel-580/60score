@@ -118,7 +118,9 @@ List<PotmCandidate> potmShortlist(Match m, Store store, {int maxCount = 3}) {
       teamId: teamId,
       teamName: teamName,
       role: pl?.role ?? 'Batter',
-      photoBase64: pl?.photoBase64 ?? '',
+      // v1.1.6: photo via the shared player record (a photo added in
+      // Registered Players / Team Management shows up in the picker).
+      photoBase64: store.photoForPlayer(pid),
       runs: f.runs,
       balls: f.balls,
       fours: f.fours,

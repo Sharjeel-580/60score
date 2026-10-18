@@ -115,13 +115,19 @@ class _FixturePosterCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (cap != null) ...[
-            PlayerAvatar(
-              photoBase64:
-                  cap.photoBase64.isEmpty ? null : cap.photoBase64,
-              role: cap.role,
-              name: cap.name,
-              radius: 24,
-            ),
+            // v1.1.6: captain's photo via the shared player record;
+            // default person icon when no photo (never role icon, never
+            // another player's photo).
+            Builder(builder: (_) {
+              final capPhoto = store.photoForPlayer(cap.id);
+              return PlayerAvatar(
+                photoBase64: capPhoto.isEmpty ? null : capPhoto,
+                role: cap.role,
+                name: cap.name,
+                radius: 24,
+                fallbackIcon: Icons.person,
+              );
+            }),
             const SizedBox(height: 4),
             Text(
               'C: ${cap.name}',

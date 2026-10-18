@@ -315,6 +315,10 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
   Widget _captainBlock(String teamId, Color accent) {
     final name = store.teamName(teamId);
     final cap = _captain(teamId);
+    // v1.1.6: captain's photo via the shared player record, so a photo
+    // added in Registered Players / Team Management shows up here without
+    // any re-import. Never another player's photo.
+    final capPhoto = cap == null ? '' : store.photoForPlayer(cap.id);
     return Column(
       children: [
         Container(
@@ -330,9 +334,7 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
             ],
           ),
           child: PlayerAvatar(
-            photoBase64: (cap?.photoBase64 ?? '').isEmpty
-                ? null
-                : cap!.photoBase64,
+            photoBase64: capPhoto.isEmpty ? null : capPhoto,
             role: cap?.role ?? 'Batter',
             name: cap?.name ?? name,
             radius: 38,
@@ -457,6 +459,17 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
     return [full.substring(0, idx).trim(), full.substring(idx + 1).trim()];
   }
 
+  /// v1.1.6: mirrors the New Match screen's _canStart gate — teams set and
+  /// different, at least 2 players per XI, toss recorded. Below this the
+  /// user is guided through the existing setup flow instead of scoring.
+  bool _fixtureReadyForScoring(Match m) =>
+      m.teamAId.isNotEmpty &&
+      m.teamBId.isNotEmpty &&
+      m.teamAId != m.teamBId &&
+      m.xiA.length >= 2 &&
+      m.xiB.length >= 2 &&
+      m.tossWinnerId.isNotEmpty;
+
   // ---------- 2x2 action grid ----------
 
   Widget _actionGrid(Match m) {
@@ -530,7 +543,25 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
             if (mounted) setState(() {});
           });
     } else if (m.status == 'upcoming') {
-      liveTap = () => Navigator.push(
+      // v1.1.6 "Do Scoring": one tap per fixture, no duplicates.
+      // Setup complete -> flip this fixture to live and go to scoring.
+      // Setup missing -> open the existing setup screen on this fixture
+      // (in-place update, the fixture is preserved and never duplicated).
+      liveTap = () async {
+        if (_fixtureReadyForScoring(m)) {
+          m.status = 'live';
+          await store.upsertMatch(m);
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ScoringScreen(store: store, match: m),
+            ),
+          ).then((_) {
+            if (mounted) setState(() {});
+          });
+        } else {
+          Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => MatchSetupScreen(
@@ -542,6 +573,8 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
           ).then((_) {
             if (mounted) setState(() {});
           });
+        }
+      };
     }
 
     VoidCallback? scorecardTap;
@@ -578,7 +611,8 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
           children: [
             btn(
               icon: Icons.sports_cricket,
-              label: m.status == 'live' ? 'Live Scoring' : 'Start Scoring',
+              // v1.1.6: "Do Scoring" on a saved fixture (was "Start Scoring").
+              label: m.status == 'live' ? 'Live Scoring' : 'Do Scoring',
               color: const Color(0xFFB388FF),
               onTap: liveTap,
             ),
@@ -685,12 +719,12 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
                         ? m.teamAId
                         : m.teamBId);
                 final tp = t?.playerById(pid);
+                // v1.1.6: photo via the shared player record.
+                final xiPhoto = store.photoForPlayer(pid);
                 return ListTile(
                   dense: true,
                   leading: PlayerAvatar(
-                    photoBase64: (tp?.photoBase64 ?? '').isEmpty
-                        ? null
-                        : tp!.photoBase64,
+                    photoBase64: xiPhoto.isEmpty ? null : xiPhoto,
                     role: tp?.role ?? pl?.role ?? 'Batter',
                     name: store.playerName(pid),
                     radius: 16,

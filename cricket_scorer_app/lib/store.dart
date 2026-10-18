@@ -445,6 +445,25 @@ class Store extends ChangeNotifier implements PlayoffStore {
     return null;
   }
 
+  /// Shared photo lookup (v1.1.6): one player record, one photo everywhere.
+  /// Prefers the Registered Players record (the canonical profile), falls
+  /// back to the team-squad copy, returns '' when no photo exists anywhere.
+  /// Use this wherever a player photo is displayed instead of reading a
+  /// single copy's photoBase64, so a photo added in Registered Players
+  /// (or Team Management) shows up in Team Management, squads, Playing XI,
+  /// POTM, Summary and fixture cards without any re-import.
+  String photoForPlayer(String id) {
+    final reg = regById(id);
+    if (reg != null && reg.photoBase64.isNotEmpty) {
+      return reg.photoBase64;
+    }
+    final p = findPlayer(id);
+    if (p != null && p.photoBase64.isNotEmpty) {
+      return p.photoBase64;
+    }
+    return '';
+  }
+
   Draft? draftById(String id) {
     for (final d in drafts) {
       if (d.id == id) return d;
@@ -520,6 +539,9 @@ class Store extends ChangeNotifier implements PlayoffStore {
           existing.role = reg.role;
           existing.battingStyle = reg.battingStyle;
           existing.bowlingStyle = reg.bowlingStyle;
+          // v1.1.6: keep the shared photo in sync on re-apply too, so the
+          // team copy never shows a stale/missing image.
+          existing.photoBase64 = reg.photoBase64;
           if (reg.jerseyNo > 0) existing.jerseyNo = reg.jerseyNo;
         }
       }
