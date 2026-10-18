@@ -154,7 +154,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor:
-                          isDefault ? kGold.withOpacity(0.25) : kPanel2,
+                          isDefault ? kGold.withValues(alpha: 0.25) : kPanel2,
                       child: Icon(
                         Icons.emoji_events,
                         color: isDefault ? kGold : kCyan,
@@ -170,7 +170,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: kGold.withOpacity(0.2),
+                              color: kGold.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Text(

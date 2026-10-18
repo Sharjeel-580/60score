@@ -157,7 +157,7 @@ class _FixturePosterCard extends StatelessWidget {
           colors: [Color(0xFF0B1B33), Color(0xFF060D18)],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kGold.withOpacity(0.5), width: 2),
+        border: Border.all(color: kGold.withValues(alpha: 0.5), width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -189,9 +189,9 @@ class _FixturePosterCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
             decoration: BoxDecoration(
-              color: kGold.withOpacity(0.18),
+              color: kGold.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: kGold.withOpacity(0.6)),
+              border: Border.all(color: kGold.withValues(alpha: 0.6)),
             ),
             child: Text(
               stageLabel(match.stage).toUpperCase(),

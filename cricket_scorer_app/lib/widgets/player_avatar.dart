@@ -72,7 +72,7 @@ class PlayerAvatar extends StatelessWidget {
     }
     return CircleAvatar(
       radius: radius,
-      backgroundColor: roleColor(role).withOpacity(0.25),
+      backgroundColor: roleColor(role).withValues(alpha: 0.25),
       child: Icon(
         roleIcon(role),
         color: roleColor(role),

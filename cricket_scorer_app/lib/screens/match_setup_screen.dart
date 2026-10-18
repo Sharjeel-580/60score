@@ -1076,7 +1076,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                       border: Border.all(color: Colors.white54, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: kGold.withOpacity(0.4),
+                          color: kGold.withValues(alpha: 0.4),
                           blurRadius: 12,
                           spreadRadius: 2,
                         ),
