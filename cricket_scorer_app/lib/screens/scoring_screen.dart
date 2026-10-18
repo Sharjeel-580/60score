@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../potm.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
 import '../widgets/charts.dart';
+import '../widgets/potm_picker.dart';
 import 'scorecard_screen.dart';
 
 class ScoringScreen extends StatefulWidget {
@@ -670,6 +672,14 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 onPressed: () async {
                   final nav = Navigator.of(context);
                   computeResult(match, store.teamName);
+                  // v1.1.5: no manual POTM pick? Auto-select the
+                  // highest-ranked eligible candidate (never random).
+                  if (match.manOfMatchId.isEmpty) {
+                    final top = potmShortlist(match, store);
+                    if (top.isNotEmpty) {
+                      match.manOfMatchId = top.first.playerId;
+                    }
+                  }
                   match.status = 'completed';
                   await store.persist();
                   nav.pushReplacement(
@@ -689,22 +699,25 @@ class _ScoringScreenState extends State<ScoringScreen> {
     );
   }
 
+  /// Player of the Match picker (v1.1.5): opens the stat-based shortlist
+  /// dialog. The old dropdown is gone; selection is saved on the match.
   Widget _momPicker() {
-    final xi = {...match.xiA, ...match.xiB}.toList();
-    return DropdownButtonFormField<String>(
-      initialValue: match.manOfMatchId.isEmpty ? null : match.manOfMatchId,
-      decoration: const InputDecoration(
-        labelText: 'Man of the Match (optional)',
-      ),
-      items: [
-        const DropdownMenuItem(value: '', child: Text('None')),
-        ...xi.map((id) => DropdownMenuItem(value: id, child: Text(nameOf(id)))),
-      ],
-      onChanged: (v) async {
-        match.manOfMatchId = v ?? '';
-        await store.persist();
-        setState(() {});
+    final hasPick = match.manOfMatchId.isNotEmpty;
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final picked = await showPotmPickerDialog(context, store, match);
+        if (picked != null && picked.isNotEmpty) {
+          match.manOfMatchId = picked;
+          await store.persist();
+          if (mounted) setState(() {});
+        }
       },
+      icon: const Icon(Icons.emoji_events_outlined),
+      label: Text(
+        hasPick
+            ? 'POTM: ${nameOf(match.manOfMatchId)} (tap to change)'
+            : 'Select Player of the Match',
+      ),
     );
   }
 

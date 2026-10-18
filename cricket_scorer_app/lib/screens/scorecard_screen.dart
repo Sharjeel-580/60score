@@ -9,6 +9,7 @@ import '../summary_share.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/player_avatar.dart';
+import '../widgets/potm_picker.dart';
 
 class ScorecardScreen extends StatelessWidget {
   final Store store;
@@ -802,6 +803,27 @@ class _SummaryTab extends StatelessWidget {
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+              // v1.1.5: change the award later (updates the saved award,
+              // never duplicates it).
+              trailing: IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                tooltip: 'Change Player of the Match',
+                onPressed: () async {
+                  final picked = await showPotmPickerDialog(
+                    context,
+                    store,
+                    match,
+                  );
+                  if (picked != null && picked.isNotEmpty) {
+                    match.manOfMatchId = picked;
+                    await store.persist();
+                    // StatelessWidget: force a rebuild to show the change.
+                    if (context.mounted) {
+                      (context as Element).markNeedsBuild();
+                    }
+                  }
+                },
               ),
             ),
           ),

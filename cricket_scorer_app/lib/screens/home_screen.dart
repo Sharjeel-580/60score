@@ -12,6 +12,7 @@ import 'scorer_home_screen.dart';
 import 'scorecard_screen.dart';
 import 'settings_screen.dart';
 import 'teams_screen.dart';
+import 'tournaments_screen.dart';
 
 /// Short fixture date range, e.g. '2026-10-22T14:00:00' -> '22 Oct 2026'.
 String _shortDate(String iso) {
@@ -134,13 +135,9 @@ class _HomeScreenState extends State<HomeScreen> {
           title: 'Tournaments',
           subtitle: 'View & Manage',
           gradient: const [Color(0xFF0B5FA5), Color(0xFF19D7F2)],
-          onTap: () {
-            if (defaultT != null) {
-              _openTournament(context, defaultT);
-            } else {
-              widget.onSelectTab(1);
-            }
-          },
+          // Same Tournament Management screen as the sidebar's Tournaments
+          // menu (v1.1.5): never a separate implementation.
+          onTap: () => push(TournamentsScreen(store: store)),
         ),
       ),
       _sizedActionCard(

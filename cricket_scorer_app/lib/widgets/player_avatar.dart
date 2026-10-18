@@ -40,12 +40,15 @@ Color roleColor(String role) {
   return const Color(0xFF29B6F6); // blue for batters
 }
 
-/// Circular player avatar: photo (base64) when available, role icon otherwise.
+/// Circular player avatar: photo (base64) when available, otherwise a
+/// fallback icon. By default the icon is role-specific; pass [fallbackIcon]
+/// (e.g. Icons.person) to force a plain icon instead.
 class PlayerAvatar extends StatelessWidget {
   final String? photoBase64;
   final String role;
   final String name;
   final double radius;
+  final IconData? fallbackIcon;
 
   const PlayerAvatar({
     super.key,
@@ -53,6 +56,7 @@ class PlayerAvatar extends StatelessWidget {
     this.role = 'Batter',
     this.name = '',
     this.radius = 20,
+    this.fallbackIcon,
   });
 
   @override
@@ -74,7 +78,7 @@ class PlayerAvatar extends StatelessWidget {
       radius: radius,
       backgroundColor: roleColor(role).withValues(alpha: 0.25),
       child: Icon(
-        roleIcon(role),
+        fallbackIcon ?? roleIcon(role),
         color: roleColor(role),
         size: radius * 1.1,
       ),

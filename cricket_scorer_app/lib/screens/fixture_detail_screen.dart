@@ -8,6 +8,7 @@ import '../fixture_poster.dart';
 import '../widgets/player_avatar.dart';
 import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
+import 'scorer_home_screen.dart';
 import 'scoring_screen.dart';
 
 /// "2026-11-06T15:00:00" -> "06 Nov 2026, 03:00 PM".
@@ -335,6 +336,9 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
             role: cap?.role ?? 'Batter',
             name: cap?.name ?? name,
             radius: 38,
+            // v1.1.5: captains without a photo get a clean default person
+            // icon — never a role icon, never another player's photo.
+            fallbackIcon: Icons.person_outline,
           ),
         ),
         const SizedBox(height: 8),
@@ -361,7 +365,7 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
               ),
               const SizedBox(height: 2),
               Text(
-                cap != null ? 'Captain: ${cap.name}' : 'Captain: TBD',
+                cap != null ? 'Captain: ${cap.name}' : 'Captain: unassigned',
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -901,7 +905,24 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
     );
     return ScoreCard(
       child: InkWell(
-        onTap: () => _snack('Open Tournaments to view the full points table.'),
+        // v1.1.5: opens the tournament's existing points-table screen.
+        onTap: () {
+          final tid = m.tournamentId;
+          final t = tid == null ? null : store.tournamentById(tid);
+          if (t == null) {
+            _snack('No tournament linked to this fixture.');
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TournamentDetailScreen(
+                store: store,
+                tournament: t,
+              ),
+            ),
+          );
+        },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(14),
