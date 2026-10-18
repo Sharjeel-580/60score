@@ -16,6 +16,7 @@ import 'screens/settings_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/draft_screen.dart';
 import 'widgets/app_logo.dart';
+import 'widgets/splash_image.dart';
 
 void main() {
   runApp(const Score60App());
@@ -121,11 +122,8 @@ class _SplashGateState extends State<SplashGate> {
     if (!_ready) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: SizedBox.expand(
-          child: Image.asset(
-            'assets/splash.png',
-            fit: BoxFit.cover,
-          ),
+        body: const SizedBox.expand(
+          child: SplashImage(),
         ),
       );
     }
