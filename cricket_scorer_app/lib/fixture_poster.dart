@@ -78,30 +78,16 @@ class _FixturePosterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: align,
         children: [
+          // v1.1.7: the team's assigned captain's actual photo replaces the
+          // initials circle, at the same 72px position with the cyan border.
           Container(
             width: 72,
             height: 72,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: kPanel2,
               border: Border.all(color: kCyan, width: 2),
             ),
-            alignment: Alignment.center,
-            child: Text(
-              name.isEmpty
-                  ? '?'
-                  : name
-                      .split(' ')
-                      .map((w) => w.isEmpty ? '' : w[0])
-                      .take(2)
-                      .join()
-                      .toUpperCase(),
-              style: const TextStyle(
-                color: kWhite,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            child: CaptainAvatar(store: store, teamId: teamId, radius: 34),
           ),
           const SizedBox(height: 8),
           Text(
@@ -114,21 +100,7 @@ class _FixturePosterCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          if (cap != null) ...[
-            // v1.1.6: captain's photo via the shared player record;
-            // default person icon when no photo (never role icon, never
-            // another player's photo).
-            Builder(builder: (_) {
-              final capPhoto = store.photoForPlayer(cap.id);
-              return PlayerAvatar(
-                photoBase64: capPhoto.isEmpty ? null : capPhoto,
-                role: cap.role,
-                name: cap.name,
-                radius: 24,
-                fallbackIcon: Icons.person,
-              );
-            }),
-            const SizedBox(height: 4),
+          if (cap != null)
             Text(
               'C: ${cap.name}',
               textAlign: TextAlign.center,
@@ -137,8 +109,8 @@ class _FixturePosterCard extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
-            ),
-          ] else
+            )
+          else
             const Text(
               'Captain TBD',
               style: TextStyle(color: Colors.white38, fontSize: 11),

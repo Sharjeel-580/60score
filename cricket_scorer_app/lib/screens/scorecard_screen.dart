@@ -208,7 +208,7 @@ class ScorecardScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              TeamAvatar(store.teamName(match.teamAId)),
+              CaptainAvatar(store: store, teamId: match.teamAId),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -222,7 +222,7 @@ class ScorecardScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              TeamAvatar(store.teamName(match.teamBId)),
+              CaptainAvatar(store: store, teamId: match.teamBId),
             ],
           ),
           const SizedBox(height: 8),
@@ -294,7 +294,7 @@ class ScorecardScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             child: Row(
               children: [
-                TeamAvatar(store.teamName(inn.battingTeamId)),
+                CaptainAvatar(store: store, teamId: inn.battingTeamId),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -781,52 +781,112 @@ class _SummaryTab extends StatelessWidget {
           ),
         if (match.manOfMatchId.isNotEmpty)
           Card(
-            child: ListTile(
-              leading: Builder(builder: (context) {
-                final pl = store.findPlayer(match.manOfMatchId);
-                // v1.1.6: POTM photo via the shared player record; default
-                // person icon when no photo exists (never dummy/another).
-                final potmPhoto = store.photoForPlayer(match.manOfMatchId);
-                return PlayerAvatar(
-                  photoBase64: potmPhoto.isEmpty ? null : potmPhoto,
-                  role: pl?.role ?? 'Batter',
-                  name: nameOf(match.manOfMatchId),
-                  radius: 22,
-                  fallbackIcon: Icons.person,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Builder(builder: (context) {
+                final pid = match.manOfMatchId;
+                final pl = store.findPlayer(pid);
+                // v1.1.7: POTM photo prominent on the LEFT via the shared
+                // player record; default person icon when no photo exists
+                // (never dummy/another player's photo).
+                final potmPhoto = store.photoForPlayer(pid);
+                // Compact match figures for the award winner.
+                var runs = 0, balls = 0, wkts = 0;
+                for (final inn in match.innings) {
+                  final bf = inn.batting[pid];
+                  if (bf != null && bf.batted) {
+                    runs += bf.runs;
+                    balls += bf.balls;
+                  }
+                  final wf = inn.bowling[pid];
+                  if (wf != null && wf.legalBalls > 0) wkts += wf.wickets;
+                }
+                var teamName = '';
+                for (final t in store.teams) {
+                  if (t.players.any((p) => p.id == pid)) {
+                    teamName = t.name;
+                    break;
+                  }
+                }
+                final figLine = [
+                  if (runs > 0 || balls > 0) '$runs ($balls)',
+                  if (wkts > 0) '$wkts wkt${wkts == 1 ? '' : 's'}',
+                ].join('  •  ');
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    PlayerAvatar(
+                      photoBase64: potmPhoto.isEmpty ? null : potmPhoto,
+                      role: pl?.role ?? 'Batter',
+                      name: nameOf(pid),
+                      radius: 52,
+                      fallbackIcon: Icons.person,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Player of the Match',
+                            style: TextStyle(
+                                color: Colors.white70, fontSize: 13),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            nameOf(pid),
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (teamName.isNotEmpty)
+                            Text(
+                              teamName,
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 13,
+                              ),
+                            ),
+                          if (figLine.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              figLine,
+                              style: const TextStyle(
+                                color: kGold,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // v1.1.5: change the award later (updates the saved
+                    // award, never duplicates it).
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: 'Change Player of the Match',
+                      onPressed: () async {
+                        final picked = await showPotmPickerDialog(
+                          context,
+                          store,
+                          match,
+                        );
+                        if (picked != null && picked.isNotEmpty) {
+                          match.manOfMatchId = picked;
+                          await store.persist();
+                          // StatelessWidget: force a rebuild to show change.
+                          if (context.mounted) {
+                            (context as Element).markNeedsBuild();
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 );
               }),
-              title: const Text(
-                'Player of the Match',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-              subtitle: Text(
-                nameOf(match.manOfMatchId),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              // v1.1.5: change the award later (updates the saved award,
-              // never duplicates it).
-              trailing: IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                tooltip: 'Change Player of the Match',
-                onPressed: () async {
-                  final picked = await showPotmPickerDialog(
-                    context,
-                    store,
-                    match,
-                  );
-                  if (picked != null && picked.isNotEmpty) {
-                    match.manOfMatchId = picked;
-                    await store.persist();
-                    // StatelessWidget: force a rebuild to show the change.
-                    if (context.mounted) {
-                      (context as Element).markNeedsBuild();
-                    }
-                  }
-                },
-              ),
             ),
           ),
         const SizedBox(height: 10),

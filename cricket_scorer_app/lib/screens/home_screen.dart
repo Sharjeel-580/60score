@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../widgets/player_avatar.dart';
 import 'backup_screen.dart';
 import 'draft_screen.dart';
 import 'registration_screen.dart';
@@ -335,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TeamAvatar(name, radius: 24),
+              CaptainAvatar(store: store, teamId: teamId, radius: 24),
               const SizedBox(height: 6),
               Text(
                 name,
@@ -493,9 +494,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _push(context, ScorecardScreen(store: store, match: m)),
       child: Row(
         children: [
-          TeamAvatar(a, radius: 18),
+          CaptainAvatar(store: store, teamId: m.teamAId, radius: 18),
           const SizedBox(width: 4),
-          TeamAvatar(b, radius: 18),
+          CaptainAvatar(store: store, teamId: m.teamBId, radius: 18),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

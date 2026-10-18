@@ -248,7 +248,9 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _editPlayer(context, null),
+        // v1.1.7: choose between creating a new player and picking an
+        // existing registered player.
+        onPressed: () => _chooseAddPlayer(context),
         icon: const Icon(Icons.person_add),
         label: const Text('Add player'),
       ),
@@ -290,6 +292,139 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 );
               },
             ),
+    );
+  }
+
+  /// v1.1.7: Add-player chooser — create a new player or pick an existing
+  /// registered player into this team.
+  void _chooseAddPlayer(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add player'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person_add_outlined),
+              title: const Text('Add New Player'),
+              subtitle: const Text('Create a new player profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _editPlayer(context, null);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.group_add_outlined),
+              title: const Text('Choose Registered Player'),
+              subtitle: const Text('Pick from registered players'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickRegisteredPlayer(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// v1.1.7: searchable registered-player picker. Adds the selected player
+  /// to the current team using the same shared record/ID (no duplicates).
+  void _pickRegisteredPlayer(BuildContext context) {
+    final store = widget.store;
+    final team = widget.team;
+    var query = '';
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final q = query.trim().toLowerCase();
+          final list = store.regPlayers.where((r) {
+            if (q.isEmpty) return true;
+            return r.name.toLowerCase().contains(q) ||
+                (r.jerseyNo > 0 && '${r.jerseyNo}'.contains(q));
+          }).toList();
+          return AlertDialog(
+            title: const Text('Choose Registered Player'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Search name or shirt number',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setDialogState(() => query = v),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: list.isEmpty
+                        ? const Center(
+                            child:
+                                Text('No registered players found.'),
+                          )
+                        : ListView.builder(
+                            itemCount: list.length,
+                            itemBuilder: (_, i) {
+                              final r = list[i];
+                              final already = team.players
+                                  .any((p) => p.id == r.id);
+                              return ListTile(
+                                leading: PlayerAvatar(
+                                  photoBase64: r.photoBase64.isEmpty
+                                      ? null
+                                      : r.photoBase64,
+                                  role: r.role,
+                                  name: r.name,
+                                  radius: 20,
+                                  fallbackIcon: Icons.person,
+                                ),
+                                title: Text(r.name),
+                                subtitle: Text(
+                                  '${r.role}${r.jerseyNo > 0 ? ' · #${r.jerseyNo}' : ''}',
+                                ),
+                                trailing: already
+                                    ? const Icon(Icons.check,
+                                        color: Colors.green)
+                                    : null,
+                                onTap: () async {
+                                  if (already) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Player is already in this team.'),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  team.players.add(r.toTeamPlayer());
+                                  await store.persist();
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (context.mounted) {
+                                    setState(() {});
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Player added successfully.'),
+                                      ),
+                                    );
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

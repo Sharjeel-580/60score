@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../points_table_share.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
+import '../widgets/player_avatar.dart';
 import 'fixture_detail_screen.dart';
 import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
@@ -729,7 +731,10 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              TeamAvatar(nameA, radius: 20),
+                              CaptainAvatar(
+                                  store: store,
+                                  teamId: m.teamAId,
+                                  radius: 20),
                               const SizedBox(height: 4),
                               Text(
                                 nameA,
@@ -761,7 +766,10 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              TeamAvatar(nameB, radius: 20),
+                              CaptainAvatar(
+                                  store: store,
+                                  teamId: m.teamBId,
+                                  radius: 20),
                               const SizedBox(height: 4),
                               Text(
                                 nameB,
@@ -953,7 +961,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
             const SizedBox(height: 10),
             Row(
               children: [
-                TeamAvatar(store.teamName(m.teamAId)),
+                CaptainAvatar(store: store, teamId: m.teamAId),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -981,7 +989,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                TeamAvatar(store.teamName(m.teamBId)),
+                CaptainAvatar(store: store, teamId: m.teamBId),
               ],
             ),
             const SizedBox(height: 8),
@@ -1010,6 +1018,13 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
         appBar: AppBar(
           title: Text(tournament.name),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              tooltip: 'Share points table',
+              // v1.1.7: shareable points-table image from real standings.
+              onPressed: () =>
+                  sharePointsTableImage(context, store, tournament),
+            ),
             IconButton(
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {

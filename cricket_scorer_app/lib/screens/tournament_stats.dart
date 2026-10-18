@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../scoring.dart';
+import '../stats_share.dart';
 import '../store.dart';
 import '../theme.dart';
 import 'stats_screen.dart' show CompareScreen, allPersons;
@@ -360,6 +361,10 @@ class TournamentStatsTab extends StatelessWidget {
                         builder: (_) => CompareScreen(store: store),
                       ),
                     );
+                  } else if (v == 'share') {
+                    // v1.1.7: shareable Top-5 stats image from real data.
+                    // The on-screen stats grid itself is untouched.
+                    shareStatsImage(context, store, tournamentId: tournament.id);
                   }
                 },
                 itemBuilder: (_) => const [
@@ -370,6 +375,10 @@ class TournamentStatsTab extends StatelessWidget {
                   PopupMenuItem(
                     value: 'compare',
                     child: Text('Compare players'),
+                  ),
+                  PopupMenuItem(
+                    value: 'share',
+                    child: Text('Share stats image'),
                   ),
                 ],
               ),

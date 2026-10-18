@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../store.dart';
 import '../theme.dart';
 
 /// Returns the Material icon best representing a player role.
@@ -82,6 +83,45 @@ class PlayerAvatar extends StatelessWidget {
         color: roleColor(role),
         size: radius * 1.1,
       ),
+    );
+  }
+}
+
+/// v1.1.7: Team avatar replaced by the assigned captain's actual photo.
+///
+/// Resolves the team's captain (player with isCaptain) and shows their photo
+/// via the shared player record ([Store.photoForPlayer]). Falls back to a
+/// plain person icon when no captain is assigned or no photo exists — never
+/// team initials, never a role icon, never another player's photo.
+class CaptainAvatar extends StatelessWidget {
+  final Store store;
+  final String teamId;
+  final double radius;
+
+  const CaptainAvatar({
+    super.key,
+    required this.store,
+    required this.teamId,
+    this.radius = 20,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    String? photo;
+    final t = store.teamById(teamId);
+    if (t != null) {
+      for (final p in t.players) {
+        if (p.isCaptain) {
+          final ph = store.photoForPlayer(p.id);
+          if (ph.isNotEmpty) photo = ph;
+          break;
+        }
+      }
+    }
+    return PlayerAvatar(
+      photoBase64: photo,
+      radius: radius,
+      fallbackIcon: Icons.person,
     );
   }
 }

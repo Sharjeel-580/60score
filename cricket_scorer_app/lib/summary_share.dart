@@ -275,7 +275,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           child: Column(
             children: [
-              TeamAvatar(store.teamName(teamId)),
+              CaptainAvatar(store: store, teamId: teamId),
               const SizedBox(height: 6),
               Text(
                 store.teamName(teamId).toUpperCase(),
@@ -534,45 +534,46 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         children: [
+          // v1.1.7: POTM photo prominent on the LEFT (large), name/team on
+          // the right — mirrors the on-screen summary layout.
           Row(
-            children: [
-              const Icon(Icons.emoji_events, color: kGold, size: 28),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'PLAYER OF\nTHE MATCH',
-                  style: TextStyle(
-                    color: kGold,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    height: 1.1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               PlayerAvatar(
                 photoBase64: potmPhoto.isEmpty ? null : potmPhoto,
                 role: pl?.role ?? 'Batter',
                 name: name,
-                radius: 34,
+                radius: 52,
                 fallbackIcon: Icons.person,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.emoji_events, color: kGold, size: 20),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'PLAYER OF THE MATCH',
+                            style: TextStyle(
+                              color: kGold,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       name,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
-                        fontSize: 18,
+                        fontSize: 20,
                       ),
                     ),
                     if (team.isNotEmpty)
@@ -580,7 +581,7 @@ class _SummaryCard extends StatelessWidget {
                         team,
                         style: const TextStyle(
                           color: Colors.white60,
-                          fontSize: 12,
+                          fontSize: 13,
                         ),
                       ),
                   ],
