@@ -806,15 +806,27 @@ class DraftPick {
 }
 
 /// An offline manual-pick draft. Simple rounds, no categories.
+/// Newer settings fields are optional with defaults so drafts saved by
+/// older versions still load (fromJson uses `?? defaults`).
 class Draft {
   String id;
   String name;
   List<String> teamIds; // pick order (linear repeating)
-  int squadSize;
+  int squadSize; // == number of rounds (one pick per team per round)
   bool snakeOrder;
   List<DraftPick> picks;
   String status; // active / completed
   bool appliedToTeams; // squads copied into Scorer teams
+  // --- v1.1.2 drafting settings (all optional, backward compatible) ---
+  String tournamentId;
+  int pickTimeSeconds;
+  bool allowManualSkip;
+  bool allowUndo;
+  bool autoNextPick; // default OFF: fully manual unless the user opts in
+  bool showPlayerRoles;
+  List<String> manualPickOrder; // custom pick order, [] = use teamIds order
+  Map<String, List<String>> manualRoundPicks; // round ('1','2',..) -> teamIds
+  int createdAt; // ms since epoch, 0 when unknown (old drafts)
 
   Draft({
     required this.id,
@@ -825,10 +837,22 @@ class Draft {
     List<DraftPick>? picks,
     this.status = 'active',
     this.appliedToTeams = false,
-  }) : picks = picks ?? [];
+    this.tournamentId = '',
+    this.pickTimeSeconds = 30,
+    this.allowManualSkip = true,
+    this.allowUndo = true,
+    this.autoNextPick = false,
+    this.showPlayerRoles = true,
+    List<String>? manualPickOrder,
+    Map<String, List<String>>? manualRoundPicks,
+    this.createdAt = 0,
+  }) : picks = picks ?? [],
+       manualPickOrder = manualPickOrder ?? [],
+       manualRoundPicks = manualRoundPicks ?? {};
 
   int get totalPicks => squadSize * teamIds.length;
   bool get isComplete => picks.length >= totalPicks;
+  int get rounds => squadSize;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -839,18 +863,45 @@ class Draft {
     'picks': picks.map((p) => p.toJson()).toList(),
     'status': status,
     'appliedToTeams': appliedToTeams,
+    'tournamentId': tournamentId,
+    'pickTimeSeconds': pickTimeSeconds,
+    'allowManualSkip': allowManualSkip,
+    'allowUndo': allowUndo,
+    'autoNextPick': autoNextPick,
+    'showPlayerRoles': showPlayerRoles,
+    'manualPickOrder': manualPickOrder,
+    'manualRoundPicks': manualRoundPicks,
+    'createdAt': createdAt,
   };
 
-  factory Draft.fromJson(Map<String, dynamic> j) => Draft(
-    id: j['id'] as String,
-    name: j['name'] as String,
-    teamIds: ((j['teamIds'] as List?) ?? []).map((e) => e as String).toList(),
-    squadSize: (j['squadSize'] as num?)?.toInt() ?? 14,
-    snakeOrder: j['snakeOrder'] as bool? ?? false,
-    picks: ((j['picks'] as List?) ?? [])
-        .map((e) => DraftPick.fromJson(e as Map<String, dynamic>))
-        .toList(),
-    status: j['status'] as String? ?? 'active',
-    appliedToTeams: j['appliedToTeams'] as bool? ?? false,
-  );
+  factory Draft.fromJson(Map<String, dynamic> j) {
+    final mrp = <String, List<String>>{};
+    ((j['manualRoundPicks'] as Map?) ?? {}).forEach((k, v) {
+      mrp[k as String] = ((v as List?) ?? []).map((e) => e as String).toList();
+    });
+    return Draft(
+      id: j['id'] as String,
+      name: j['name'] as String,
+      teamIds: ((j['teamIds'] as List?) ?? []).map((e) => e as String).toList(),
+      squadSize: (j['squadSize'] as num?)?.toInt() ?? 14,
+      snakeOrder: j['snakeOrder'] as bool? ?? false,
+      picks: ((j['picks'] as List?) ?? [])
+          .map((e) => DraftPick.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      status: j['status'] as String? ?? 'active',
+      appliedToTeams: j['appliedToTeams'] as bool? ?? false,
+      tournamentId: j['tournamentId'] as String? ?? '',
+      pickTimeSeconds: (j['pickTimeSeconds'] as num?)?.toInt() ?? 30,
+      allowManualSkip: j['allowManualSkip'] as bool? ?? true,
+      allowUndo: j['allowUndo'] as bool? ?? true,
+      autoNextPick: j['autoNextPick'] as bool? ?? false,
+      showPlayerRoles: j['showPlayerRoles'] as bool? ?? true,
+      manualPickOrder:
+          ((j['manualPickOrder'] as List?) ?? [])
+              .map((e) => e as String)
+              .toList(),
+      manualRoundPicks: mrp,
+      createdAt: (j['createdAt'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

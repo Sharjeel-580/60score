@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../player_io.dart';
+import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
 
@@ -163,12 +164,37 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         isThreeLine: true,
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Delete player',
                           onPressed: () async {
-                            await store.deleteRegPlayer(p.id);
-                            if (mounted) setState(() {});
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (c) => AlertDialog(
+                                title: const Text('Delete player?'),
+                                content: Text(
+                                  'Remove "${p.name}" from registered players?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(c, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: kRed,
+                                    ),
+                                    onPressed: () => Navigator.pop(c, true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              await store.deleteRegPlayer(p.id);
+                              if (mounted) setState(() {});
+                            }
                           },
                         ),
-                        onTap: () => _editRegPlayer(p),
+                        onTap: () => _showPlayerDetails(p),
                       );
                     },
                   ),
@@ -201,6 +227,171 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       onChanged: onChanged,
     );
   }
+
+  /// Player Details dialog (screen 9): existing fields + career stats,
+  /// with Edit and Delete actions.
+  Future<void> _showPlayerDetails(RegPlayer p) async {
+    final career = computeCareerStats(store.matches);
+    final stats = career[p.id];
+    final avg = stats == null || (stats.inningsBatted - stats.notOuts) <= 0
+        ? '–'
+        : (stats.runs / (stats.inningsBatted - stats.notOuts))
+              .toStringAsFixed(1);
+    final sr = stats == null || stats.ballsFaced == 0
+        ? '–'
+        : (stats.runs * 100 / stats.ballsFaced).toStringAsFixed(1);
+    Widget row(String k, String v) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(k, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ),
+          Expanded(child: Text(v, style: const TextStyle(fontSize: 12))),
+        ],
+      ),
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: p.availability == 'Available' ? kTeal : kPanel2,
+              child: Text(p.name.isEmpty ? '?' : p.name[0]),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(p.name, style: const TextStyle(fontSize: 17)),
+                  Text(
+                    p.role,
+                    style: const TextStyle(color: kCyan, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('OVERVIEW',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: kGold)),
+              const SizedBox(height: 4),
+              row('Full Name', p.name),
+              row('Playing Role', p.role),
+              row('Batting Style', p.battingStyle),
+              row('Bowling Style', p.bowlingStyle),
+              if (p.age > 0) row('Age', '${p.age}'),
+              if (p.area.isNotEmpty) row('Area', p.area),
+              if (p.phone.isNotEmpty) row('Phone', p.phone),
+              if (p.category.isNotEmpty) row('Category', p.category),
+              if (p.jerseyNo > 0) row('Jersey No', '${p.jerseyNo}'),
+              if (p.teamName.isNotEmpty) row('Team', p.teamName),
+              row('Status', '${p.regStatus} • ${p.availability}'),
+              if (p.isCaptain || p.isKeeper)
+                row('Tags', [
+                  if (p.isCaptain) 'Captain',
+                  if (p.isKeeper) 'Wicket-keeper',
+                ].join(' • ')),
+              if (p.remarks.isNotEmpty) row('Remarks', p.remarks),
+              const SizedBox(height: 10),
+              const Text('CAREER STATS (ALL TOURNAMENTS)',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: kGold)),
+              const SizedBox(height: 4),
+              if (stats == null || stats.matches == 0)
+                const Text('No recorded matches yet.',
+                    style: TextStyle(color: Colors.white54, fontSize: 12))
+              else ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _statChip('Matches', '${stats.matches}'),
+                    _statChip('Runs', '${stats.runs}'),
+                    _statChip('Avg', avg),
+                    _statChip('SR', sr),
+                    _statChip('HS', '${stats.highScore}'),
+                    _statChip('50s/100s', '${stats.fifties}/${stats.hundreds}'),
+                    _statChip('Wickets', '${stats.wickets}'),
+                    _statChip('Best', stats.bestFigures),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(c);
+              await _editRegPlayer(p);
+            },
+            child: const Text('Edit'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: kRed),
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (c2) => AlertDialog(
+                  title: const Text('Delete player?'),
+                  content: Text('Remove "${p.name}" from registered players?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(c2, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: kRed),
+                      onPressed: () => Navigator.pop(c2, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok == true) {
+                await store.deleteRegPlayer(p.id);
+                if (context.mounted) Navigator.pop(c);
+                if (mounted) setState(() {});
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(String label, String value) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: kPanel2,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: kTeal.withValues(alpha: 0.35)),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(value,
+            style: const TextStyle(
+                color: kWhite, fontWeight: FontWeight.w800, fontSize: 13)),
+        Text(label,
+            style: const TextStyle(color: Colors.white54, fontSize: 9)),
+      ],
+    ),
+  );
 
   Future<void> _editRegPlayer(RegPlayer? existing) async {
     final p = existing ?? RegPlayer(id: Store.newId('reg'), name: '');

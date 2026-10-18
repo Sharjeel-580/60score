@@ -9,12 +9,10 @@ import 'theme.dart';
 import 'backup_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/match_setup_screen.dart';
-import 'screens/registration_screen.dart';
 import 'screens/scorer_home_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/teams_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/backup_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/draft_screen.dart';
 import 'widgets/app_logo.dart';
@@ -203,90 +201,204 @@ class _HomeShellState extends State<HomeShell> {
                 _scaffoldKey.currentState?.openDrawer(),
             onSelectTab: _onNavTap,
           ),
-          ScorerHomeScreen(store: store),
-          StatsScreen(store: store),
+          ScorerHomeScreen(
+            store: store,
+            onOpenDrawer: () =>
+                _scaffoldKey.currentState?.openDrawer(),
+          ),
+          StatsScreen(
+            store: store,
+            onOpenDrawer: () =>
+                _scaffoldKey.currentState?.openDrawer(),
+          ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _navIndex,
-        onTap: _onNavTap,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.sports_cricket_outlined),
-            activeIcon: Icon(Icons.sports_cricket),
-            label: 'Matches',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_circle_outline),
-            activeIcon: Icon(Icons.add_circle),
-            label: 'New Match',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            activeIcon: Icon(Icons.bar_chart),
-            label: 'Statistics',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu),
-            label: 'More',
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  /// Custom bottom bar: Home | Matches | (gold + circle) | Statistics | More.
+  /// Index contract (shared with HomeScreen.onSelectTab):
+  /// 0 Home, 1 Matches, 2 New Match (action), 3 Statistics, 4 More (drawer).
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        color: kNavy,
+        border: Border(
+          top: BorderSide(color: kGold.withValues(alpha: 0.35), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: kGold.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
           ),
         ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 70,
+          child: Row(
+            children: [
+              _navBtn(0, Icons.home_outlined, Icons.home, 'Home'),
+              _navBtn(
+                1,
+                Icons.sports_cricket_outlined,
+                Icons.sports_cricket,
+                'Matches',
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _onNavTap(2),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(0, -6),
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: kGoldGradient,
+                            border: Border.all(
+                              color: kGold.withValues(alpha: 0.8),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: kGold.withValues(alpha: 0.5),
+                                blurRadius: 14,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Color(0xFF2B1C05),
+                            size: 30,
+                          ),
+                        ),
+                      ),
+                      const Text(
+                        'New Match',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              _navBtn(
+                3,
+                Icons.bar_chart_outlined,
+                Icons.bar_chart,
+                'Statistics',
+              ),
+              _navBtn(4, Icons.menu, Icons.menu, 'More'),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  /// Half-width drawer: min(320, 58% of screen width).
-  /// The native Drawer already closes on outside taps and back navigation.
+  Widget _navBtn(
+    int index,
+    IconData icon,
+    IconData activeIcon,
+    String label,
+  ) {
+    final active = _navIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => _onNavTap(index),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              active ? activeIcon : icon,
+              color: active ? kGold : Colors.white54,
+              size: 24,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? kGold : Colors.white54,
+                fontSize: 11,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Sidebar per the approved reference: 7 items only —
+  /// Home, Tournaments, Teams & Players, Drafting, Statistics,
+  /// Settings, About 60Score.
   Widget _buildDrawer() {
     return Drawer(
-      width: math.min(320.0, MediaQuery.of(context).size.width * 0.58),
+      width: math.min(320.0, MediaQuery.of(context).size.width * 0.82),
+      backgroundColor: kNavyDeep,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: kTealDark),
-                ),
-              ),
+            // Header: logo + name + tagline + close.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AppLogo(height: 44),
-                  const SizedBox(width: 12),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '60Score',
-                        style: TextStyle(
-                          color: kWhite,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppLogo(height: 64),
+                        SizedBox(height: 10),
+                        Text(
+                          '60Score',
+                          style: TextStyle(
+                            color: kWhite,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'Cricket Scoring, Simplified.',
-                        style: TextStyle(color: kSilver, fontSize: 11),
-                      ),
-                    ],
+                        Text(
+                          'Cricket Scoring, Simplified.',
+                          style:
+                              TextStyle(color: kSilver, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close, color: kWhite),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 8, horizontal: 12),
                 children: [
-                  _drawerItem(
-                    icon: Icons.emoji_events_outlined,
+                  _drawerCard(
+                    icon: Icons.home,
+                    label: 'Home',
+                    selected: _navIndex == 0,
+                    onTap: () => _closeDrawerAndGoTab(0),
+                  ),
+                  _drawerCard(
+                    icon: Icons.emoji_events,
                     label: 'Tournaments',
                     onTap: () {
                       final t = store.tournamentById(
@@ -310,62 +422,38 @@ class _HomeShellState extends State<HomeShell> {
                       );
                     },
                   ),
-                  _drawerItem(
-                    icon: Icons.group_outlined,
-                    label: 'Teams',
+                  _drawerCard(
+                    icon: Icons.groups,
+                    label: 'Teams & Players',
                     onTap: () =>
                         _closeDrawerAndPush(TeamsScreen(store: store)),
                   ),
-                  _drawerItem(
-                    icon: Icons.how_to_reg_outlined,
-                    label: 'Players',
-                    onTap: () => _closeDrawerAndPush(
-                      RegistrationScreen(store: store),
-                    ),
-                  ),
-                  _drawerItem(
-                    icon: Icons.event_outlined,
-                    label: 'Fixtures',
-                    onTap: () => _closeDrawerAndGoTab(1),
-                  ),
-                  _drawerItem(
-                    icon: Icons.scoreboard_outlined,
-                    label: 'Scorecards',
-                    onTap: () => _closeDrawerAndGoTab(1),
-                  ),
-                  _drawerItem(
-                    icon: Icons.shuffle_outlined,
-                    label: 'Player Draft',
+                  _drawerCard(
+                    icon: Icons.edit_note,
+                    label: 'Drafting',
                     onTap: () => _closeDrawerAndPush(
                       DraftListScreen(store: store),
                     ),
                   ),
-                  _drawerItem(
-                    icon: Icons.import_export_outlined,
-                    label: 'Import / Export',
-                    onTap: () => _closeDrawerAndPush(
-                      RegistrationScreen(store: store),
-                    ),
+                  _drawerCard(
+                    icon: Icons.bar_chart,
+                    label: 'Statistics',
+                    selected: _navIndex == 3,
+                    onTap: () => _closeDrawerAndGoTab(3),
                   ),
-                  const Divider(height: 16),
-                  _drawerItem(
-                    icon: Icons.backup_outlined,
-                    label: 'Backup / Restore',
-                    onTap: () => _closeDrawerAndPush(
-                      BackupScreen(store: store),
-                    ),
-                  ),
-                  _drawerItem(
-                    icon: Icons.settings_outlined,
+                  const Divider(height: 24, color: kTealDark),
+                  _drawerCard(
+                    icon: Icons.settings,
                     label: 'Settings',
                     onTap: () => _closeDrawerAndPush(
                       SettingsScreen(store: store),
                     ),
                   ),
-                  _drawerItem(
-                    icon: Icons.info_outline,
-                    label: 'About',
-                    onTap: () => _closeDrawerAndPush(const AboutScreen()),
+                  _drawerCard(
+                    icon: Icons.info,
+                    label: 'About 60Score',
+                    onTap: () =>
+                        _closeDrawerAndPush(const AboutScreen()),
                   ),
                 ],
               ),
@@ -373,9 +461,9 @@ class _HomeShellState extends State<HomeShell> {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Made by Sharjeel',
+                'Version 1.1.2',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: TextStyle(color: Colors.white38, fontSize: 12),
               ),
             ),
           ],
@@ -384,23 +472,49 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  Widget _drawerItem({
+  Widget _drawerCard({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    bool selected = false,
   }) {
-    return ListTile(
-      dense: true,
-      leading: Icon(icon, color: kCyan, size: 22),
-      title: Text(
-        label,
-        style: const TextStyle(
-          color: kWhite,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        gradient: selected ? kGoldGradient : null,
+        color: selected ? null : kPanel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: selected
+              ? kGold.withValues(alpha: 0.7)
+              : kCyan.withValues(alpha: 0.18),
         ),
       ),
-      onTap: onTap,
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: selected ? const Color(0xFF2B1C05) : kCyan,
+          size: 26,
+        ),
+        title: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF2B1C05) : kWhite,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: selected
+              ? const Color(0xFF2B1C05)
+              : Colors.white54,
+        ),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
     );
   }
 }

@@ -1,62 +1,63 @@
-// 60Score home dashboard.
+// 60Score home dashboard — v1.1.2 redesign.
 // Built only from real persisted store data — nothing hardcoded.
 import 'package:flutter/material.dart';
 
 import '../models.dart';
-import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
-import '../tournament_engine.dart';
-import 'match_setup_screen.dart';
+import 'backup_screen.dart';
+import 'draft_screen.dart';
 import 'registration_screen.dart';
 import 'scorer_home_screen.dart';
 import 'scorecard_screen.dart';
-import 'scoring_screen.dart';
 import 'settings_screen.dart';
-import 'fixture_detail_screen.dart';
-import '../widgets/app_logo.dart';
 import 'teams_screen.dart';
 
-/// Formats a stored dateIso like '2026-10-22T14:00:00' as
-/// '22 Oct 2026, 02:00 PM'. Manual parse — never a toIso8601String round-trip.
-String formatFixtureDate(String iso) {
+/// Short fixture date range, e.g. '2026-10-22T14:00:00' -> '22 Oct 2026'.
+String _shortDate(String iso) {
   try {
-    final parts = iso.split('T');
-    if (parts.length != 2) return iso;
-    final d = parts[0].split('-');
-    final t = parts[1].split(':');
-    if (d.length != 3 || t.length < 2) return iso;
-    final day = int.parse(d[2]);
-    final month = int.parse(d[1]);
-    final year = int.parse(d[0]);
-    final hour = int.parse(t[0]);
-    final minute = t[1].padLeft(2, '0');
+    final d = iso.split('T').first.split('-');
+    if (d.length != 3) return '';
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    if (month < 1 || month > 12) return iso;
-    final ampm = hour >= 12 ? 'PM' : 'AM';
-    var h12 = hour % 12;
-    if (h12 == 0) h12 = 12;
-    return '${day.toString().padLeft(2, '0')} ${months[month - 1]} $year, '
-        '${h12.toString().padLeft(2, '0')}:$minute $ampm';
+    final month = int.parse(d[1]);
+    if (month < 1 || month > 12) return '';
+    return '${d[2].trim().padLeft(2, '0')} ${months[month - 1]} ${d[0]}';
   } catch (_) {
-    return iso;
+    return '';
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final Store store;
   final VoidCallback onOpenDrawer;
   final ValueChanged<int> onSelectTab;
+  const HomeScreen({super.key, required this.store, required this.onOpenDrawer, required this.onSelectTab});
 
-  const HomeScreen({
-    super.key,
-    required this.store,
-    required this.onOpenDrawer,
-    required this.onSelectTab,
-  });
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Store get store => widget.store;
 
   void _openTournament(BuildContext context, Tournament t) {
     Navigator.push(
@@ -65,6 +66,10 @@ class HomeScreen extends StatelessWidget {
         builder: (_) => TournamentDetailScreen(store: store, tournament: t),
       ),
     );
+  }
+
+  void _push(BuildContext context, Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
   @override
@@ -76,65 +81,117 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(context),
+            // 1. Branded header
+            BrandedHeader(
+              onMenu: widget.onOpenDrawer,
+              onSettings: () =>
+                  _push(context, SettingsScreen(store: store)),
+            ),
             const SizedBox(height: 12),
+            // 2. Five action cards
+            _actionRow(context, defaultT),
+            const SizedBox(height: 12),
+            // 3. Default tournament card
             _tournamentCard(context, defaultT),
-            _upcomingSection(context),
-            _liveSection(context),
-            _recentSection(context),
-            _pointsSection(context, defaultT),
-            _quickActions(context, defaultT),
+            // 4. Quick actions grid
+            SectionTitle(
+              icon: Icons.flash_on,
+              title: 'Quick Actions',
+            ),
+            _quickActionsGrid(context, defaultT),
+            // 5. Recent matches
+            SectionTitle(
+              icon: Icons.history,
+              title: 'Recent Matches',
+              trailing: ViewAllLink(onTap: () => widget.onSelectTab(1)),
+            ),
+            _recentMatches(context),
           ],
         ),
       ),
     );
   }
 
-  // ---------- branded header ----------
-  Widget _header(BuildContext context) {
-    return Row(
-      children: [
-        IconButton(
-          tooltip: 'Menu',
-          icon: const Icon(Icons.menu, color: kWhite),
-          onPressed: onOpenDrawer,
+  // ---------- 2. Five action cards (horizontal scroll row) ----------
+  Widget _actionRow(BuildContext context, Tournament? defaultT) {
+    void push(Widget page) => _push(context, page);
+    const cardWidth = 132.0;
+    final cards = <Widget>[
+      _sizedActionCard(
+        cardWidth,
+        ActionCard(
+          icon: Icons.sports_cricket,
+          title: 'New Match',
+          subtitle: 'Quick / Custom',
+          gradient: const [Color(0xFFB26A00), kGold],
+          onTap: () => widget.onSelectTab(2),
         ),
-        const AppLogo(height: 40),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '60Score',
-                style: TextStyle(
-                  color: kWhite,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                'Cricket Scoring, Simplified.',
-                style: TextStyle(color: kSilver, fontSize: 12),
-              ),
-            ],
-          ),
+      ),
+      _sizedActionCard(
+        cardWidth,
+        ActionCard(
+          icon: Icons.emoji_events,
+          title: 'Tournaments',
+          subtitle: 'View & Manage',
+          gradient: const [Color(0xFF0B5FA5), Color(0xFF19D7F2)],
+          onTap: () {
+            if (defaultT != null) {
+              _openTournament(context, defaultT);
+            } else {
+              widget.onSelectTab(1);
+            }
+          },
         ),
-        IconButton(
-          tooltip: 'Settings',
-          icon: const Icon(Icons.settings_outlined, color: kSilver),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SettingsScreen(store: store),
-            ),
-          ),
+      ),
+      _sizedActionCard(
+        cardWidth,
+        ActionCard(
+          icon: Icons.groups,
+          title: 'Teams',
+          subtitle: 'Add / Manage',
+          gradient: const [Color(0xFF0B5FA5), Color(0xFF19D7F2)],
+          onTap: () => push(TeamsScreen(store: store)),
         ),
-      ],
+      ),
+      _sizedActionCard(
+        cardWidth,
+        ActionCard(
+          icon: Icons.person,
+          title: 'Registered Players',
+          subtitle: 'View All Players',
+          gradient: const [Color(0xFF0E7A3D), Color(0xFF3ECF6F)],
+          onTap: () => push(RegistrationScreen(store: store)),
+        ),
+      ),
+      _sizedActionCard(
+        cardWidth,
+        ActionCard(
+          icon: Icons.edit_note,
+          title: 'Drafting',
+          subtitle: 'Create Playing XI',
+          gradient: const [Color(0xFF6A1FB0), Color(0xFFB14BF2)],
+          onTap: () => push(DraftListScreen(store: store)),
+        ),
+      ),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            cards[i],
+          ],
+        ],
+      ),
     );
   }
 
-  // ---------- featured default tournament ----------
+  Widget _sizedActionCard(double width, Widget card) =>
+      SizedBox(width: width, child: card);
+
+  // ---------- 3. Default tournament card ----------
   Widget _tournamentCard(BuildContext context, Tournament? t) {
     if (t == null) {
       return const EmptyState(
@@ -143,434 +200,371 @@ class HomeScreen extends StatelessWidget {
         subtitle: 'The default tournament will appear here after setup.',
       );
     }
-    final fixtureCount =
-        store.matches.where((m) => m.tournamentId == t.id).length;
+    final fixtures =
+        store.matches.where((m) => m.tournamentId == t.id).toList();
+    final dateRange = _fixtureDateRange(fixtures);
+    final teamNames = t.teamIds.map(store.teamName).toList();
     return ScoreCard(
       highlight: true,
+      onTap: () => _openTournament(context, t),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Gold 'DEFAULT TOURNAMENT' pill
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'DEFAULT TOURNAMENT',
+              style: TextStyle(
+                color: Color(0xFF2B1C05),
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            t.name,
+            style: const TextStyle(
+              color: kWhite,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          // venue + date range + team count
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              const Icon(Icons.emoji_events, color: kGold, size: 28),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  t.name,
-                  style: const TextStyle(
-                    color: kWhite,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+              if (t.venue.isNotEmpty)
+                _metaChip(Icons.location_on_outlined, t.venue),
+              if (dateRange.isNotEmpty)
+                _metaChip(Icons.calendar_month_outlined, dateRange),
+              _metaChip(
+                Icons.groups_outlined,
+                '${t.teamIds.length} Teams',
               ),
             ],
           ),
-          if (t.venue.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(Icons.location_on_outlined,
-                    color: kSilver, size: 14),
-                const SizedBox(width: 4),
-                Text(t.venue,
-                    style:
-                        const TextStyle(color: kSilver, fontSize: 13)),
-              ],
+          if (teamNames.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(
+                children: [
+                  for (var i = 0; i < teamNames.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 10),
+                    _teamChip(context, t, i),
+                  ],
+                ],
+              ),
             ),
           ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              StatChip('Teams', '${t.teamIds.length}'),
-              const SizedBox(width: 10),
-              StatChip('Fixtures', '$fixtureCount'),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ScoreButton(
-            label: 'View Tournament',
-            icon: Icons.arrow_forward,
-            onPressed: () => _openTournament(context, t),
+        ],
+      ),
+    );
+  }
+
+  Widget _metaChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: kNavyDeep.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: kTeal.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: kSilver, size: 14),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: kWhite, fontSize: 12),
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ---------- upcoming fixtures ----------
-  Widget _upcomingSection(BuildContext context) {
-    final upcoming = store.matches
-        .where((m) => m.status == 'upcoming')
-        .toList()
-      ..sort((a, b) => a.dateIso.compareTo(b.dateIso));
-    final show = upcoming.take(5).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(
-          'Upcoming Fixtures',
-          action: TextButton(
-            onPressed: () => onSelectTab(1),
-            child: const Text('View all',
-                style: TextStyle(color: kCyan, fontSize: 13)),
-          ),
-        ),
-        if (show.isEmpty)
-          const EmptyState(
-            icon: Icons.event_outlined,
-            title: 'No upcoming fixtures',
-            subtitle: 'Create a match or tournament fixture to see it here.',
-          )
-        else
-          ...show.map((m) => _fixtureTile(context, m)),
-      ],
-    );
+  /// Date range label from real fixture dates, e.g. '22 Oct - 08 Nov 2026'.
+  String _fixtureDateRange(List<Match> fixtures) {
+    final dates =
+        fixtures.map((m) => m.dateIso).where((d) => d.isNotEmpty).toList()
+          ..sort();
+    if (dates.isEmpty) return '';
+    final first = dates.first;
+    final last = dates.last;
+    if (first.split('T').first == last.split('T').first) {
+      return _shortDate(first);
+    }
+    return '${_shortDate(first)} - ${_shortDate(last)}';
   }
 
-  Widget _fixtureTile(BuildContext context, Match m) {
-    final a = store.teamName(m.teamAId);
-    final b = store.teamName(m.teamBId);
-    final isPlayoff = m.stage != 'league';
-    final title = isPlayoff && m.matchTitle.isNotEmpty ? m.matchTitle : '$a vs $b';
-    final subtitle = isPlayoff
-        ? '$a vs $b  •  ${formatFixtureDate(m.dateIso)}'
-        : '${formatFixtureDate(m.dateIso)}${m.venue.isNotEmpty ? '  •  ${m.venue}' : ''}';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: ScoreCard(
-        padding: const EdgeInsets.all(12),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FixtureDetailScreen(
-              store: store,
-              matchId: m.id,
-            ),
+  Widget _teamChip(BuildContext context, Tournament t, int index) {
+    final teamId = t.teamIds[index];
+    final name = store.teamName(teamId);
+    final team = store.teamById(teamId);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: team == null
+            ? null
+            : () => _push(
+                  context,
+                  TeamDetailScreen(store: store, team: team),
+                ),
+        child: Container(
+          width: 76,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: kNavyDeep.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: kCyan.withValues(alpha: 0.18)),
           ),
-        ),
-        child: Row(
-          children: [
-            TeamAvatar(a, radius: 18),
-            const SizedBox(width: 4),
-            TeamAvatar(b, radius: 18),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          color: kWhite,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14)),
-                  const SizedBox(height: 3),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 12)),
-                ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TeamAvatar(name, radius: 24),
+              const SizedBox(height: 6),
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: kWhite,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const StatusPill('upcoming'),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ---------- live matches ----------
-  Widget _liveSection(BuildContext context) {
-    final live =
-        store.matches.where((m) => m.status == 'live').toList();
-    if (live.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionHeader('Live Matches'),
-        ...live.map((m) {
-          final a = store.teamName(m.teamAId);
-          final b = store.teamName(m.teamBId);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: ScoreCard(
-              highlight: true,
-              padding: const EdgeInsets.all(12),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ScoringScreen(store: store, match: m),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('$a vs $b',
-                            style: const TextStyle(
-                                color: kWhite,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14)),
-                        const SizedBox(height: 3),
-                        Text(_liveSummary(m),
-                            style: const TextStyle(
-                                color: kSilver, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  const StatusPill('live'),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
+  // ---------- 4. Quick actions grid (2 rows x 4) ----------
+  Widget _quickActionsGrid(BuildContext context, Tournament? defaultT) {
+    void push(Widget page) => _push(context, page);
+    final items = <_QuickNav>[
+      _QuickNav(
+        icon: Icons.group_add,
+        title: 'New Team',
+        subtitle: 'Create Team',
+        gradient: const [Color(0xFF9B2C2C), Color(0xFFD05A5A)],
+        onTap: () => push(TeamsScreen(store: store)),
+      ),
+      _QuickNav(
+        icon: Icons.person_add,
+        title: 'New Player',
+        subtitle: 'Add Player',
+        gradient: const [Color(0xFF0B5FA5), Color(0xFF19D7F2)],
+        onTap: () => push(RegistrationScreen(store: store)),
+      ),
+      _QuickNav(
+        icon: Icons.edit_note,
+        title: 'Drafting',
+        subtitle: 'Create Playing XI',
+        gradient: const [Color(0xFF6A1FB0), Color(0xFFB14BF2)],
+        onTap: () => push(DraftListScreen(store: store)),
+      ),
+      _QuickNav(
+        icon: Icons.bar_chart,
+        title: 'Points Table',
+        subtitle: 'Live Standings',
+        gradient: const [Color(0xFFB26A00), kGold],
+        onTap: () {
+          if (defaultT != null) {
+            _openTournament(context, defaultT);
+          } else {
+            widget.onSelectTab(1);
+          }
+        },
+      ),
+      _QuickNav(
+        icon: Icons.calendar_month,
+        title: 'Fixtures',
+        subtitle: 'Full Schedule',
+        gradient: const [Color(0xFF0B5FA5), Color(0xFF3ECF6F)],
+        onTap: () => widget.onSelectTab(1),
+      ),
+      _QuickNav(
+        icon: Icons.description,
+        title: 'Scorecards',
+        subtitle: 'All Matches',
+        gradient: const [Color(0xFFB26A00), Color(0xFFE8A13D)],
+        onTap: () => widget.onSelectTab(1),
+      ),
+      _QuickNav(
+        icon: Icons.pie_chart,
+        title: 'Statistics',
+        subtitle: 'Players & Teams',
+        gradient: const [Color(0xFF0E7A3D), Color(0xFF19D7F2)],
+        onTap: () => widget.onSelectTab(3),
+      ),
+      _QuickNav(
+        icon: Icons.upload,
+        title: 'Import / Export',
+        subtitle: 'CSV & PDF',
+        gradient: const [Color(0xFF0B5FA5), Color(0xFF19D7F2)],
+        onTap: () => push(BackupScreen(store: store)),
+      ),
+    ];
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 0.78,
+      ),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final a = items[i];
+        return ActionCard(
+          icon: a.icon,
+          title: a.title,
+          subtitle: a.subtitle,
+          gradient: a.gradient,
+          onTap: a.onTap,
+          iconSize: 26,
+        );
+      },
     );
   }
 
-  String _liveSummary(Match m) {
-    if (m.innings.isEmpty) return 'Match in progress';
-    final inn = m.innings.last;
-    final bat = store.teamName(inn.battingTeamId);
-    return '$bat ${inn.totalRuns}/${inn.wickets} '
-        '(${oversText(inn.legalBalls, inn.ballsPerOver)})';
-  }
-
-  // ---------- recent results ----------
-  Widget _recentSection(BuildContext context) {
+  // ---------- 5. Recent matches ----------
+  Widget _recentMatches(BuildContext context) {
     final done = store.matches
         .where((m) => m.status == 'completed')
         .toList()
       ..sort((a, b) => b.dateIso.compareTo(a.dateIso));
-    final show = done.take(5).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(
-          'Recent Results',
-          action: TextButton(
-            onPressed: () => onSelectTab(1),
-            child: const Text('View all',
-                style: TextStyle(color: kCyan, fontSize: 13)),
-          ),
+    final show = done.take(3).toList();
+    if (show.isEmpty) {
+      return ScoreCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const EmptyState(
+              icon: Icons.scoreboard_outlined,
+              title: 'No matches yet',
+              subtitle:
+                  'Start a new match or open a tournament to view match history.',
+            ),
+            ScoreButton(
+              label: 'New Match',
+              icon: Icons.add_circle_outline,
+              kind: ScoreButtonKind.ghost,
+              onPressed: () => widget.onSelectTab(2),
+            ),
+          ],
         ),
-        if (show.isEmpty)
-          const EmptyState(
-            icon: Icons.scoreboard_outlined,
-            title: 'No completed matches',
-            subtitle: 'Finished matches and their scorecards appear here.',
-          )
-        else
-          ...show.map((m) {
-            final a = store.teamName(m.teamAId);
-            final b = store.teamName(m.teamBId);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: ScoreCard(
-                padding: const EdgeInsets.all(12),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        ScorecardScreen(store: store, match: m),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('$a vs $b',
-                              style: const TextStyle(
-                                  color: kWhite,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14)),
-                          if (m.resultText.isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Text(m.resultText,
-                                style: const TextStyle(
-                                    color: kSilver, fontSize: 12)),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const StatusPill('completed'),
-                  ],
-                ),
-              ),
-            );
-          }),
+      );
+    }
+    return Column(
+      children: [
+        for (var i = 0; i < show.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _recentMatchCard(context, show[i]),
+        ],
       ],
     );
   }
 
-  // ---------- points-table summary ----------
-  Widget _pointsSection(BuildContext context, Tournament? t) {
-    if (t == null) return const SizedBox.shrink();
-    final table = leaguePointsTable(t, store.matches);
-    final show = table.take(4).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionHeader(
-          'Points Table',
-          action: TextButton(
-            onPressed: () => _openTournament(context, t),
-            child: const Text('Full table',
-                style: TextStyle(color: kCyan, fontSize: 13)),
-          ),
-        ),
-        if (show.isEmpty)
-          const EmptyState(
-            icon: Icons.table_chart_outlined,
-            title: 'No standings yet',
-            subtitle: 'Complete a league match to build the table.',
-          )
-        else
-          ScoreCard(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+  Widget _recentMatchCard(BuildContext context, Match m) {
+    final a = store.teamName(m.teamAId);
+    final b = store.teamName(m.teamBId);
+    return ScoreCard(
+      padding: const EdgeInsets.all(12),
+      onTap: () =>
+          _push(context, ScorecardScreen(store: store, match: m)),
+      child: Row(
+        children: [
+          TeamAvatar(a, radius: 18),
+          const SizedBox(width: 4),
+          TeamAvatar(b, radius: 18),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _pointsHeaderRow(),
-                const Divider(height: 8),
-                ...show.asMap().entries.map(
-                      (e) => _pointsRow(e.key + 1, e.value),
+                Text(
+                  '$a vs $b',
+                  style: const TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ..._scoreLines(m).map(
+                  (line) => Padding(
+                    padding: const EdgeInsets.only(bottom: 1),
+                    child: Text(
+                      line,
+                      style: const TextStyle(
+                          color: kSilver, fontSize: 12),
                     ),
+                  ),
+                ),
+                if (m.resultText.isNotEmpty)
+                  Text(
+                    m.resultText,
+                    style: const TextStyle(
+                      color: kCyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
               ],
             ),
           ),
-      ],
-    );
-  }
-
-  Widget _pointsHeaderRow() {
-    const style = TextStyle(
-        color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w700);
-    return const Row(
-      children: [
-        SizedBox(width: 26, child: Text('#', style: style)),
-        Expanded(child: Text('Team', style: style)),
-        SizedBox(width: 30, child: Text('P', style: style)),
-        SizedBox(width: 30, child: Text('W', style: style)),
-        SizedBox(width: 30, child: Text('L', style: style)),
-        SizedBox(width: 36, child: Text('Pts', style: style)),
-        SizedBox(width: 64, child: Text('NRR', style: style)),
-      ],
-    );
-  }
-
-  Widget _pointsRow(int pos, PointsRow row) {
-    final name = store.teamName(row.teamId);
-    TextStyle cell(bool head) => TextStyle(
-          color: head ? kWhite : kSilver,
-          fontSize: 12,
-          fontWeight: head ? FontWeight.w700 : FontWeight.w400,
-        );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 26,
-            child: Text('$pos',
-                style: const TextStyle(
-                    color: kCyan,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800)),
-          ),
-          Expanded(
-            child: Text(name,
-                overflow: TextOverflow.ellipsis, style: cell(true)),
-          ),
-          SizedBox(width: 30, child: Text('${row.played}', style: cell(false))),
-          SizedBox(width: 30, child: Text('${row.won}', style: cell(false))),
-          SizedBox(width: 30, child: Text('${row.lost}', style: cell(false))),
-          SizedBox(width: 36, child: Text('${row.points}', style: cell(true))),
-          SizedBox(
-            width: 64,
-            child: Text(row.nrr.toStringAsFixed(3), style: cell(false)),
-          ),
+          const StatusPill('completed'),
         ],
       ),
     );
   }
 
-  // ---------- quick actions ----------
-  Widget _quickActions(BuildContext context, Tournament? t) {
-    void push(Widget page) => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => page),
-        );
-    final actions = <_QuickAction>[
-      _QuickAction('New Match', Icons.add_circle_outline, kCyan,
-          () => push(MatchSetupScreen(store: store))),
-      _QuickAction('Tournaments', Icons.emoji_events_outlined, kGold, () {
-        if (t != null) {
-          _openTournament(context, t);
-        } else {
-          onSelectTab(1);
-        }
-      }),
-      _QuickAction('Teams', Icons.group_outlined, kTeal,
-          () => push(TeamsScreen(store: store))),
-      _QuickAction('Players', Icons.how_to_reg_outlined, kCyan,
-          () => push(RegistrationScreen(store: store))),
-      _QuickAction('Scorecards', Icons.scoreboard_outlined, kSilver,
-          () => onSelectTab(1)),
-      _QuickAction('Statistics', Icons.bar_chart_outlined, kGold,
-          () => onSelectTab(3)),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionHeader('Quick Actions'),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 1.15,
-          ),
-          itemCount: actions.length,
-          itemBuilder: (_, i) {
-            final a = actions[i];
-            return ScoreCard(
-              padding: const EdgeInsets.all(10),
-              onTap: a.onTap,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(a.icon, color: a.color, size: 26),
-                  const SizedBox(height: 8),
-                  Text(
-                    a.label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: kWhite,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ],
-    );
+  List<String> _scoreLines(Match m) {
+    final lines = <String>[];
+    for (final inn in m.innings) {
+      final bat = store.teamName(inn.battingTeamId);
+      final overs = inn.ballsPerOver > 0
+          ? '${inn.legalBalls ~/ inn.ballsPerOver}.${inn.legalBalls % inn.ballsPerOver}'
+          : '${inn.legalBalls}';
+      lines.add('$bat ${inn.totalRuns}/${inn.wickets} ($overs ov)');
+    }
+    return lines.take(2).toList();
   }
 }
 
-class _QuickAction {
-  final String label;
+class _QuickNav {
   final IconData icon;
-  final Color color;
+  final String title;
+  final String subtitle;
+  final List<Color> gradient;
   final VoidCallback onTap;
-  _QuickAction(this.label, this.icon, this.color, this.onTap);
+  _QuickNav({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.gradient,
+    required this.onTap,
+  });
 }

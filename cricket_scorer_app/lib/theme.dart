@@ -494,6 +494,438 @@ class StatChip extends StatelessWidget {
   }
 }
 
+// ---------- v1.1.2 redesign: shared components ----------
+
+/// Gold gradient used for primary action buttons and highlights.
+const kGoldGradient = LinearGradient(
+  colors: [Color(0xFFF6C453), kGold, kAmber],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+
+/// Branded screen header: hamburger (left), centered 60Score logo +
+/// tagline, settings (right). Used on Home / Matches / Statistics.
+class BrandedHeader extends StatelessWidget {
+  final VoidCallback onMenu;
+  final VoidCallback? onSettings;
+  const BrandedHeader({
+    super.key,
+    required this.onMenu,
+    this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu, color: kWhite, size: 28),
+            onPressed: onMenu,
+          ),
+          const Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '60Score',
+                  style: TextStyle(
+                    color: kWhite,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  'Cricket Scoring, Simplified.',
+                  style: TextStyle(color: kSilver, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          if (onSettings != null)
+            IconButton(
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings_outlined, color: kSilver),
+              onPressed: onSettings,
+            )
+          else
+            const SizedBox(width: 48),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gradient action card (Home 5-card row, Quick Actions).
+class ActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Color> gradient;
+  final VoidCallback onTap;
+  final double iconSize;
+  const ActionCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.gradient,
+    required this.onTap,
+    this.iconSize = 30,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+            boxShadow: [
+              BoxShadow(
+                color: gradient.last.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: kWhite, size: iconSize),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: kWhite,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: kWhite.withValues(alpha: 0.85),
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Gold gradient primary button (Create Match, Save Settings, ...).
+class GoldButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  const GoldButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onPressed,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            gradient: kGoldGradient,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: kGold.withValues(alpha: 0.4),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: const Color(0xFF2B1C05), size: 22),
+                const SizedBox(width: 10),
+              ],
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF2B1C05),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Section title row: icon + UPPERCASE title + optional trailing action.
+class SectionTitle extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget? trailing;
+  const SectionTitle({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
+      child: Row(
+        children: [
+          Icon(icon, color: kGold, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                color: kWhite,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          if (trailing != null) ...[trailing!],
+        ],
+      ),
+    );
+  }
+}
+
+/// Cyan "View All >" trailing link.
+class ViewAllLink extends StatelessWidget {
+  final VoidCallback onTap;
+  const ViewAllLink({super.key, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'View All',
+            style: TextStyle(
+              color: kCyan,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          Icon(Icons.chevron_right, color: kCyan, size: 18),
+        ],
+      ),
+    );
+  }
+}
+
+/// Numbered settings section card (New Match screen sections).
+class NumberedSection extends StatelessWidget {
+  final int number;
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Widget? headerAction;
+  const NumberedSection({
+    super.key,
+    required this.number,
+    required this.title,
+    this.subtitle,
+    required this.child,
+    this.headerAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kPanel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kCyan.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: kCyan.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: kCyan.withValues(alpha: 0.4)),
+                ),
+                child: Center(
+                  child: Text(
+                    '$number',
+                    style: const TextStyle(
+                      color: kCyan,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: kWhite,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (headerAction != null) ...[headerAction!],
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// Selectable option chip card (format cards, toss options, tabs).
+class OptionCard extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  const OptionCard({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+          decoration: BoxDecoration(
+            gradient: selected ? kGoldGradient : null,
+            color: selected ? null : kPanel2,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? kGold
+                  : kCyan.withValues(alpha: 0.25),
+              width: selected ? 1.5 : 1,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: kGold.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  color: selected
+                      ? const Color(0xFF2B1C05)
+                      : kSilver,
+                  size: 20,
+                ),
+                const SizedBox(height: 4),
+              ],
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: selected
+                      ? const Color(0xFF2B1C05)
+                      : kWhite,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+              if (subtitle != null)
+                Text(
+                  subtitle!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF2B1C05).withValues(alpha: 0.8)
+                        : Colors.white54,
+                    fontSize: 10,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ---------- File helpers (kept from previous version) ----------
 
 /// Write [bytes] to a temp file and open the system share sheet.

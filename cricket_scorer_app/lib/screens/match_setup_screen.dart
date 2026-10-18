@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../store.dart';
+import '../theme.dart';
 import 'scoring_screen.dart';
+import 'settings_screen.dart';
 
 class MatchSetupScreen extends StatefulWidget {
   final Store store;
@@ -24,13 +26,27 @@ class MatchSetupScreen extends StatefulWidget {
   State<MatchSetupScreen> createState() => _MatchSetupScreenState();
 }
 
+/// Preset formats shown in the Match Format grid. Super Sixty is 8 overs and
+/// is the default selection for a fresh setup screen.
+const List<(String, int)> _formatPresets = [
+  ('Super Sixty', 8),
+  ('T5', 5),
+  ('T10', 10),
+  ('T20', 20),
+  ('T30', 30),
+  ('T40', 40),
+  ('T50', 50),
+];
+
+const Set<int> _presetOvers = {5, 8, 10, 20, 30, 40, 50};
+
 class _MatchSetupScreenState extends State<MatchSetupScreen> {
   String? teamAId;
   String? teamBId;
   String? tournamentId;
   final Set<String> xiA = {};
   final Set<String> xiB = {};
-  int overs = 10;
+  int overs = 8;
   int totalWickets = 0; // 0 = auto (XI - 1)
   bool lastManStands = false;
   bool widePenalty = true;
@@ -43,6 +59,11 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
   DateTime date = DateTime.now();
   String? tossWinnerId;
   String tossDecision = 'bat';
+
+  /// UI-only flags (presentational; not part of the match-creation logic).
+  bool _customOvers = false; // Custom Overs toggle in the format section.
+  bool _showTossDetail = false; // 'Set Now' reveals winner/decision pickers.
+  bool _starting = false; // double-tap guard on the Create button.
 
   Store get store => widget.store;
 
@@ -63,7 +84,9 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         _preselect();
       }
     }
-    tossWinnerId = teamAId;
+    // Redesign default: toss is 'Auto (Toss later)' until the user picks a
+    // result. _canStart (unchanged) keeps Create disabled while it is null.
+    tossWinnerId = null;
     // Pre-fill from an existing fixture (Start Setup flow). Only adopt team
     // IDs that actually exist, so TBD playoff slots ('') never break the
     // dropdowns with a value-not-in-items assertion.
@@ -92,8 +115,11 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         xiB.clear();
         xiB.addAll(em.xiB);
       }
-      tossWinnerId = teamAId;
+      tossWinnerId = null;
     }
+    // A non-preset overs count (e.g. from an existing fixture) means the
+    // Custom Overs toggle starts enabled.
+    _customOvers = !_presetOvers.contains(overs);
   }
 
   void _preselect() {
@@ -192,287 +218,1048 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       xiB.length >= 2 &&
       tossWinnerId != null;
 
+  String get _hint {
+    if (teamAId == null || teamBId == null || teamAId == teamBId) {
+      return 'Pick two different teams to continue.';
+    }
+    if (xiA.length < 2 || xiB.length < 2) {
+      return 'Pick two different teams and at least 2 players per XI to start.';
+    }
+    if (tossWinnerId == null) {
+      return 'Choose a toss result above (or Set Now) to create the match.';
+    }
+    return '';
+  }
+
+  static String _fmtDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
+  }
+
+  static String _fmtTime(DateTime d) {
+    final h12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final ampm = d.hour < 12 ? 'AM' : 'PM';
+    return '${h12.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} $ampm';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final teams = store.teams;
-    // Always include the current value: a custom-typed overs count must
-    // never crash the dropdown (value-not-in-items assertion).
-    final overOptions = <int>{5, 8, 10, 15, 20, 25, 30, 40, 50, overs}.toList()
-      ..sort();
+    final isFixture = widget.existingMatch != null;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.existingMatch != null ? 'Fixture setup' : 'New match',
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            _header(),
+            const SizedBox(height: 10),
+            _titleRow(isFixture),
+            const SizedBox(height: 10),
+            _matchTypeRow(),
+            if (tournamentId != null) ...[
+              const SizedBox(height: 10),
+              _tournamentPicker(),
+            ],
+            const SizedBox(height: 12),
+            _formatSection(),
+            _teamsSection(),
+            _venueSection(),
+            _dateTimeSection(),
+            _tossSection(),
+            _settingsSection(),
+            const SizedBox(height: 4),
+            Opacity(
+              opacity: _canStart && !_starting ? 1 : 0.45,
+              child: GoldButton(
+                label: _starting
+                    ? 'Creating…'
+                    : (isFixture ? 'Start Match' : 'Create Match'),
+                icon: Icons.play_arrow,
+                onPressed: _canStart && !_starting ? _create : null,
+              ),
+            ),
+            if (!_canStart)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _hint,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.orange),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          DropdownButtonFormField<String>(
-            initialValue: tournamentId,
-            decoration: const InputDecoration(
-              labelText: 'Tournament (optional)',
-            ),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('Friendly / none'),
-              ),
-              ...store.tournaments.map(
-                (t) => DropdownMenuItem(value: t.id, child: Text(t.name)),
-              ),
-            ],
-            onChanged: (v) => setState(() => tournamentId = v),
-          ),
-          const SizedBox(height: 10),
-          Row(
+    );
+  }
+
+  // ---------- Header ----------
+
+  Widget _header() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        const Expanded(
+          child: Column(
             children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: teamAId,
-                  decoration: const InputDecoration(labelText: 'Team A'),
-                  items: teams
-                      .map(
-                        (t) =>
-                            DropdownMenuItem(value: t.id, child: Text(t.name)),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    teamAId = v;
-                    if (teamBId == v) teamBId = null;
-                    tossWinnerId = v;
-                    _preselect();
-                  }),
+              Text(
+                '60Score',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: kWhite,
                 ),
               ),
+              Text(
+                'Cricket Scoring, Simplified.',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SettingsScreen(store: store),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _titleRow(bool isFixture) {
+    return Row(
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            gradient: kGoldGradient,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(
+            Icons.sports_cricket,
+            color: Color(0xFF2B1C05),
+            size: 26,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isFixture ? 'Fixture Setup' : 'New Match',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: kWhite,
+                ),
+              ),
+              Text(
+                isFixture
+                    ? 'Update the fixture details, then start'
+                    : 'Create a quick or custom match',
+                style: const TextStyle(fontSize: 12, color: Colors.white54),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Quick Match <=> tournamentId == null (the old 'Friendly / none' choice);
+  /// Tournament Match <=> a tournament is attached.
+  Widget _matchTypeRow() {
+    final quick = tournamentId == null;
+    return Row(
+      children: [
+        Expanded(
+          child: OptionCard(
+            title: 'Quick Match',
+            subtitle: 'Create a standalone match',
+            icon: Icons.bolt,
+            selected: quick,
+            onTap: () {
+              if (!quick) setState(() => tournamentId = null);
+            },
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OptionCard(
+            title: 'Tournament Match',
+            subtitle: 'From existing tournament',
+            icon: Icons.emoji_events,
+            selected: !quick,
+            onTap: () {
+              if (!quick) return;
+              if (store.tournaments.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No tournaments yet — create one first.'),
+                  ),
+                );
+                return;
+              }
+              setState(() => tournamentId = store.tournaments.first.id);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Which tournament a Tournament Match belongs to (the old optional
+  /// tournament dropdown, shown only in Tournament Match mode).
+  Widget _tournamentPicker() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: kPanel2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kCyan.withValues(alpha: 0.25)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          value: tournamentId,
+          hint: const Text('Select tournament'),
+          items: store.tournaments
+              .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
+              .toList(),
+          onChanged: (v) => setState(() {
+            tournamentId = v;
+            // Same preselect the old initState applied when a tournament was
+            // attached: default the two sides to the tournament's teams.
+            final t = store.tournamentById(v);
+            if (t != null && t.teamIds.length >= 2) {
+              teamAId = t.teamIds[0];
+              teamBId = t.teamIds[1];
+              _preselect();
+              tossWinnerId = teamAId;
+            }
+            _showTossDetail = false;
+          }),
+        ),
+      ),
+    );
+  }
+
+  // ---------- Section 1: Match Format ----------
+
+  Widget _formatSection() {
+    return NumberedSection(
+      number: 1,
+      title: 'Match Format',
+      subtitle: 'Select a format or set custom overs',
+      child: Column(
+        children: [
+          GridView.count(
+            crossAxisCount: 4,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 0.72,
+            children: [
+              for (final (name, o) in _formatPresets)
+                OptionCard(
+                  title: name,
+                  subtitle: '($o Overs)',
+                  selected: !_customOvers && overs == o,
+                  onTap: () => setState(() {
+                    overs = o;
+                    _customOvers = false;
+                  }),
+                ),
+              OptionCard(
+                title: 'Custom',
+                subtitle: '(Set Overs)',
+                selected: _customOvers,
+                onTap: () => setState(() => _customOvers = true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _customOversPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _customOversPanel() {
+    final enabled = _customOvers;
+    return Opacity(
+      opacity: enabled ? 1 : 0.75,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: kPanel2,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: kCyan.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.settings, color: kSilver, size: 22),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Custom Overs (Optional)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: kWhite,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        'Set your own number of overs',
+                        style: TextStyle(fontSize: 11, color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  'Enable Custom Overs',
+                  style: TextStyle(fontSize: 11, color: kSilver),
+                ),
+                const SizedBox(width: 6),
+                Switch(
+                  value: enabled,
+                  onChanged: (v) => setState(() {
+                    _customOvers = v;
+                    if (!v) overs = 8; // back to the Super Sixty default
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Text('Overs:', style: TextStyle(color: kSilver)),
+                const SizedBox(width: 8),
+                _stepperButton(
+                  Icons.remove,
+                  enabled && overs > 1
+                      ? () => setState(() => overs--)
+                      : null,
+                ),
+                Container(
+                  width: 52,
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: kPanel,
+                    borderRadius: BorderRadius.circular(10),
+                    border:
+                        Border.all(color: kCyan.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(
+                    '$overs',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: kWhite,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                _stepperButton(
+                  Icons.add,
+                  enabled ? () => setState(() => overs++) : null,
+                ),
+                Container(
+                  width: 1,
+                  height: 34,
+                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                  color: kCyan.withValues(alpha: 0.25),
+                ),
+                const Text('Balls per Over:', style: TextStyle(color: kSilver)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: kPanel,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: kCyan.withValues(alpha: 0.25)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        isExpanded: true,
+                        value: ballsPerOver,
+                        items: [4, 5, 6, 8]
+                            .map(
+                              (o) => DropdownMenuItem(
+                                value: o,
+                                child: Text(
+                                  o == 6 ? '6 (Standard)' : '$o',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => ballsPerOver = v ?? 6),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stepperButton(IconData icon, VoidCallback? onTap) {
+    return Opacity(
+      opacity: onTap == null ? 0.35 : 1,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: kPanel,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kCyan.withValues(alpha: 0.35)),
+          ),
+          child: Icon(icon, color: kCyan, size: 18),
+        ),
+      ),
+    );
+  }
+
+  // ---------- Section 2: Select Teams ----------
+
+  Widget _teamsSection() {
+    return NumberedSection(
+      number: 2,
+      title: 'Select Teams',
+      headerAction: OutlinedButton.icon(
+        icon: const Icon(Icons.add, size: 18),
+        label: const Text('New Team'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: kCyan,
+          side: BorderSide(color: kCyan.withValues(alpha: 0.5)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        onPressed: _newTeam,
+      ),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _teamCard(true)),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
-                child: Text('vs'),
-              ),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: teamBId,
-                  decoration: const InputDecoration(labelText: 'Team B'),
-                  items: teams
-                      .map(
-                        (t) =>
-                            DropdownMenuItem(value: t.id, child: Text(t.name)),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    teamBId = v;
-                    // Keep the toss-winner value inside the dropdown items.
-                    if (tossWinnerId != teamAId && tossWinnerId != teamBId) {
-                      tossWinnerId = teamAId;
-                    }
-                    _preselect();
-                  }),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  isExpanded: true,
-                  initialValue: overs,
-                  decoration: const InputDecoration(labelText: 'Overs'),
-                  items: overOptions
-                      .map(
-                        (o) =>
-                            DropdownMenuItem(value: o, child: Text('$o overs')),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => overs = v ?? 10),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  initialValue: '$overs',
-                  decoration: const InputDecoration(labelText: 'Custom overs'),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    final n = int.tryParse(v);
-                    if (n != null && n > 0) setState(() => overs = n);
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  isExpanded: true,
-                  initialValue: ballsPerOver,
-                  decoration: const InputDecoration(labelText: 'Balls / over'),
-                  items: [4, 5, 6, 8]
-                      .map(
-                        (o) =>
-                            DropdownMenuItem(value: o, child: Text('$o balls')),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => ballsPerOver = v ?? 6),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: venueCtrl,
-            decoration: const InputDecoration(labelText: 'Venue'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: titleCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Match title (optional, e.g. Final)',
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: ballType,
-                  decoration: const InputDecoration(labelText: 'Ball type'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Tennis Ball',
-                      child: Text('Tennis Ball'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Leather Ball',
-                      child: Text('Leather Ball'),
-                    ),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                  ],
-                  onChanged: (v) =>
-                      setState(() => ballType = v ?? 'Tennis Ball'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: seasonCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Season / Year (e.g. 2025)',
+                child: Text(
+                  'VS',
+                  style: TextStyle(
+                    color: kRed,
+                    fontWeight: FontWeight.w900,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 22,
                   ),
                 ),
               ),
+              Expanded(child: _teamCard(false)),
             ],
           ),
-          const SizedBox(height: 10),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Date'),
-            subtitle: Text(date.toIso8601String().substring(0, 10)),
-            trailing: const Icon(Icons.calendar_month),
-            onTap: () async {
-              final d = await showDatePicker(
-                context: context,
-                initialDate: date,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2035),
-              );
-              if (d != null) setState(() => date = d);
-            },
-          ),
-          const Divider(),
-          const Text(
-            'Match settings',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: totalWickets,
-            decoration: const InputDecoration(labelText: 'Total wickets'),
-            items: const [
-              DropdownMenuItem(value: 0, child: Text('Auto (players - 1)')),
-              DropdownMenuItem(value: 10, child: Text('10 wickets')),
-              DropdownMenuItem(value: 9, child: Text('9 wickets')),
-              DropdownMenuItem(value: 8, child: Text('8 wickets')),
-              DropdownMenuItem(value: 11, child: Text('11 wickets')),
-            ],
-            onChanged: (v) => setState(() => totalWickets = v ?? 0),
-          ),
-          SwitchListTile(
-            value: lastManStands,
-            title: const Text('Last man stands'),
-            onChanged: (v) => setState(() => lastManStands = v),
-          ),
-          SwitchListTile(
-            value: widePenalty,
-            title: const Text('Wide ball penalty run'),
-            onChanged: (v) => setState(() => widePenalty = v),
-          ),
-          SwitchListTile(
-            value: noBallPenalty,
-            title: const Text('No ball penalty run'),
-            onChanged: (v) => setState(() => noBallPenalty = v),
-          ),
-          const Divider(),
-          const Text('Toss', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: tossWinnerId,
-                  decoration: const InputDecoration(labelText: 'Toss won by'),
-                  items: [
-                    if (teamAId != null)
-                      DropdownMenuItem(
-                        value: teamAId,
-                        child: Text(store.teamName(teamAId!)),
-                      ),
-                    if (teamBId != null)
-                      DropdownMenuItem(
-                        value: teamBId,
-                        child: Text(store.teamName(teamBId!)),
-                      ),
-                  ],
-                  onChanged: (v) => setState(() => tossWinnerId = v),
+          if (teamAId != null) ...[
+            const SizedBox(height: 10),
+            _xiPicker(teamAId!, xiA),
+          ],
+          if (teamBId != null) ...[
+            const Divider(height: 20),
+            _xiPicker(teamBId!, xiB),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _teamCard(bool isTeamA) {
+    final teamId = isTeamA ? teamAId : teamBId;
+    final team = teamId == null ? null : store.teamById(teamId);
+    return InkWell(
+      onTap: () => _pickTeam(isTeamA),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: kPanel2,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: kCyan.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: kCyan.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isTeamA ? 'Team 1' : 'Team 2',
+                  style: const TextStyle(
+                    color: kCyan,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: tossDecision,
-                  decoration: const InputDecoration(labelText: 'Chose to'),
-                  items: const [
-                    DropdownMenuItem(value: 'bat', child: Text('Bat first')),
-                    DropdownMenuItem(value: 'bowl', child: Text('Bowl first')),
-                  ],
-                  onChanged: (v) => setState(() => tossDecision = v ?? 'bat'),
+            ),
+            const SizedBox(height: 8),
+            TeamAvatar(team?.name ?? '?', radius: 30),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    team?.name ?? 'Select team',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: kWhite,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const Divider(),
-          if (teamAId != null) _xiPicker(teamAId!, xiA),
-          const Divider(),
-          if (teamBId != null) _xiPicker(teamBId!, xiB),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _canStart ? _start : null,
-            icon: const Icon(Icons.sports_cricket),
-            label: const Text('Start match'),
-          ),
-          if (!_canStart)
+                const Icon(
+                  Icons.keyboard_arrow_down,
+                  color: kSilver,
+                  size: 20,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Team picker dialog. The selection handlers mirror the old Team A / Team B
+  /// dropdown onChanged bodies exactly (same-team guard + toss handling).
+  Future<void> _pickTeam(bool isTeamA) async {
+    final teams = store.teams;
+    final currentId = isTeamA ? teamAId : teamBId;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: Text(isTeamA ? 'Select Team 1' : 'Select Team 2'),
+        children: [
+          if (teams.isEmpty)
             const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text(
-                'Pick two different teams and at least 2 players per XI to start.',
-                style: TextStyle(color: Colors.orange),
+              padding: EdgeInsets.all(16),
+              child: Text('No teams yet — tap + New Team to add one.'),
+            ),
+          for (final t in teams)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(c, t.id),
+              child: Row(
+                children: [
+                  TeamAvatar(t.name, radius: 16),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(t.name)),
+                  if (t.id == currentId)
+                    const Icon(Icons.check, color: kCyan, size: 18),
+                ],
               ),
             ),
         ],
       ),
     );
+    if (picked == null) return;
+    setState(() {
+      if (isTeamA) {
+        teamAId = picked;
+        if (teamBId == picked) teamBId = null;
+        tossWinnerId = picked;
+        _preselect();
+      } else {
+        teamBId = picked;
+        // Keep the toss-winner value inside the dropdown items (null = Auto
+        // is a legitimate state now, so only repair a stale non-null value).
+        if (tossWinnerId != null &&
+            tossWinnerId != teamAId &&
+            tossWinnerId != teamBId) {
+          tossWinnerId = teamAId;
+        }
+        _preselect();
+      }
+      _showTossDetail = false;
+    });
+  }
+
+  /// '+ New Team' — the same new-team dialog as the Teams screen.
+  Future<void> _newTeam() async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('New team'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'Team name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    final team = Team(id: Store.newId('team'), name: name);
+    await store.upsertTeam(team);
+    setState(() {
+      // Fill the first empty slot with the new team.
+      if (teamAId == null) {
+        teamAId = team.id;
+        tossWinnerId = team.id;
+        _preselect();
+      } else if (teamBId == null) {
+        teamBId = team.id;
+        _preselect();
+      }
+    });
+  }
+
+  // ---------- Section 3: Venue ----------
+
+  Widget _venueSection() {
+    return NumberedSection(
+      number: 3,
+      title: 'Venue (Optional)',
+      child: TextField(
+        controller: venueCtrl,
+        decoration: InputDecoration(
+          hintText: 'e.g. 75 LOKRI CLUB',
+          prefixIcon: const Icon(Icons.location_on, color: kSilver),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: venueCtrl,
+            builder: (_, v, _) => v.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    icon: const Icon(Icons.clear, color: kSilver),
+                    onPressed: venueCtrl.clear,
+                  ),
+          ),
+          filled: true,
+          fillColor: kPanel2,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: kCyan.withValues(alpha: 0.25)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: kCyan.withValues(alpha: 0.25)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------- Section 4: Date & Time ----------
+
+  Widget _dateTimeSection() {
+    return NumberedSection(
+      number: 4,
+      title: 'Date & Time',
+      child: Row(
+        children: [
+          Expanded(
+            child: _pickerTile(
+              icon: Icons.calendar_month,
+              label: _fmtDate(date),
+              onTap: () async {
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: date,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2035),
+                );
+                if (d != null) setState(() => date = d);
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _pickerTile(
+              icon: Icons.access_time,
+              label: _fmtTime(date),
+              onTap: () async {
+                final t = await showTimePicker(
+                  context: context,
+                  initialTime:
+                      TimeOfDay(hour: date.hour, minute: date.minute),
+                );
+                if (t != null) {
+                  setState(() {
+                    date = DateTime(
+                      date.year, date.month, date.day, t.hour, t.minute);
+                  });
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pickerTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: kPanel2,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kCyan.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: kSilver, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: kWhite, fontSize: 14),
+              ),
+            ),
+            const Icon(Icons.keyboard_arrow_down, color: kSilver, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------- Section 5: Toss ----------
+
+  Widget _tossSection() {
+    final t1 = tossWinnerId == teamAId && tossWinnerId != null;
+    final t2 = tossWinnerId == teamBId && tossWinnerId != null;
+    return NumberedSection(
+      number: 5,
+      title: 'Toss',
+      child: Column(
+        children: [
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.7,
+            children: [
+              OptionCard(
+                title: 'Auto (Toss later)',
+                icon: Icons.check_circle,
+                selected: tossWinnerId == null && !_showTossDetail,
+                onTap: () => setState(() {
+                  tossWinnerId = null;
+                  _showTossDetail = false;
+                }),
+              ),
+              OptionCard(
+                title: 'Team 1',
+                icon: Icons.shield,
+                selected: t1 && !_showTossDetail,
+                onTap: () {
+                  if (teamAId == null) return;
+                  setState(() {
+                    tossWinnerId = teamAId;
+                    _showTossDetail = false;
+                  });
+                },
+              ),
+              OptionCard(
+                title: 'Team 2',
+                icon: Icons.shield,
+                selected: t2 && !_showTossDetail,
+                onTap: () {
+                  if (teamBId == null) return;
+                  setState(() {
+                    tossWinnerId = teamBId;
+                    _showTossDetail = false;
+                  });
+                },
+              ),
+              OptionCard(
+                title: 'Set Now',
+                icon: Icons.tune,
+                selected: _showTossDetail,
+                onTap: () => setState(() {
+                  _showTossDetail = true;
+                  tossWinnerId ??= teamAId;
+                }),
+              ),
+            ],
+          ),
+          if (_showTossDetail) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: tossWinnerId,
+                    decoration: const InputDecoration(
+                      labelText: 'Toss won by',
+                    ),
+                    items: [
+                      if (teamAId != null)
+                        DropdownMenuItem(
+                          value: teamAId,
+                          child: Text(store.teamName(teamAId!)),
+                        ),
+                      if (teamBId != null)
+                        DropdownMenuItem(
+                          value: teamBId,
+                          child: Text(store.teamName(teamBId!)),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => tossWinnerId = v),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: tossDecision,
+                    decoration: const InputDecoration(labelText: 'Chose to'),
+                    items: const [
+                      DropdownMenuItem(value: 'bat', child: Text('Bat first')),
+                      DropdownMenuItem(
+                          value: 'bowl', child: Text('Bowl first')),
+                    ],
+                    onChanged: (v) => setState(() => tossDecision = v ?? 'bat'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (tossWinnerId == null && !_showTossDetail)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text(
+                'Toss will be recorded later — pick Team 1 or Team 2 '
+                '(or Set Now) before creating the match.',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- Section 6: Additional Settings ----------
+
+  Widget _settingsSection() {
+    return NumberedSection(
+      number: 6,
+      title: 'Additional Settings (Optional)',
+      child: Column(
+        children: [
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.7,
+            children: [
+              _settingCard(
+                'Match Ball',
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: ballType,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Tennis Ball',
+                        child: Text('Tennis Ball',
+                            style: TextStyle(fontSize: 14)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Leather Ball',
+                        child: Text('Leather Ball',
+                            style: TextStyle(fontSize: 14)),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Other',
+                        child:
+                            Text('Other', style: TextStyle(fontSize: 14)),
+                      ),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => ballType = v ?? 'Tennis Ball'),
+                  ),
+                ),
+              ),
+              _settingCard(
+                'Total Wickets',
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    isExpanded: true,
+                    value: totalWickets,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 0,
+                        child: Text('Auto (XI - 1)',
+                            style: TextStyle(fontSize: 14)),
+                      ),
+                      DropdownMenuItem(
+                        value: 10,
+                        child: Text('10 wickets',
+                            style: TextStyle(fontSize: 14)),
+                      ),
+                      DropdownMenuItem(
+                        value: 9,
+                        child:
+                            Text('9 wickets', style: TextStyle(fontSize: 14)),
+                      ),
+                      DropdownMenuItem(
+                        value: 8,
+                        child:
+                            Text('8 wickets', style: TextStyle(fontSize: 14)),
+                      ),
+                      DropdownMenuItem(
+                        value: 11,
+                        child: Text('11 wickets',
+                            style: TextStyle(fontSize: 14)),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => totalWickets = v ?? 0),
+                  ),
+                ),
+              ),
+              _settingCard(
+                'Season / Year',
+                TextField(
+                  controller: seasonCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. 2025',
+                    isDense: true,
+                    border: InputBorder.none,
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+              _settingCard(
+                'Match Title',
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. Final',
+                    isDense: true,
+                    border: InputBorder.none,
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _switchTile(
+            'Last man stands',
+            lastManStands,
+            (v) => setState(() => lastManStands = v),
+          ),
+          _switchTile(
+            'Wide ball penalty run',
+            widePenalty,
+            (v) => setState(() => widePenalty = v),
+          ),
+          _switchTile(
+            'No ball penalty run',
+            noBallPenalty,
+            (v) => setState(() => noBallPenalty = v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _settingCard(String label, Widget control) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: kPanel2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kCyan.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: Colors.white54),
+          ),
+          control,
+        ],
+      ),
+    );
+  }
+
+  Widget _switchTile(String title, bool value, ValueChanged<bool> onChanged) {
+    return SwitchListTile(
+      value: value,
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      onChanged: onChanged,
+    );
+  }
+
+  // ---------- Create ----------
+
+  /// Double-tap guard around the unchanged [_start] flow.
+  Future<void> _create() async {
+    if (_starting || !_canStart) return;
+    setState(() => _starting = true);
+    try {
+      await _start();
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
   }
 
   Future<void> _start() async {

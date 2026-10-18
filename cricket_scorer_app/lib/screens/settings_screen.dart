@@ -1,6 +1,6 @@
-// Settings screen (§26): backup/restore, player import-export, notification
-// preferences, reset app (§29), and app info. Offline-first — no accounts,
-// no cloud.
+// Settings screen (§26): notification preferences, data management
+// (backup/restore, player import-export), reset app (§29), appearance
+// note, and app info. Offline-first — no accounts, no cloud.
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -85,61 +85,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _settingsRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: kCyan),
+      title: Text(title, style: const TextStyle(color: kWhite)),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+      onTap: onTap,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
-          const SectionHeader('Data'),
-          ScoreCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.backup, color: kCyan),
-                  title: const Text(
-                    'Backup & Restore',
-                    style: TextStyle(color: kWhite),
-                  ),
-                  subtitle: const Text(
-                    'Manual, automatic and Downloads backups',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.white54,
-                  ),
-                  onTap: () => _open(BackupScreen(store: store)),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.import_export, color: kCyan),
-                  title: const Text(
-                    'Player import/export',
-                    style: TextStyle(color: kWhite),
-                  ),
-                  subtitle: const Text(
-                    'Excel / CSV player lists',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.white54,
-                  ),
-                  onTap: () => _open(RegistrationScreen(store: store)),
-                ),
-              ],
+          const SectionTitle(
+            icon: Icons.notifications_outlined,
+            title: 'Notifications',
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 2),
+            child: Text(
+              'Preferences only — no cloud, reminders stay on this device.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
             ),
           ),
-          const SectionHeader('Notifications'),
-          const Text(
-            'Preferences only — no cloud, reminders stay on this device.',
-            style: TextStyle(color: Colors.white54, fontSize: 13),
-          ),
-          const SizedBox(height: 8),
           ScoreCard(
             padding: EdgeInsets.zero,
             child: Column(
@@ -184,7 +166,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          const SectionHeader('Appearance'),
+          const SectionTitle(
+            icon: Icons.storage_outlined,
+            title: 'Data Management',
+          ),
+          ScoreCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                _settingsRow(
+                  icon: Icons.backup,
+                  title: 'Backup & Restore',
+                  subtitle: 'Manual, automatic and Downloads backups',
+                  onTap: () => _open(BackupScreen(store: store)),
+                ),
+                const Divider(height: 1),
+                _settingsRow(
+                  icon: Icons.import_export,
+                  title: 'Player import/export',
+                  subtitle: 'Excel / CSV player lists',
+                  onTap: () => _open(RegistrationScreen(store: store)),
+                ),
+              ],
+            ),
+          ),
+          const SectionTitle(
+            icon: Icons.palette_outlined,
+            title: 'Appearance',
+          ),
+          // Info only — the app ships with a single dark navy theme;
+          // there is no stored theme preference to toggle.
           const ScoreCard(
             child: Row(
               children: [
@@ -199,37 +210,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          const SectionHeader('Reset'),
+          const SizedBox(height: 12),
           ScoreCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              leading: const Icon(
+                Icons.warning_amber_rounded,
+                color: kRed,
+              ),
+              title: const Text(
+                'Reset App',
+                style: TextStyle(
+                  color: kWhite,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: const Text(
+                'Advanced — restore default data',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              iconColor: kRed,
+              collapsedIconColor: Colors.white54,
               children: [
-                ScoreButton(
-                  label: 'Reset App',
-                  icon: Icons.delete_forever,
-                  kind: ScoreButtonKind.danger,
-                  onPressed: _confirmReset,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ScoreButton(
+                        label: 'Reset App',
+                        icon: Icons.delete_forever,
+                        kind: ScoreButtonKind.danger,
+                        onPressed: _confirmReset,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          const SectionHeader('About'),
+          const SectionTitle(
+            icon: Icons.info_outline,
+            title: 'About & App Info',
+          ),
           ScoreCard(
             padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: const Icon(Icons.info_outline, color: kCyan),
-              title: const Text(
-                'About 60Score',
-                style: TextStyle(color: kWhite),
-              ),
-              subtitle: const Text(
-                'Version, credits and description',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.white54,
-              ),
+            child: _settingsRow(
+              icon: Icons.info_outline,
+              title: 'About 60Score',
+              subtitle: 'Version, credits and description',
               onTap: () => _open(const AboutScreen()),
             ),
           ),

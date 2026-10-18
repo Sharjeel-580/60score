@@ -54,7 +54,49 @@ class _TeamsScreenState extends State<TeamsScreen> {
             ),
             title: Text(t.name),
             subtitle: Text('${t.players.length} players'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  tooltip: 'Edit team',
+                  onPressed: () => _editTeam(context, t),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  tooltip: 'Delete team',
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: Text('Delete ${t.name}?'),
+                        content: const Text(
+                          'This removes the team and its squad.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: kRed,
+                            ),
+                            onPressed: () => Navigator.pop(c, true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      await store.deleteTeam(t.id);
+                      if (mounted) setState(() {});
+                    }
+                  },
+                ),
+                const Icon(Icons.chevron_right, size: 20),
+              ],
+            ),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(

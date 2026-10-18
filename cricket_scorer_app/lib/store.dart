@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'draft.dart';
 import 'models.dart';
 import 'tournament_engine.dart';
 
@@ -479,6 +480,14 @@ class Store extends ChangeNotifier implements PlayoffStore {
   Future<void> deleteDraft(String id) async {
     drafts.removeWhere((d) => d.id == id);
     await persist();
+  }
+
+  /// Remove one draft pick (from Draft History / Team Squads) and re-index
+  /// the remaining picks so rounds and turns stay fair.
+  Future<bool> deleteDraftPick(Draft d, DraftPick pick) async {
+    final removed = removePick(d, pick);
+    if (removed) await persist();
+    return removed;
   }
 
   Future<void> addManualStat(ManualStatEntry e) async {
