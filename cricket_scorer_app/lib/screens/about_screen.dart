@@ -11,7 +11,7 @@ class AboutScreen extends StatelessWidget {
 
   static const _kPhoneDisplay = '03096571271';
   static const _kPhoneIntl = '923096571271';
-  static const _kVersion = '1.1.3';
+  static const _kVersion = '1.1.4';
 
   static const _kFeatures = <String>[
     'Match creation',

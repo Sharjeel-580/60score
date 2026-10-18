@@ -93,182 +93,566 @@ class ScorecardScreen extends StatelessWidget {
     );
   }
 
-  // ---------------- Scorecard tab (unchanged content) ----------------
+  // ---------------- Scorecard tab (v1.1.4: reference layout) ----------------
 
   Widget _scorecardTab(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        Text(
-          '${store.teamName(match.teamAId)} vs ${store.teamName(match.teamBId)}',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-        ),
-        Text(
-          '${match.oversLimit} overs${match.venue.isNotEmpty ? ' | ${match.venue}' : ''}${match.dateIso.isNotEmpty ? ' | ${match.dateIso}' : ''}',
-        ),
-        Text(
-          'Toss: ${store.teamName(match.tossWinnerId)} chose to ${match.tossDecision} first',
-        ),
-        if (match.resultText.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Text(
-              match.resultText,
-              style: const TextStyle(
+        _matchHeaderCard(),
+        const SizedBox(height: 12),
+        for (var i = 0; i < match.innings.length; i++) ...[
+          _inningsCard(match.innings[i], i),
+          const SizedBox(height: 12),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: _bigActionButton(
+                context,
+                icon: Icons.share,
+                title: 'Share Summary',
+                subtitle: 'Share match result',
                 color: kCyan,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
+                onTap: () => shareMatchSummaryImage(context, store, match),
               ),
             ),
-          ),
-        if (match.manOfMatchId.isNotEmpty)
-          Text(
-            'Man of the Match: ${nameOf(match.manOfMatchId)}',
-            style: const TextStyle(color: kCopper),
-          ),
-        for (final inn in match.innings) ...[
-          const Divider(height: 24),
-          Text(
-            '${store.teamName(inn.battingTeamId)} innings - ${inn.totalRuns}/${inn.wickets} (${oversText(inn.legalBalls, inn.ballsPerOver)} ov)',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          _battingTable(inn),
-          const SizedBox(height: 4),
-          Text(
-            'Extras: ${inn.extrasTotal} (wd ${inn.widesRuns}, nb ${inn.noBallRuns}, b ${inn.byeRuns}, lb ${inn.legByeRuns})',
-            style: const TextStyle(color: Colors.white70),
-          ),
-          const SizedBox(height: 8),
-          _bowlingTable(inn),
-          if (inn.fallOfWickets.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Fall of Wickets',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text(
-              inn.fallOfWickets
-                  .map(
-                    (w) =>
-                        '${w.runs}-${w.wicketNo} (${nameOf(w.playerId)}, ${w.overText})',
-                  )
-                  .join(', '),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _bigActionButton(
+                context,
+                icon: Icons.picture_as_pdf,
+                title: 'Export PDF',
+                subtitle: 'Download Scorecard',
+                color: kGold,
+                onTap: () => _sharePdf(context),
+              ),
             ),
           ],
-          const SizedBox(height: 8),
-          const Text(
-            'Partnerships',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          ...partnerships(inn).map(
-            (p) => Text(
-              '${nameOf(p.batter1Id)} & ${nameOf(p.batter2Id)}: ${p.runs} (${p.balls})${p.unbroken ? ' *' : ''}',
-            ),
-          ),
-        ],
+        ),
+        const SizedBox(height: 20),
       ],
     );
   }
 
-  Widget _battingTable(InningsState inn) {
-    final rows = <DataRow>[];
-    for (final pid in inn.battingXI) {
-      final f = inn.batting[pid];
-      if (f == null || !f.batted) continue;
-      final sr = f.balls == 0
-          ? '-'
-          : (f.runs * 100 / f.balls).toStringAsFixed(1);
-      rows.add(
-        DataRow(
-          cells: [
-            DataCell(
-              Column(
+  Widget _bigActionButton(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.6), width: 1.5),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withValues(alpha: 0.22),
+              color.withValues(alpha: 0.08),
+            ],
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 30),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(nameOf(pid)),
                   Text(
-                    f.out ? resolveHowOut(f.howOut, nameOf) : 'not out',
-                    style: const TextStyle(fontSize: 11, color: Colors.white54),
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
             ),
-            DataCell(Text('${f.runs}')),
-            DataCell(Text('${f.balls}')),
-            DataCell(Text('${f.fours}')),
-            DataCell(Text('${f.sixes}')),
-            DataCell(Text(sr)),
           ],
         ),
-      );
-    }
-    final dnb = inn.battingXI
-        .where((id) => !(inn.batting[id]?.batted ?? false))
-        .map(nameOf)
-        .toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            columnSpacing: 14,
-            columns: const [
-              DataColumn(label: Text('Batter')),
-              DataColumn(label: Text('R')),
-              DataColumn(label: Text('B')),
-              DataColumn(label: Text('4s')),
-              DataColumn(label: Text('6s')),
-              DataColumn(label: Text('SR')),
+      ),
+    );
+  }
+
+  Widget _matchHeaderCard() {
+    final date = match.dateIso.isNotEmpty ? match.dateIso : '';
+    final venue = match.venue.isNotEmpty ? match.venue : 'TBD';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kPanel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: kCyan.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TeamAvatar(store.teamName(match.teamAId)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${store.teamName(match.teamAId)} vs ${store.teamName(match.teamBId)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              TeamAvatar(store.teamName(match.teamBId)),
             ],
-            rows: rows,
           ),
-        ),
-        if (dnb.isNotEmpty)
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              if (date.isNotEmpty)
+                _metaChip(Icons.calendar_month, date),
+              _metaChip(Icons.sports_cricket, '${match.oversLimit} overs'),
+              _metaChip(Icons.location_on_outlined, venue),
+            ],
+          ),
+          const SizedBox(height: 6),
           Text(
-            'Did not bat: ${dnb.join(', ')}',
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            'Toss: ${store.teamName(match.tossWinnerId)} chose to ${match.tossDecision} first',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
+          if (match.resultText.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              match.resultText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: kCyan,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _metaChip(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: kCyan),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
       ],
     );
   }
 
-  Widget _bowlingTable(InningsState inn) {
-    final rows = <DataRow>[];
-    for (final pid in inn.bowling.keys) {
-      final f = inn.bowling[pid]!;
-      if (f.legalBalls == 0 && f.wides == 0 && f.noBalls == 0) continue;
-      final econ = f.legalBalls == 0
-          ? '-'
-          : (f.runs * inn.ballsPerOver / f.legalBalls).toStringAsFixed(2);
-      rows.add(
-        DataRow(
-          cells: [
-            DataCell(Text(nameOf(pid))),
-            DataCell(Text(oversText(f.legalBalls, inn.ballsPerOver))),
-            DataCell(Text('${f.maidens}')),
-            DataCell(Text('${f.runs}')),
-            DataCell(Text('${f.wickets}')),
-            DataCell(Text(econ)),
-          ],
-        ),
-      );
-    }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columnSpacing: 14,
-        columns: const [
-          DataColumn(label: Text('Bowler')),
-          DataColumn(label: Text('O')),
-          DataColumn(label: Text('M')),
-          DataColumn(label: Text('R')),
-          DataColumn(label: Text('W')),
-          DataColumn(label: Text('Econ')),
+  Widget _inningsCard(InningsState inn, int idx) {
+    final accent = idx == 0 ? kOrangeRed : kGold;
+    final ordinal = idx == 0
+        ? '1st'
+        : idx == 1
+            ? '2nd'
+            : '${idx + 1}th';
+    return Container(
+      decoration: BoxDecoration(
+        color: kPanel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withValues(alpha: 0.55), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: Row(
+              children: [
+                TeamAvatar(store.teamName(inn.battingTeamId)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        store.teamName(inn.battingTeamId),
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        '$ordinal Innings',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: accent),
+                  ),
+                  child: Text(
+                    '${inn.totalRuns}/${inn.wickets} (${oversText(inn.legalBalls, inn.ballsPerOver)} ov)',
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          _sectionHeader(Icons.sports_cricket, 'Batting'),
+          _battingTableNew(inn),
+          const SizedBox(height: 6),
+          _sectionHeader(Icons.sports_baseball, 'Bowling'),
+          _bowlingTableNew(inn),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.handshake_outlined,
+                    size: 18, color: kGold),
+                const SizedBox(width: 8),
+                const Text(
+                  'Partnerships  ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    partnerships(inn).isEmpty
+                        ? '-'
+                        : partnerships(inn)
+                            .map(
+                              (p) =>
+                                  '${nameOf(p.batter1Id)} & ${nameOf(p.batter2Id)}: ${p.runs} (${p.balls})${p.unbroken ? ' *' : ''}',
+                            )
+                            .join('  \u2022  '),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
-        rows: rows,
+      ),
+    );
+  }
+
+  Widget _sectionHeader(IconData icon, String label) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: kPanel2,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: kGold),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeaderRow(List<String> cols, List<int> flex) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Row(
+        children: [
+          for (var i = 0; i < cols.length; i++)
+            Expanded(
+              flex: flex[i],
+              child: Text(
+                cols[i],
+                textAlign: i == 0 ? TextAlign.left : TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _battingTableNew(InningsState inn) {
+    final batted = inn.battingXI
+        .where((pid) => inn.batting[pid]?.batted ?? false)
+        .toList();
+    final dnb = inn.battingXI
+        .where((pid) => !(inn.batting[pid]?.batted ?? false))
+        .map(nameOf)
+        .toList();
+    return Column(
+      children: [
+        _tableHeaderRow(
+          const ['Batter', 'R', 'B', '4s', '6s', 'SR'],
+          const [5, 2, 2, 2, 2, 3],
+        ),
+        for (final pid in batted) _battingRowNew(inn, pid),
+        if (dnb.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.group_outlined,
+                    size: 16, color: kCyan),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Did not bat (${dnb.length} players): ${dnb.join(', ')}',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+          child: Row(
+            children: [
+              const Text(
+                'Extras: ',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  '${inn.extrasTotal} (wd ${inn.widesRuns}, nb ${inn.noBallRuns}, b ${inn.byeRuns}, lb ${inn.legByeRuns})',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _battingRowNew(InningsState inn, String pid) {
+    final f = inn.batting[pid]!;
+    final sr = f.balls == 0
+        ? '-'
+        : (f.runs * 100 / f.balls).toStringAsFixed(1);
+    final pl = store.findPlayer(pid);
+    final figures = [
+      '${f.runs}',
+      '${f.balls}',
+      '${f.fours}',
+      '${f.sixes}',
+      sr,
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Row(
+              children: [
+                PlayerAvatar(
+                  photoBase64: (pl?.photoBase64 ?? '').isEmpty
+                      ? null
+                      : pl!.photoBase64,
+                  role: pl?.role ?? 'Batter',
+                  name: nameOf(pid),
+                  radius: 15,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nameOf(pid),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        f.out
+                            ? resolveHowOut(f.howOut, nameOf)
+                            : 'not out',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: f.out ? Colors.white38 : kCyan,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < figures.length; i++)
+            Expanded(
+              flex: i == 4 ? 3 : 2,
+              child: Text(
+                figures[i],
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bowlingTableNew(InningsState inn) {
+    final bowlers = inn.bowling.keys
+        .where((pid) {
+          final f = inn.bowling[pid]!;
+          return f.legalBalls > 0 || f.wides > 0 || f.noBalls > 0;
+        })
+        .toList();
+    return Column(
+      children: [
+        _tableHeaderRow(
+          const ['Bowler', 'O', 'M', 'R', 'W', 'Econ'],
+          const [5, 2, 2, 2, 2, 3],
+        ),
+        for (final pid in bowlers) _bowlingRowNew(inn, pid),
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  Widget _bowlingRowNew(InningsState inn, String pid) {
+    final f = inn.bowling[pid]!;
+    final econ = f.legalBalls == 0
+        ? '-'
+        : (f.runs * inn.ballsPerOver / f.legalBalls).toStringAsFixed(2);
+    final pl = store.findPlayer(pid);
+    final figures = [
+      oversText(f.legalBalls, inn.ballsPerOver),
+      '${f.maidens}',
+      '${f.runs}',
+      '${f.wickets}',
+      econ,
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Row(
+              children: [
+                PlayerAvatar(
+                  photoBase64: (pl?.photoBase64 ?? '').isEmpty
+                      ? null
+                      : pl!.photoBase64,
+                  role: pl?.role ?? 'Bowler',
+                  name: nameOf(pid),
+                  radius: 15,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    nameOf(pid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < figures.length; i++)
+            Expanded(
+              flex: i == 4 ? 3 : 2,
+              child: Text(
+                figures[i],
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
