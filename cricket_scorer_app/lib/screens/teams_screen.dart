@@ -5,9 +5,32 @@ import '../player_io.dart';
 import '../store.dart';
 import '../theme.dart';
 
-class TeamsScreen extends StatelessWidget {
+class TeamsScreen extends StatefulWidget {
   final Store store;
   const TeamsScreen({super.key, required this.store});
+
+  @override
+  State<TeamsScreen> createState() => _TeamsScreenState();
+}
+
+class _TeamsScreenState extends State<TeamsScreen> {
+  Store get store => widget.store;
+
+  @override
+  void initState() {
+    super.initState();
+    store.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {

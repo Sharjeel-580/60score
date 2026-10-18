@@ -16,6 +16,7 @@ import 'screens/teams_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/backup_screen.dart';
 import 'screens/about_screen.dart';
+import 'screens/draft_screen.dart';
 import 'widgets/app_logo.dart';
 
 void main() {
@@ -331,6 +332,13 @@ class _HomeShellState extends State<HomeShell> {
                     icon: Icons.scoreboard_outlined,
                     label: 'Scorecards',
                     onTap: () => _closeDrawerAndGoTab(1),
+                  ),
+                  _drawerItem(
+                    icon: Icons.shuffle_outlined,
+                    label: 'Player Draft',
+                    onTap: () => _closeDrawerAndPush(
+                      DraftListScreen(store: store),
+                    ),
                   ),
                   _drawerItem(
                     icon: Icons.import_export_outlined,
