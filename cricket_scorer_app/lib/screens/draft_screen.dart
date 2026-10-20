@@ -313,9 +313,6 @@ class _DraftListScreenState extends State<DraftListScreen> {
   }
 
   Tournament? get _tournament {
-    for (final t in store.tournaments) {
-      if (t.id == Store.defaultTournamentId) return t;
-    }
     return store.tournaments.isEmpty ? null : store.tournaments.first;
   }
 
@@ -627,7 +624,9 @@ class _DraftSettingsScreenState extends State<DraftSettingsScreen> {
         for (final e in d.manualRoundPicks.entries) e.key: List.of(e.value),
       };
     } else {
-      tournamentId = Store.defaultTournamentId;
+      // New draft defaults to the first tournament, if one exists.
+      tournamentId =
+          store.tournaments.isEmpty ? '' : store.tournaments.first.id;
       final t = store.tournamentById(tournamentId);
       // Draft name follows the selected tournament — not hardcoded.
       _nameCtrl.text = t != null ? '${t.name} Draft' : 'New Draft';
