@@ -132,6 +132,10 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
                 child: TabBar(
                   controller: _tabs,
+                  // v1.2.2: without this the M3 default sizes the pill
+                  // to the label, rendering a small oval behind the
+                  // text instead of a full tab-segment highlight.
+                  indicatorSize: TabBarIndicatorSize.tab,
                   indicator: BoxDecoration(
                     gradient: kSunsetGradient,
                     borderRadius: BorderRadius.circular(12),
