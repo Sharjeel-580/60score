@@ -194,7 +194,7 @@ class StatsScreen extends StatefulWidget {
 class _StatsScreenState extends State<StatsScreen> {
   Store get store => widget.store;
 
-  // Filters (default tournament = the seeded default tournament).
+  // Filters.
   String? _tournamentId;
   int? _overs; // null = all formats
   String? _teamId; // null = all teams
@@ -215,9 +215,7 @@ class _StatsScreenState extends State<StatsScreen> {
   void initState() {
     super.initState();
     final tids = store.tournaments.map((t) => t.id).toList();
-    if (tids.contains(Store.defaultTournamentId)) {
-      _tournamentId = Store.defaultTournamentId;
-    } else if (tids.isNotEmpty) {
+    if (tids.isNotEmpty) {
       _tournamentId = tids.first;
     }
     store.addListener(_onStoreChanged);
