@@ -16,6 +16,7 @@ import 'scoring.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'widgets/player_avatar.dart';
+import 'widgets/share_preview.dart';
 
 /// One ranked player row inside a stat category.
 class StatEntry {
@@ -229,6 +230,7 @@ Future<void> shareStatsImage(
   final overlay = Overlay.of(context);
   final dir = await getTemporaryDirectory();
   final files = <XFile>[];
+  final previews = <Uint8List>[];
   for (var i = 0; i < groups.length; i++) {
     final bytes = await _captureCard(
       overlay,
@@ -242,12 +244,23 @@ Future<void> shareStatsImage(
       ),
     );
     if (bytes == null) continue;
+    previews.add(bytes);
     final file = File(
         '${dir.path}/stats_${tournamentId ?? 'all'}_${DateTime.now().millisecondsSinceEpoch}_$i.png');
     await file.writeAsBytes(bytes, flush: true);
     files.add(XFile(file.path));
   }
   if (files.isEmpty) return;
+  // v1.2.2: fit-to-screen preview inside the SafeArea before
+  // sharing, so the tall cards can be checked whole (their tops no
+  // longer run under the camera/notch). Images are unchanged.
+  if (!context.mounted) return;
+  final ok = await showSharePreview(
+    context,
+    title: 'Top 5 Statistics',
+    images: previews,
+  );
+  if (!ok) return;
   await SharePlus.instance.share(
     ShareParams(files: files, text: '60Score statistics — $scope'),
   );
