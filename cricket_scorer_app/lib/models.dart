@@ -98,6 +98,10 @@ class Tournament {
   List<String> qualifiedTeamIds;
   /// True once league standings are final and seeds are locked.
   bool qualificationFinalized;
+  /// True while this tournament is published to the public
+  /// `published_tournaments` collection (search / follow, view-only).
+  /// Publishing is always a manual owner action — never automatic.
+  bool published;
 
   Tournament({
     required this.id,
@@ -108,6 +112,7 @@ class Tournament {
     Map<String, int>? pointsAdjustments,
     List<String>? qualifiedTeamIds,
     this.qualificationFinalized = false,
+    this.published = false,
   }) : teamIds = teamIds ?? [],
        pointsAdjustments = pointsAdjustments ?? {},
        qualifiedTeamIds = qualifiedTeamIds ?? [];
@@ -121,6 +126,7 @@ class Tournament {
     'pointsAdjustments': pointsAdjustments,
     'qualifiedTeamIds': qualifiedTeamIds,
     'qualificationFinalized': qualificationFinalized,
+    'published': published,
   };
 
   factory Tournament.fromJson(Map<String, dynamic> j) {
@@ -140,6 +146,7 @@ class Tournament {
               .map((e) => e as String)
               .toList(),
       qualificationFinalized: j['qualificationFinalized'] as bool? ?? false,
+      published: j['published'] as bool? ?? false,
     );
   }
 }
