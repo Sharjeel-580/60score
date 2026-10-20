@@ -18,6 +18,7 @@ import 'screens/settings_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/draft_screen.dart';
 import 'widgets/app_logo.dart';
+import 'widgets/splash_logo_image.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -157,28 +158,8 @@ class _SplashView extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const AppLogo(height: 150),
-                    const SizedBox(height: 24),
-                    RichText(
-                      text: const TextSpan(
-                        style: TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.2,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: '60',
-                            style: TextStyle(color: kSunsetOrange),
-                          ),
-                          TextSpan(
-                            text: 'Score',
-                            style: TextStyle(color: kSilver),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                    const SplashLogoImage(width: 300),
+                    const SizedBox(height: 4),
                     Text(
                       'CRICKET SCORING, SIMPLIFIED',
                       style: TextStyle(
