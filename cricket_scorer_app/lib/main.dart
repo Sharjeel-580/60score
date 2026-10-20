@@ -18,7 +18,6 @@ import 'screens/settings_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/draft_screen.dart';
 import 'widgets/app_logo.dart';
-import 'widgets/splash_image.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,8 +40,8 @@ class Score60App extends StatelessWidget {
   }
 }
 
-/// Splash: full-bleed artwork (60Score logo, Made by Sharjeel),
-/// then the app shell once local data is loaded.
+/// Splash (old style, per Dazy): logo, big app name, loading spinner and
+/// "Made by Sharjeel" — then the app shell once local data is loaded.
 class SplashGate extends StatefulWidget {
   const SplashGate({super.key});
 
@@ -125,16 +124,95 @@ class _SplashGateState extends State<SplashGate> {
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: const SizedBox.expand(
-          child: SplashImage(),
-        ),
-      );
+      return const _SplashView();
     }
     return AnimatedBuilder(
       animation: store,
       builder: (context, _) => HomeShell(store: store),
+    );
+  }
+}
+
+/// Splash screen: ocean gradient, approved logo, big "60Score" name,
+/// tagline, a loading spinner while data loads, and "Made by Sharjeel"
+/// at the bottom.
+class _SplashView extends StatelessWidget {
+  const _SplashView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [kNavyDeep, kNavy],
+          ),
+        ),
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AppLogo(height: 150),
+                    const SizedBox(height: 24),
+                    RichText(
+                      text: const TextSpan(
+                        style: TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.2,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '60',
+                            style: TextStyle(color: kSunsetOrange),
+                          ),
+                          TextSpan(
+                            text: 'Score',
+                            style: TextStyle(color: kSilver),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'CRICKET SCORING, SIMPLIFIED',
+                      style: TextStyle(
+                        fontSize: 12,
+                        letterSpacing: 3,
+                        color: kSilver.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 44),
+                    const CircularProgressIndicator(
+                      color: kSunsetOrange,
+                      strokeWidth: 3,
+                    ),
+                  ],
+                ),
+              ),
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 28,
+                child: Text(
+                  'Made by Sharjeel',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: kGold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
