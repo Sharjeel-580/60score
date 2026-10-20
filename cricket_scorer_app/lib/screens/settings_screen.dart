@@ -61,9 +61,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (c) => AlertDialog(
         title: const Text('Reset App'),
         content: const Text(
-          'Deletes all teams, players, matches, tournaments, drafts and '
-          'restores the default Super Sixty League Season 2K26 with its '
-          '18 fixtures. Backups and exported files are kept.',
+          'Deletes all teams, players, matches, tournaments and drafts. '
+          'The app is left completely empty — nothing is restored. '
+          'Backups and exported files are kept.',
         ),
         actions: [
           TextButton(
@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('App reset — default tournament restored'),
+        content: Text('App reset — all data deleted'),
       ),
     );
   }
@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               subtitle: const Text(
-                'Advanced — restore default data',
+                'Advanced — permanently delete all data',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
               iconColor: kRed,
