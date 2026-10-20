@@ -12,10 +12,13 @@
 //      Email/Password, Google, and Phone.
 // Until google-services.json is present, this service stays in offline mode
 // and every method reports [AuthUnavailable].
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Result of an auth attempt.
 enum AuthStatus {
@@ -42,6 +45,49 @@ class AuthService extends ChangeNotifier {
   bool _firebaseReady = false;
   bool get firebaseReady => _firebaseReady;
 
+  // ---------- Guest mode ----------
+  // "Continue as Guest" on the login gate is remembered on-device: a
+  // returning guest skips the gate and goes straight into the app.
+  // Choosing to log in clears the flag, so after a later log-out the
+  // gate comes back on the next launch.
+  static const _kGuestFlag = 'score60_guest_v1';
+  bool _guestMode = false;
+  bool get guestMode => _guestMode;
+
+  bool _initStarted = false;
+  bool _initDone = false;
+  final Completer<void> _readyCompleter = Completer<void>();
+
+  /// True once [init] has settled (Firebase ready OR failed). Never
+  /// true in environments where [init] was never called (tests).
+  bool get initDone => _initDone;
+
+  /// Waits until [init] has settled, at most [timeout]. Returns
+  /// immediately when init was never started or has already finished,
+  /// so the splash can never hang on it.
+  Future<void> waitReady(Duration timeout) async {
+    if (!_initStarted || _initDone) return;
+    try {
+      await _readyCompleter.future.timeout(timeout);
+    } catch (_) {
+      // Timed out: the caller treats Firebase as unavailable (offline).
+    }
+  }
+
+  Future<void> _persistGuestFlag() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kGuestFlag, _guestMode);
+    } catch (_) {}
+  }
+
+  /// Remembers the "Continue as Guest" choice on this device.
+  Future<void> setGuestMode() async {
+    _guestMode = true;
+    await _persistGuestFlag();
+    notifyListeners();
+  }
+
   User? get currentUser =>
       _firebaseReady ? FirebaseAuth.instance.currentUser : null;
   bool get isLoggedIn => currentUser != null;
@@ -50,16 +96,37 @@ class AuthService extends ChangeNotifier {
 
   /// Call once at startup. Never throws — falls back to offline mode.
   Future<void> init() async {
+    _initStarted = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _guestMode = prefs.getBool(_kGuestFlag) ?? false;
+    } catch (_) {}
     try {
       await Firebase.initializeApp();
       _firebaseReady = true;
-      FirebaseAuth.instance.authStateChanges().listen((_) {
+      FirebaseAuth.instance.authStateChanges().listen((user) {
+        if (user != null && _guestMode) {
+          // A real login supersedes the guest choice: after a later
+          // log-out the login gate comes back on the next launch.
+          _guestMode = false;
+          _persistGuestFlag();
+        }
         notifyListeners();
       });
+      // Wait (briefly) for the first auth event so the splash gate
+      // decision sees a settled currentUser, restored session included.
+      try {
+        await FirebaseAuth.instance
+            .authStateChanges()
+            .first
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
     } catch (_) {
       // No google-services.json (or other init failure): stay offline.
       _firebaseReady = false;
     }
+    _initDone = true;
+    if (!_readyCompleter.isCompleted) _readyCompleter.complete();
     notifyListeners();
   }
 
