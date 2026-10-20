@@ -153,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          if (trailing != null) trailing,
+          if (trailing != null) ...[trailing],
         ],
       ),
     );
