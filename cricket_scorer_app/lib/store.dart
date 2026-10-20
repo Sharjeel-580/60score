@@ -1,5 +1,9 @@
 // SharedPreferences repository for 60Score.
-// Everything is stored on the phone only — no network, no accounts.
+// Data is stored on the phone, scoped per identity (v1.3.1): the
+// signed-in account's uid, or 'guest'. A guest or a different account
+// on the same phone NEVER sees — or edits — another identity's data;
+// logging out hides the account's data until that same account logs
+// back in. Cloud sync (per account) lives in sync_service.dart.
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -33,6 +37,22 @@ class Store extends ChangeNotifier implements PlayoffStore {
   static const _kWelcome = 'score60_welcome_v1';
   static const _kLastModified = 'score60_last_modified_v1';
 
+  // Per-identity storage (v1.3.1): the data keys above are BASE names.
+  // Values actually live under '<base>__<identityId>', where the
+  // identity id is 'guest' or a signed-in account's uid ('locked' is a
+  // transient, always-empty scope used right after log-out). The
+  // un-suffixed keys are the pre-v1.3.1 legacy location — the first
+  // account to log in claims that data (see [claimLegacyData]);
+  // guests are never shown it. The welcome flag stays global.
+  String _identityId = 'guest';
+
+  /// The identity whose data is currently loaded: 'guest' or a
+  /// Firebase uid. Cloud services compare against this so one
+  /// identity's data can never be written to another's account.
+  String get identityId => _identityId;
+
+  String _scoped(String base) => '${base}__$_identityId';
+
   static int _counter = 0;
   static String newId(String prefix) {
     _counter++;
@@ -47,21 +67,86 @@ class Store extends ChangeNotifier implements PlayoffStore {
     // A fresh install has nothing saved, so every list simply stays
     // empty — the app ships with ZERO default/seeded content, and data
     // a user saved on this device loads back exactly as it was saved.
-    teams = _decodeList(prefs.getString(_kTeams), Team.fromJson) ?? teams;
-    tournaments =
-        _decodeList(prefs.getString(_kTournaments), Tournament.fromJson) ??
+    // Only the CURRENT identity's scope is read (see _scoped).
+    teams =
+        _decodeList(prefs.getString(_scoped(_kTeams)), Team.fromJson) ??
+            teams;
+    tournaments = _decodeList(
+            prefs.getString(_scoped(_kTournaments)), Tournament.fromJson) ??
         tournaments;
-    matches = _decodeList(prefs.getString(_kMatches), Match.fromJson) ??
-        matches;
+    matches =
+        _decodeList(prefs.getString(_scoped(_kMatches)), Match.fromJson) ??
+            matches;
     regPlayers =
-        _decodeList(prefs.getString(_kReg), RegPlayer.fromJson) ?? regPlayers;
-    drafts = _decodeList(prefs.getString(_kDrafts), Draft.fromJson) ?? drafts;
-    manualStats =
-        _decodeList(prefs.getString(_kManual), ManualStatEntry.fromJson) ??
+        _decodeList(prefs.getString(_scoped(_kReg)), RegPlayer.fromJson) ??
+            regPlayers;
+    drafts =
+        _decodeList(prefs.getString(_scoped(_kDrafts)), Draft.fromJson) ??
+            drafts;
+    manualStats = _decodeList(
+            prefs.getString(_scoped(_kManual)), ManualStatEntry.fromJson) ??
         manualStats;
     welcomeDone = prefs.getBool(_kWelcome) ?? false;
     loaded = true;
     notifyListeners();
+  }
+
+  /// Switches the active identity: pending cloud writes for the old
+  /// identity are cancelled (so its data can never land in another
+  /// account), in-memory data is cleared, and the new identity's saved
+  /// data — if any — is loaded. Other identities' saved data is never
+  /// touched.
+  Future<void> activateIdentity(String id) async {
+    SyncService().cancelPending();
+    PublishService().cancelPending();
+    _identityId = id;
+    teams = [];
+    tournaments = [];
+    matches = [];
+    regPlayers = [];
+    drafts = [];
+    manualStats = [];
+    loaded = false;
+    await load();
+  }
+
+  /// Activates a signed-in account's identity, first claiming any
+  /// pre-v1.3.1 (unscoped) device data into the account when the
+  /// account has no local data of its own yet.
+  Future<void> activateAccount(String uid) async {
+    await claimLegacyData(uid);
+    await activateIdentity(uid);
+  }
+
+  /// Moves pre-v1.3.1 device data (stored under the original unscoped
+  /// keys) into [uid]'s scope, then removes the legacy keys. Only runs
+  /// when the legacy data exists AND the account's own scope is still
+  /// empty, so an account that already has data is never overwritten,
+  /// and a second account finds nothing left to claim. Returns true
+  /// when data was claimed.
+  Future<bool> claimLegacyData(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString(_kTeams) == null) return false;
+    if (prefs.getString('${_kTeams}__$uid') != null) return false;
+    final dataKeys = [
+      _kTeams,
+      _kTournaments,
+      _kMatches,
+      _kReg,
+      _kDrafts,
+      _kManual,
+    ];
+    for (final base in dataKeys) {
+      final v = prefs.getString(base);
+      if (v != null) await prefs.setString('${base}__$uid', v);
+      await prefs.remove(base);
+    }
+    final lm = prefs.getInt(_kLastModified);
+    if (lm != null) {
+      await prefs.setInt('${_kLastModified}__$uid', lm);
+      await prefs.remove(_kLastModified);
+    }
+    return true;
   }
 
   /// Full data export for backups (§31). Versioned JSON map.
@@ -178,41 +263,42 @@ class Store extends ChangeNotifier implements PlayoffStore {
   Future<void> _saveAll([SharedPreferences? prefs]) async {
     final p = prefs ?? await SharedPreferences.getInstance();
     await p.setString(
-      _kTeams,
+      _scoped(_kTeams),
       jsonEncode(teams.map((t) => t.toJson()).toList()),
     );
     await p.setString(
-      _kTournaments,
+      _scoped(_kTournaments),
       jsonEncode(tournaments.map((t) => t.toJson()).toList()),
     );
     await p.setString(
-      _kMatches,
+      _scoped(_kMatches),
       jsonEncode(matches.map((m) => m.toJson()).toList()),
     );
     await p.setString(
-      _kReg,
+      _scoped(_kReg),
       jsonEncode(regPlayers.map((r) => r.toJson()).toList()),
     );
     await p.setString(
-      _kDrafts,
+      _scoped(_kDrafts),
       jsonEncode(drafts.map((d) => d.toJson()).toList()),
     );
     await p.setString(
-      _kManual,
+      _scoped(_kManual),
       jsonEncode(manualStats.map((e) => e.toJson()).toList()),
     );
     await p.setBool(_kWelcome, welcomeDone);
   }
 
   /// Wall-clock ms of the last local change (used by cloud sync).
+  /// Scoped per identity: each account's sync clock is its own.
   Future<int> getLastModified() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_kLastModified) ?? 0;
+    return prefs.getInt(_scoped(_kLastModified)) ?? 0;
   }
 
   Future<void> setLastModified(int ms) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kLastModified, ms);
+    await prefs.setInt(_scoped(_kLastModified), ms);
   }
 
   @override
