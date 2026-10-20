@@ -1,14 +1,16 @@
 // Tournaments list: view all tournaments, add new, edit names, delete.
-// The default tournament (Super Sixty League) stays, but users can manage
-// their own tournaments freely.
+// Every tournament is user-created data — the app seeds nothing.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../auth_service.dart';
 import '../models.dart';
+import '../publish_service.dart';
 import '../store.dart';
 import '../theme.dart';
+import 'published_search_screen.dart';
 import 'scorer_home_screen.dart';
 
 /// Create/edit tournament dialog (name, venue, optional logo).
@@ -174,11 +176,13 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   void initState() {
     super.initState();
     store.addListener(_onChanged);
+    AuthService().addListener(_onChanged);
   }
 
   @override
   void dispose() {
     store.removeListener(_onChanged);
+    AuthService().removeListener(_onChanged);
     super.dispose();
   }
 
@@ -189,6 +193,29 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   Future<void> _editTournament(Tournament? existing) async {
     final t = await showTournamentEditDialog(context, store, existing);
     if (t != null && mounted) setState(() {});
+  }
+
+  /// Publish / unpublish (owner only, login required). Publishing is
+  /// always this manual tap — nothing is ever published automatically.
+  Future<void> _togglePublish(Tournament t) async {
+    final wasPublished = t.published;
+    final svc = PublishService();
+    final err = wasPublished
+        ? await svc.unpublish(store, t)
+        : await svc.publish(store, t);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          err ??
+              (wasPublished
+                  ? 'Unpublished — it no longer appears in Search.'
+                  : 'Published — anyone can find it in Search '
+                      '(view-only).'),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteTournament(Tournament t) async {
@@ -214,6 +241,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
       ),
     );
     if (ok == true) {
+      if (t.published) PublishService().deletePublishedDoc(t.id);
       await store.deleteTournament(t.id);
       if (mounted) setState(() {});
     }
@@ -222,8 +250,23 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   @override
   Widget build(BuildContext context) {
     final tournaments = store.tournaments;
+    final loggedIn = AuthService().isLoggedIn;
     return Scaffold(
-      appBar: AppBar(title: const Text('Tournaments')),
+      appBar: AppBar(
+        title: const Text('Tournaments'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search published tournaments',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const PublishedSearchScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _editTournament(null),
         icon: const Icon(Icons.add),
@@ -240,7 +283,6 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
               itemCount: tournaments.length,
               itemBuilder: (context, i) {
                 final t = tournaments[i];
-                final isDefault = t.id == Store.defaultTournamentId;
                 final teamCount = t.teamIds.length;
                 final matchCount = store.matches
                     .where((m) => m.tournamentId == t.id)
@@ -252,35 +294,37 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
                   ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor:
-                          isDefault ? kGold.withValues(alpha: 0.25) : kPanel2,
-                      child: Icon(
+                      backgroundColor: kPanel2,
+                      child: const Icon(
                         Icons.emoji_events,
-                        color: isDefault ? kGold : kCyan,
+                        color: kCyan,
                       ),
                     ),
                     title: Row(
                       children: [
-                        Expanded(child: Text(t.name)),
-                        if (isDefault)
+                        Flexible(child: Text(t.name)),
+                        if (t.published) ...[
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
+                                horizontal: 7, vertical: 2),
                             decoration: BoxDecoration(
-                              color: kGold.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(10),
+                              color: kGreen.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: kGreen.withValues(alpha: 0.5)),
                             ),
                             child: const Text(
-                              'DEFAULT',
+                              'Published',
                               style: TextStyle(
+                                color: kGreen,
                                 fontSize: 10,
-                                color: kGold,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                     subtitle: Text(
@@ -290,6 +334,20 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (loggedIn)
+                          IconButton(
+                            icon: Icon(
+                              t.published
+                                  ? Icons.public
+                                  : Icons.public_off,
+                              size: 20,
+                              color: t.published ? kGreen : null,
+                            ),
+                            tooltip: t.published
+                                ? 'Unpublish'
+                                : 'Publish (public, view-only)',
+                            onPressed: () => _togglePublish(t),
+                          ),
                         IconButton(
                           icon: const Icon(Icons.edit, size: 20),
                           tooltip: 'Rename',
