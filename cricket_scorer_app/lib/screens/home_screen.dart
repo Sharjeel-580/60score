@@ -82,7 +82,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final defaultT = store.tournamentById(Store.defaultTournamentId);
+    // Hero features the most recently created tournament (the list is in
+    // creation order); with no tournaments the hero hides into an empty
+    // state — there is no seeded/default tournament anymore.
+    final featuredT =
+        store.tournaments.isEmpty ? null : store.tournaments.last;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -105,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
               // 2. HERO — featured tournament
-              _heroCard(context, defaultT),
+              _heroCard(context, featuredT),
               const SizedBox(height: 20),
               // 3. Quick actions (2x2 premium grid)
               _sectionTitle('Quick Actions', Icons.flash_on),
@@ -165,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return const EmptyState(
         icon: Icons.emoji_events_outlined,
         title: 'No tournament yet',
-        subtitle: 'The default tournament will appear here after setup.',
+        subtitle: 'Create a tournament and it will be featured here.',
       );
     }
     final fixtures =
@@ -402,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // (Old 5-card action row removed — replaced by _quickGrid 2x2.)
 
-  // ---------- 3. Default tournament card ----------
+  // ---------- 3. Featured tournament card ----------
   // (Old _tournamentCard/_metaChip removed — replaced by _heroCard.)
 
   /// Date range label from real fixture dates, e.g. '22 Oct - 08 Nov 2026'.
