@@ -1,1 +1,110 @@
-bmFtZTogY3JpY2tldF9zY29yZXJfYXBwCmRlc2NyaXB0aW9uOiAiNjBTY29yZSAtIG9mZmxpbmUgY3JpY2tldCBzY29yZXIsIGRyYWZ0IGFuZCByZWdpc3RyYXRpb24gZm9yIFN1cGVyIFNpeHR5IExlYWd1ZS4iCiMgVGhlIGZvbGxvd2luZyBsaW5lIHByZXZlbnRzIHRoZSBwYWNrYWdlIGZyb20gYmVpbmcgYWNjaWRlbnRhbGx5IHB1Ymxpc2hlZCB0bwojIHB1Yi5kZXYgdXNpbmcgYGZsdXR0ZXIgcHViIHB1Ymxpc2hgLiBUaGlzIGlzIHByZWZlcnJlZCBmb3IgcHJpdmF0ZSBwYWNrYWdlcy4KcHVibGlzaF90bzogJ25vbmUnICMgUmVtb3ZlIHRoaXMgbGluZSBpZiB5b3Ugd2lzaCB0byBwdWJsaXNoIHRvIHB1Yi5kZXYKCiMgVGhlIGZvbGxvd2luZyBkZWZpbmVzIHRoZSB2ZXJzaW9uIGFuZCBidWlsZCBudW1iZXIgZm9yIHlvdXIgYXBwbGljYXRpb24uCiMgQSB2ZXJzaW9uIG51bWJlciBpcyB0aHJlZSBudW1iZXJzIHNlcGFyYXRlZCBieSBkb3RzLCBsaWtlIDEuMi40MwojIGZvbGxvd2VkIGJ5IGFuIG9wdGlvbmFsIGJ1aWxkIG51bWJlciBzZXBhcmF0ZWQgYnkgYSArLgojIEJvdGggdGhlIHZlcnNpb24gYW5kIHRoZSBidWlsZGVyIG51bWJlciBtYXkgYmUgb3ZlcnJpZGRlbiBpbiBmbHV0dGVyCiMgYnVpbGQgYnkgc3BlY2lmeWluZyAtLWJ1aWxkLW5hbWUgYW5kIC0tYnVpbGQtbnVtYmVyLCByZXNwZWN0aXZlbHkuCiMgSW4gQW5kcm9pZCwgYnVpbGQtbmFtZSBpcyB1c2VkIGFzIHZlcnNpb25OYW1lIHdoaWxlIGJ1aWxkLW51bWJlciB1c2VkIGFzIHZlcnNpb25Db2RlLgojIFJlYWQgbW9yZSBhYm91dCBBbmRyb2lkIHZlcnNpb25pbmcgYXQgaHR0cHM6Ly9kZXZlbG9wZXIuYW5kcm9pZC5jb20vc3R1ZGlvL3B1Ymxpc2gvdmVyc2lvbmluZwojIEluIGlPUywgYnVpbGQtbmFtZSBpcyB1c2VkIGFzIENGQnVuZGxlU2hvcnRWZXJzaW9uU3RyaW5nIHdoaWxlIGJ1aWxkLW51bWJlciBpcyB1c2VkIGFzIENGQnVuZGxlVmVyc2lvbi4KIyBSZWFkIG1vcmUgYWJvdXQgaU9TIHZlcnNpb25pbmcgYXQKIyBodHRwczovL2RldmVsb3Blci5hcHBsZS5jb20vbGlicmFyeS9hcmNoaXZlL2RvY3VtZW50YXRpb24vR2VuZXJhbC9SZWZlcmVuY2UvSW5mb1BsaXN0S2V5UmVmZXJlbmNlL0FydGljbGVzL0NvcmVGb3VuZGF0aW9uS2V5cy5odG1sCiMgSW4gV2luZG93cywgYnVpbGQtbmFtZSBpcyB1c2VkIGFzIHRoZSBtYWpvciwgbWlub3IsIGFuZCBwYXRjaCBwYXJ0cwojIG9mIHRoZSBwcm9kdWN0IGFuZCBmaWxlIHZlcnNpb25zIHdoaWxlIGJ1aWxkLW51bWJlciBpcyB1c2VkIGFzIHRoZSBidWlsZCBzdWZmaXguCnZlcnNpb246IDEuMi4wKzEwCgplbnZpcm9ubWVudDoKICBzZGs6IF4zLjEzLjQKCiMgRGVwZW5kZW5jaWVzIHNwZWNpZnkgb3RoZXIgcGFja2FnZXMgdGhhdCB5b3VyIHBhY2thZ2UgbmVlZHMgaW4gb3JkZXIgdG8gd29yay4KIyBUbyBhdXRvbWF0aWNhbGx5IHVwZ3JhZGUgeW91ciBwYWNrYWdlIGRlcGVuZGVuY2llcyB0byB0aGUgbGF0ZXN0IHZlcnNpb25zCiMgY29uc2lkZXIgcnVubmluZyBgZmx1dHRlciBwdWIgdXBncmFkZSAtLW1ham9yLXZlcnNpb25zYC4gQWx0ZXJuYXRpdmVseSwKIyBkZXBlbmRlbmNpZXMgY2FuIGJlIG1hbnVhbGx5IHVwZGF0ZWQgYnkgY2hhbmdpbmcgdGhlIHZlcnNpb24gbnVtYmVycyBiZWxvdyB0bwojIHRoZSBsYXRlc3QgdmVyc2lvbiBhdmFpbGFibGUgb24gcHViLmRldi4gVG8gc2VlIHdoaWNoIGRlcGVuZGVuY2llcyBoYXZlIG5ld2VyCiMgdmVyc2lvbnMgYXZhaWxhYmxlLCBydW4gYGZsdXR0ZXIgcHViIG91dGRhdGVkYC4KZGVwZW5kZW5jaWVzOgogIGZsdXR0ZXI6CiAgICBzZGs6IGZsdXR0ZXIKCiAgIyBUaGUgZm9sbG93aW5nIGFkZHMgdGhlIEN1cGVydGlubyBJY29ucyBmb250IHRvIHlvdXIgYXBwbGljYXRpb24uCiAgIyBVc2Ugd2l0aCB0aGUgQ3VwZXJ0aW5vSWNvbnMgY2xhc3MgZm9yIGlPUyBzdHlsZSBpY29ucy4KICBjdXBlcnRpbm9faWNvbnM6IF4xLjAuOAogIHNoYXJlZF9wcmVmZXJlbmNlczogXjIuNS42CiAgZXhjZWw6IF40LjAuNgogIGZpbGVfcGlja2VyOiBeMTAuMy4xMAogIHNoYXJlX3BsdXM6IF4xMS4xLjAKICB1cmxfbGF1bmNoZXI6IF42LjMuMQogIGltYWdlX3BpY2tlcjogXjEuMS4yCiAgcGRmOiBeMy4xMS4zCiAgcGF0aF9wcm92aWRlcjogXjIuMS41CiAgIyBBY2NvdW50IGxvZ2luICsgY2xvdWQgc3luYyAoRmlyZWJhc2UpLiBSZXF1aXJlcyBnb29nbGUtc2VydmljZXMuanNvbgogICMgaW4gYW5kcm9pZC9hcHAvIOKAlCBzZWUgbGliL2F1dGhfc2VydmljZS5kYXJ0LgogIGZpcmViYXNlX2NvcmU6IF4zLjYuMAogIGZpcmViYXNlX2F1dGg6IF41LjMuMQogIGNsb3VkX2ZpcmVzdG9yZTogXjUuNS4wCiAgZ29vZ2xlX3NpZ25faW46IF42LjIuMgoKZGV2X2RlcGVuZGVuY2llczoKICBmbHV0dGVyX3Rlc3Q6CiAgICBzZGs6IGZsdXR0ZXIKCiAgIyBUaGUgImZsdXR0ZXJfbGludHMiIHBhY2thZ2UgYmVsb3cgY29udGFpbnMgYSBzZXQgb2YgcmVjb21tZW5kZWQgbGludHMgdG8KICAjIGVuY291cmFnZSBnb29kIGNvZGluZyBwcmFjdGljZXMuIFRoZSBsaW50IHNldCBwcm92aWRlZCBieSB0aGUgcGFja2FnZSBpcwogICMgYWN0aXZhdGVkIGluIHRoZSBgYW5hbHlzaXNfb3B0aW9ucy55YW1sYCBmaWxlIGxvY2F0ZWQgYXQgdGhlIHJvb3Qgb2YgeW91cgogICMgcGFja2FnZS4gU2VlIHRoYXQgZmlsZSBmb3IgaW5mb3JtYXRpb24gYWJvdXQgZGVhY3RpdmF0aW5nIHNwZWNpZmljIGxpbnQKICAjIHJ1bGVzIGFuZCBhY3RpdmF0aW5nIGFkZGl0aW9uYWwgb25lcy4KICBmbHV0dGVyX2xpbnRzOiBeNi4wLjAKCiMgRm9yIGluZm9ybWF0aW9uIG9uIHRoZSBnZW5lcmljIERhcnQgcGFydCBvZiB0aGlzIGZpbGUsIHNlZSB0aGUKIyBmb2xsb3dpbmcgcGFnZTogaHR0cHM6Ly9kYXJ0LmRldi90b29scy9wdWIvcHVic3BlYwoKIyBUaGUgZm9sbG93aW5nIHNlY3Rpb24gaXMgc3BlY2lmaWMgdG8gRmx1dHRlciBwYWNrYWdlcy4KZmx1dHRlcjoKCiAgIyBUaGUgZm9sbG93aW5nIGxpbmUgZW5zdXJlcyB0aGF0IHRoZSBNYXRlcmlhbCBJY29ucyBmb250IGlzCiAgIyBpbmNsdWRlZCB3aXRoIHlvdXIgYXBwbGljYXRpb24sIHNvIHRoYXQgeW91IGNhbiB1c2UgdGhlIGljb25zIGluCiAgIyB0aGUgbWF0ZXJpYWwgSWNvbnMgY2xhc3MuCiAgdXNlcy1tYXRlcmlhbC1kZXNpZ246IHRydWUKICBhc3NldHM6CiAgICAtIGFzc2V0cy9sb2dvLnBuZwogICAgLSBhc3NldHMvYXBwX2xvZ28ucG5nCiAgICAtIGFzc2V0cy9hcHBfaWNvbl92NC5wbmcKICAgIC0gYXNzZXRzL3NwbGFzaC5wbmcKICAgIC0gYXNzZXRzL2hvbWVfaGVhZGVyX2xvZ28ucG5nCiAgICAtIGFzc2V0cy9oZXJvX2Jhbm5lci5wbmcKCiAgIyBUbyBhZGQgYXNzZXRzIHRvIHlvdXIgYXBwbGljYXRpb24sIGFkZCBhbiBhc3NldHMgc2VjdGlvbiwgbGlrZSB0aGlzOgogICMgYXNzZXRzOgogICMgICAtIGltYWdlcy9hX2RvdF9idXJyLmpwZWcKICAjICAgLSBpbWFnZXMvYV9kb3RfaGFtLmpwZWcKCiAgIyBBbiBpbWFnZSBhc3NldCBjYW4gcmVmZXIgdG8gb25lIG9yIG1vcmUgcmVzb2x1dGlvbi1zcGVjaWZpYyAidmFyaWFudHMiLCBzZWUKICAjIGh0dHBzOi8vZmx1dHRlci5kZXYvdG8vcmVzb2x1dGlvbi1hd2FyZS1pbWFnZXMKCiAgIyBGb3IgZGV0YWlscyByZWdhcmRpbmcgYWRkaW5nIGFzc2V0cyBmcm9tIHBhY2thZ2UgZGVwZW5kZW5jaWVzLCBzZWUKICAjIGh0dHBzOi8vZmx1dHRlci5kZXYvdG8vYXNzZXQtZnJvbS1wYWNrYWdlCgogICMgVG8gYWRkIGN1c3RvbSBmb250cyB0byB5b3VyIGFwcGxpY2F0aW9uLCBhZGQgYSBmb250cyBzZWN0aW9uIGhlcmUsCiAgIyBpbiB0aGlzICJmbHV0dGVyIiBzZWN0aW9uLiBFYWNoIGVudHJ5IGluIHRoaXMgbGlzdCBzaG91bGQgaGF2ZSBhCiAgIyAiZmFtaWx5IiBrZXkgd2l0aCB0aGUgZm9udCBmYW1pbHkgbmFtZSwgYW5kIGEgImZvbnRzIiBrZXkgd2l0aCBhCiAgIyBsaXN0IGdpdmluZyB0aGUgYXNzZXQgYW5kIG90aGVyIGRlc2NyaXB0b3JzIGZvciB0aGUgZm9udC4gRm9yCiAgIyBleGFtcGxlOgogICMgZm9udHM6CiAgIyAgIC0gZmFtaWx5OiBTY2h5bGVyCiAgIyAgICAgZm9udHM6CiAgIyAgICAgICAtIGFzc2V0OiBmb250cy9TY2h5bGVyLVJlZ3VsYXIudHRmCiAgIyAgICAgICAtIGFzc2V0OiBmb250cy9TY2h5bGVyLUl0YWxpYy50dGYKICAjICAgICAgICAgc3R5bGU6IGl0YWxpYwogICMgICAtIGZhbWlseTogVHJhamFuIFBybwogICMgICAgIGZvbnRzOgogICMgICAgICAgLSBhc3NldDogZm9udHMvVHJhamFuUHJvLnR0ZgogICMgICAgICAgLSBhc3NldDogZm9udHMvVHJhamFuUHJvX0JvbGQudHRmCiAgIyAgICAgICAgIHdlaWdodDogNzAwCiAgIwogICMgRm9yIGRldGFpbHMgcmVnYXJkaW5nIGZvbnRzIGZyb20gcGFja2FnZSBkZXBlbmRlbmNpZXMsCiAgIyBzZWUgaHR0cHM6Ly9mbHV0dGVyLmRldi90by9mb250LWZyb20tcGFja2FnZQo=
+name: cricket_scorer_app
+description: "60Score - offline cricket scorer, draft and registration for Super Sixty League."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.2.0+10
+
+environment:
+  sdk: ^3.13.4
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  shared_preferences: ^2.5.6
+  excel: ^4.0.6
+  file_picker: ^10.3.10
+  share_plus: ^11.1.0
+  url_launcher: ^6.3.1
+  image_picker: ^1.1.2
+  pdf: ^3.11.3
+  path_provider: ^2.1.5
+  # Account login + cloud sync (Firebase). Requires google-services.json
+  # in android/app/ — see lib/auth_service.dart.
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.5.0
+  google_sign_in: ^6.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+  assets:
+    - assets/logo.png
+    - assets/app_logo.png
+    - assets/app_icon_v4.png
+    - assets/splash.png
+    - assets/home_header_logo.png
+    - assets/hero_banner.png
+
+  # To add assets to your application, add an assets section, like this:
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

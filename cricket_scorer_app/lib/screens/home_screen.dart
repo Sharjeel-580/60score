@@ -1,1 +1,520 @@
-Ly8gNjBTY29yZSBob21lIGRhc2hib2FyZCDigJQgdjEuMS4yIHJlZGVzaWduLgovLyBCdWlsdCBvbmx5IGZyb20gcmVhbCBwZXJzaXN0ZWQgc3RvcmUgZGF0YSDigJQgbm90aGluZyBoYXJkY29kZWQuCmltcG9ydCAncGFja2FnZTpmbHV0dGVyL21hdGVyaWFsLmRhcnQnOwoKaW1wb3J0ICcuLi9tb2RlbHMuZGFydCc7CmltcG9ydCAnLi4vc3RvcmUuZGFydCc7CmltcG9ydCAnLi4vdGhlbWUuZGFydCc7CmltcG9ydCAnLi4vd2lkZ2V0cy9wbGF5ZXJfYXZhdGFyLmRhcnQnOwppbXBvcnQgJ3JlZ2lzdHJhdGlvbl9zY3JlZW4uZGFydCc7CmltcG9ydCAnc2NvcmVyX2hvbWVfc2NyZWVuLmRhcnQnOwppbXBvcnQgJ3Njb3JlY2FyZF9zY3JlZW4uZGFydCc7CmltcG9ydCAnc2V0dGluZ3Nfc2NyZWVuLmRhcnQnOwppbXBvcnQgJ3RlYW1zX3NjcmVlbi5kYXJ0JzsKaW1wb3J0ICd0b3VybmFtZW50c19zY3JlZW4uZGFydCc7CgovLy8gU2hvcnQgZml4dHVyZSBkYXRlIHJhbmdlLCBlLmcuICcyMDI2LTEwLTIyVDE0OjAwOjAwJyAtPiAnMjIgT2N0IDIwMjYnLgpTdHJpbmcgX3Nob3J0RGF0ZShTdHJpbmcgaXNvKSB7CiAgdHJ5IHsKICAgIGZpbmFsIGQgPSBpc28uc3BsaXQoJ1QnKS5maXJzdC5zcGxpdCgnLScpOwogICAgaWYgKGQubGVuZ3RoICE9IDMpIHJldHVybiAnJzsKICAgIGNvbnN0IG1vbnRocyA9IFsKICAgICAgJ0phbicsICdGZWInLCAnTWFyJywgJ0FwcicsICdNYXknLCAnSnVuJywKICAgICAgJ0p1bCcsICdBdWcnLCAnU2VwJywgJ09jdCcsICdOb3YnLCAnRGVjJywKICAgIF07CiAgICBmaW5hbCBtb250aCA9IGludC5wYXJzZShkWzFdKTsKICAgIGlmIChtb250aCA8IDEgfHwgbW9udGggPiAxMikgcmV0dXJuICcnOwogICAgcmV0dXJuICcke2RbMl0udHJpbSgpLnBhZExlZnQoMiwgJzAnKX0gJHttb250aHNbbW9udGggLSAxXX0gJHtkWzBdfSc7CiAgfSBjYXRjaCAoXykgewogICAgcmV0dXJuICcnOwogIH0KfQoKY2xhc3MgSG9tZVNjcmVlbiBleHRlbmRzIFN0YXRlZnVsV2lkZ2V0IHsKICBmaW5hbCBTdG9yZSBzdG9yZTsKICBmaW5hbCBWb2lkQ2FsbGJhY2sgb25PcGVuRHJhd2VyOwogIGZpbmFsIFZhbHVlQ2hhbmdlZDxpbnQ+IG9uU2VsZWN0VGFiOwogIGNvbnN0IEhvbWVTY3JlZW4oe3N1cGVyLmtleSwgcmVxdWlyZWQgdGhpcy5zdG9yZSwgcmVxdWlyZWQgdGhpcy5vbk9wZW5EcmF3ZXIsIHJlcXVpcmVkIHRoaXMub25TZWxlY3RUYWJ9KTsKCiAgQG92ZXJyaWRlCiAgU3RhdGU8SG9tZVNjcmVlbj4gY3JlYXRlU3RhdGUoKSA9PiBfSG9tZVNjcmVlblN0YXRlKCk7Cn0KCmNsYXNzIF9RdWlja0l0ZW0gewogIGZpbmFsIEljb25EYXRhIGljb247CiAgZmluYWwgU3RyaW5nIHRpdGxlOwogIGZpbmFsIFN0cmluZyBzdWJ0aXRsZTsKICBmaW5hbCBWb2lkQ2FsbGJhY2sgb25UYXA7CiAgY29uc3QgX1F1aWNrSXRlbSh0aGlzLmljb24sIHRoaXMudGl0bGUsIHRoaXMuc3VidGl0bGUsIHRoaXMub25UYXApOwp9CgpjbGFzcyBfSG9tZVNjcmVlblN0YXRlIGV4dGVuZHMgU3RhdGU8SG9tZVNjcmVlbj4gewogIEBvdmVycmlkZQogIHZvaWQgaW5pdFN0YXRlKCkgewogICAgc3VwZXIuaW5pdFN0YXRlKCk7CiAgICB3aWRnZXQuc3RvcmUuYWRkTGlzdGVuZXIoX29uU3RvcmVDaGFuZ2VkKTsKICB9CgogIEBvdmVycmlkZQogIHZvaWQgZGlzcG9zZSgpIHsKICAgIHdpZGdldC5zdG9yZS5yZW1vdmVMaXN0ZW5lcihfb25TdG9yZUNoYW5nZWQpOwogICAgc3VwZXIuZGlzcG9zZSgpOwogIH0KCiAgdm9pZCBfb25TdG9yZUNoYW5nZWQoKSB7CiAgICBpZiAobW91bnRlZCkgc2V0U3RhdGUoKCkge30pOwogIH0KCiAgU3RvcmUgZ2V0IHN0b3JlID0+IHdpZGdldC5zdG9yZTsKCiAgdm9pZCBfb3BlblRvdXJuYW1lbnQoQnVpbGRDb250ZXh0IGNvbnRleHQsIFRvdXJuYW1lbnQgdCkgewogICAgTmF2aWdhdG9yLnB1c2goCiAgICAgIGNvbnRleHQsCiAgICAgIE1hdGVyaWFsUGFnZVJvdXRlKAogICAgICAgIGJ1aWxkZXI6IChfKSA9PiBUb3VybmFtZW50RGV0YWlsU2NyZWVuKHN0b3JlOiBzdG9yZSwgdG91cm5hbWVudDogdCksCiAgICAgICksCiAgICApOwogIH0KCiAgdm9pZCBfcHVzaChCdWlsZENvbnRleHQgY29udGV4dCwgV2lkZ2V0IHBhZ2UpIHsKICAgIE5hdmlnYXRvci5wdXNoKGNvbnRleHQsIE1hdGVyaWFsUGFnZVJvdXRlKGJ1aWxkZXI6IChfKSA9PiBwYWdlKSk7CiAgfQoKICBAb3ZlcnJpZGUKICBXaWRnZXQgYnVpbGQoQnVpbGRDb250ZXh0IGNvbnRleHQpIHsKICAgIGZpbmFsIGRlZmF1bHRUID0gc3RvcmUudG91cm5hbWVudEJ5SWQoU3RvcmUuZGVmYXVsdFRvdXJuYW1lbnRJZCk7CiAgICByZXR1cm4gQ29udGFpbmVyKAogICAgICBkZWNvcmF0aW9uOiBjb25zdCBCb3hEZWNvcmF0aW9uKAogICAgICAgIGdyYWRpZW50OiBMaW5lYXJHcmFkaWVudCgKICAgICAgICAgIGNvbG9yczogW2tPY2VhbkJsYWNrLCBrU3Vuc2V0TmF2eURlZXBdLAogICAgICAgICAgYmVnaW46IEFsaWdubWVudC50b3BDZW50ZXIsCiAgICAgICAgICBlbmQ6IEFsaWdubWVudC5ib3R0b21DZW50ZXIsCiAgICAgICAgKSwKICAgICAgKSwKICAgICAgY2hpbGQ6IFNhZmVBcmVhKAogICAgICAgIGNoaWxkOiBTaW5nbGVDaGlsZFNjcm9sbFZpZXcoCiAgICAgICAgICBwYWRkaW5nOiBjb25zdCBFZGdlSW5zZXRzLmZyb21MVFJCKDE2LCA4LCAxNiwgMjQpLAogICAgICAgICAgY2hpbGQ6IENvbHVtbigKICAgICAgICAgICAgY3Jvc3NBeGlzQWxpZ25tZW50OiBDcm9zc0F4aXNBbGlnbm1lbnQuc3RyZXRjaCwKICAgICAgICAgICAgY2hpbGRyZW46IFsKICAgICAgICAgICAgICAvLyAxLiBCcmFuZGVkIGhlYWRlcgogICAgICAgICAgICAgIEJyYW5kZWRIZWFkZXIoCiAgICAgICAgICAgICAgICBvbk1lbnU6IHdpZGdldC5vbk9wZW5EcmF3ZXIsCiAgICAgICAgICAgICAgICBvblNldHRpbmdzOiAoKSA9PgogICAgICAgICAgICAgICAgICAgIF9wdXNoKGNvbnRleHQsIFNldHRpbmdzU2NyZWVuKHN0b3JlOiBzdG9yZSkpLAogICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgY29uc3QgU2l6ZWRCb3goaGVpZ2h0OiAxNiksCiAgICAgICAgICAgICAgLy8gMi4gSEVSTyDigJQgZmVhdHVyZWQgdG91cm5hbWVudAogICAgICAgICAgICAgIF9oZXJvQ2FyZChjb250ZXh0LCBkZWZhdWx0VCksCiAgICAgICAgICAgICAgY29uc3QgU2l6ZWRCb3goaGVpZ2h0OiAyMCksCiAgICAgICAgICAgICAgLy8gMy4gUXVpY2sgYWN0aW9ucyAoMngyIHByZW1pdW0gZ3JpZCkKICAgICAgICAgICAgICBfc2VjdGlvblRpdGxlKCdRdWljayBBY3Rpb25zJywgSWNvbnMuZmxhc2hfb24pLAogICAgICAgICAgICAgIGNvbnN0IFNpemVkQm94KGhlaWdodDogMTApLAogICAgICAgICAgICAgIF9xdWlja0dyaWQoY29udGV4dCksCiAgICAgICAgICAgICAgY29uc3QgU2l6ZWRCb3goaGVpZ2h0OiAyMCksCiAgICAgICAgICAgICAgLy8gNC4gUmVjZW50IG1hdGNoZXMKICAgICAgICAgICAgICBfc2VjdGlvblRpdGxlKCdSZWNlbnQgTWF0Y2hlcycsIEljb25zLmhpc3RvcnksCiAgICAgICAgICAgICAgICAgIHRyYWlsaW5nOgogICAgICAgICAgICAgICAgICAgICAgVmlld0FsbExpbmsob25UYXA6ICgpID0+IHdpZGdldC5vblNlbGVjdFRhYigxKSkpLAogICAgICAgICAgICAgIGNvbnN0IFNpemVkQm94KGhlaWdodDogMTApLAogICAgICAgICAgICAgIF9yZWNlbnRNYXRjaGVzKGNvbnRleHQpLAogICAgICAgICAgICBdLAogICAgICAgICAgKSwKICAgICAgICApLAogICAgICApLAogICAgKTsKICB9CgogIC8vLyBTbWFsbCBwcmVtaXVtIHNlY3Rpb24gaGVhZGluZyDigJQgb3JhbmdlIGFjY2VudCBiYXIuCiAgV2lkZ2V0IF9zZWN0aW9uVGl0bGUoU3RyaW5nIHRpdGxlLCBJY29uRGF0YSBpY29uLCB7V2lkZ2V0PyB0cmFpbGluZ30pIHsKICAgIHJldHVybiBQYWRkaW5nKAogICAgICBwYWRkaW5nOiBjb25zdCBFZGdlSW5zZXRzLmZyb21MVFJCKDQsIDAsIDQsIDApLAogICAgICBjaGlsZDogUm93KAogICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICBDb250YWluZXIoCiAgICAgICAgICAgIHdpZHRoOiA0LAogICAgICAgICAgICBoZWlnaHQ6IDIwLAogICAgICAgICAgICBkZWNvcmF0aW9uOiBCb3hEZWNvcmF0aW9uKAogICAgICAgICAgICAgIGdyYWRpZW50OiBrU3Vuc2V0R3JhZGllbnQsCiAgICAgICAgICAgICAgYm9yZGVyUmFkaXVzOiBCb3JkZXJSYWRpdXMuY2lyY3VsYXIoMiksCiAgICAgICAgICAgICksCiAgICAgICAgICApLAogICAgICAgICAgY29uc3QgU2l6ZWRCb3god2lkdGg6IDEwKSwKICAgICAgICAgIEljb24oaWNvbiwgY29sb3I6IGtTdW5zZXRPcmFuZ2UsIHNpemU6IDE4KSwKICAgICAgICAgIGNvbnN0IFNpemVkQm94KHdpZHRoOiA2KSwKICAgICAgICAgIEV4cGFuZGVkKAogICAgICAgICAgICBjaGlsZDogVGV4dCgKICAgICAgICAgICAgICB0aXRsZSwKICAgICAgICAgICAgICBzdHlsZTogY29uc3QgVGV4dFN0eWxlKAogICAgICAgICAgICAgICAgY29sb3I6IGtXaGl0ZSwKICAgICAgICAgICAgICAgIGZvbnRTaXplOiAxNywKICAgICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzgwMCwKICAgICAgICAgICAgICAgIGxldHRlclNwYWNpbmc6IDAuMywKICAgICAgICAgICAgICApLAogICAgICAgICAgICApLAogICAgICAgICAgKSwKICAgICAgICAgIGlmICh0cmFpbGluZyAhPSBudWxsKSB0cmFpbGluZywKICAgICAgICBdLAogICAgICApLAogICAgKTsKICB9CgogIC8vIC0tLS0tLS0tLS0gMi4gSEVSTyBjYXJkIOKAlCBzdW5zZXQgZ3JhZGllbnQsIGJpZyB0b3VybmFtZW50IG5hbWUgLS0tLS0tLS0tLQogIFdpZGdldCBfaGVyb0NhcmQoQnVpbGRDb250ZXh0IGNvbnRleHQsIFRvdXJuYW1lbnQ/IHQpIHsKICAgIGlmICh0ID09IG51bGwpIHsKICAgICAgcmV0dXJuIGNvbnN0IEVtcHR5U3RhdGUoCiAgICAgICAgaWNvbjogSWNvbnMuZW1vamlfZXZlbnRzX291dGxpbmVkLAogICAgICAgIHRpdGxlOiAnTm8gdG91cm5hbWVudCB5ZXQnLAogICAgICAgIHN1YnRpdGxlOiAnVGhlIGRlZmF1bHQgdG91cm5hbWVudCB3aWxsIGFwcGVhciBoZXJlIGFmdGVyIHNldHVwLicsCiAgICAgICk7CiAgICB9CiAgICBmaW5hbCBmaXh0dXJlcyA9CiAgICAgICAgc3RvcmUubWF0Y2hlcy53aGVyZSgobSkgPT4gbS50b3VybmFtZW50SWQgPT0gdC5pZCkudG9MaXN0KCk7CiAgICBmaW5hbCBkYXRlUmFuZ2UgPSBfZml4dHVyZURhdGVSYW5nZShmaXh0dXJlcyk7CiAgICBmaW5hbCB0ZWFtQ291bnQgPSB0LnRlYW1JZHMubGVuZ3RoOwogICAgcmV0dXJuIEdlc3R1cmVEZXRlY3RvcigKICAgICAgb25UYXA6ICgpID0+IF9vcGVuVG91cm5hbWVudChjb250ZXh0LCB0KSwKICAgICAgY2hpbGQ6IENvbnRhaW5lcigKICAgICAgICBwYWRkaW5nOiBjb25zdCBFZGdlSW5zZXRzLmFsbCgyMCksCiAgICAgICAgZGVjb3JhdGlvbjogQm94RGVjb3JhdGlvbigKICAgICAgICAgIGdyYWRpZW50OiBjb25zdCBMaW5lYXJHcmFkaWVudCgKICAgICAgICAgICAgY29sb3JzOiBba1N1bnNldE9yYW5nZSwga1N1bnNldE5hdnldLAogICAgICAgICAgICBiZWdpbjogQWxpZ25tZW50LnRvcExlZnQsCiAgICAgICAgICAgIGVuZDogQWxpZ25tZW50LmJvdHRvbVJpZ2h0LAogICAgICAgICAgKSwKICAgICAgICAgIGJvcmRlclJhZGl1czogQm9yZGVyUmFkaXVzLmNpcmN1bGFyKDI0KSwKICAgICAgICAgIGJvcmRlcjogQm9yZGVyLmFsbCgKICAgICAgICAgICAgY29sb3I6IGtTdW5zZXRPcmFuZ2VTb2Z0LndpdGhWYWx1ZXMoYWxwaGE6IDAuNSksCiAgICAgICAgICAgIHdpZHRoOiAxLAogICAgICAgICAgKSwKICAgICAgICAgIGJveFNoYWRvdzogWwogICAgICAgICAgICBCb3hTaGFkb3coCiAgICAgICAgICAgICAgY29sb3I6IGtTdW5zZXRPcmFuZ2Uud2l0aFZhbHVlcyhhbHBoYTogMC4zNSksCiAgICAgICAgICAgICAgYmx1clJhZGl1czogMjgsCiAgICAgICAgICAgICAgb2Zmc2V0OiBjb25zdCBPZmZzZXQoMCwgMTApLAogICAgICAgICAgICApLAogICAgICAgICAgICBCb3hTaGFkb3coCiAgICAgICAgICAgICAgY29sb3I6IENvbG9ycy5ibGFjay53aXRoVmFsdWVzKGFscGhhOiAwLjQpLAogICAgICAgICAgICAgIGJsdXJSYWRpdXM6IDE2LAogICAgICAgICAgICAgIG9mZnNldDogY29uc3QgT2Zmc2V0KDAsIDYpLAogICAgICAgICAgICApLAogICAgICAgICAgXSwKICAgICAgICApLAogICAgICAgIGNoaWxkOiBDb2x1bW4oCiAgICAgICAgICBjcm9zc0F4aXNBbGlnbm1lbnQ6IENyb3NzQXhpc0FsaWdubWVudC5zdGFydCwKICAgICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICAgIENvbnRhaW5lcigKICAgICAgICAgICAgICBwYWRkaW5nOgogICAgICAgICAgICAgICAgICBjb25zdCBFZGdlSW5zZXRzLnN5bW1ldHJpYyhob3Jpem9udGFsOiAxMiwgdmVydGljYWw6IDYpLAogICAgICAgICAgICAgIGRlY29yYXRpb246IEJveERlY29yYXRpb24oCiAgICAgICAgICAgICAgICBjb2xvcjogQ29sb3JzLmJsYWNrLndpdGhWYWx1ZXMoYWxwaGE6IDAuMzUpLAogICAgICAgICAgICAgICAgYm9yZGVyUmFkaXVzOiBCb3JkZXJSYWRpdXMuY2lyY3VsYXIoMjApLAogICAgICAgICAgICAgICAgYm9yZGVyOiBCb3JkZXIuYWxsKAogICAgICAgICAgICAgICAgICBjb2xvcjogQ29sb3JzLndoaXRlLndpdGhWYWx1ZXMoYWxwaGE6IDAuMjUpLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICApLAogICAgICAgICAgICAgIGNoaWxkOiBjb25zdCBUZXh0KAogICAgICAgICAgICAgICAgJ+KYhSBGRUFUVVJFRCBUT1VSTkFNRU5UJywKICAgICAgICAgICAgICAgIHN0eWxlOiBUZXh0U3R5bGUoCiAgICAgICAgICAgICAgICAgIGNvbG9yOiBrV2hpdGUsCiAgICAgICAgICAgICAgICAgIGZvbnRTaXplOiAxMSwKICAgICAgICAgICAgICAgICAgZm9udFdlaWdodDogRm9udFdlaWdodC53ODAwLAogICAgICAgICAgICAgICAgICBsZXR0ZXJTcGFjaW5nOiAxLjQsCiAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICksCiAgICAgICAgICAgICksCiAgICAgICAgICAgIGNvbnN0IFNpemVkQm94KGhlaWdodDogMTQpLAogICAgICAgICAgICBUZXh0KAogICAgICAgICAgICAgIHQubmFtZSwKICAgICAgICAgICAgICBzdHlsZTogY29uc3QgVGV4dFN0eWxlKAogICAgICAgICAgICAgICAgY29sb3I6IGtXaGl0ZSwKICAgICAgICAgICAgICAgIGZvbnRTaXplOiAyNywKICAgICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzkwMCwKICAgICAgICAgICAgICAgIGxldHRlclNwYWNpbmc6IDAuMywKICAgICAgICAgICAgICAgIGhlaWdodDogMS4xNSwKICAgICAgICAgICAgICApLAogICAgICAgICAgICApLAogICAgICAgICAgICBjb25zdCBTaXplZEJveChoZWlnaHQ6IDEyKSwKICAgICAgICAgICAgV3JhcCgKICAgICAgICAgICAgICBzcGFjaW5nOiA4LAogICAgICAgICAgICAgIHJ1blNwYWNpbmc6IDgsCiAgICAgICAgICAgICAgY2hpbGRyZW46IFsKICAgICAgICAgICAgICAgIF9oZXJvQ2hpcChJY29ucy5ncm91cHMsICckdGVhbUNvdW50IFRlYW1zJyksCiAgICAgICAgICAgICAgICBpZiAoZGF0ZVJhbmdlLmlzTm90RW1wdHkpCiAgICAgICAgICAgICAgICAgIF9oZXJvQ2hpcChJY29ucy5jYWxlbmRhcl9tb250aCwgZGF0ZVJhbmdlKSwKICAgICAgICAgICAgICAgIF9oZXJvQ2hpcChJY29ucy5zcG9ydHNfY3JpY2tldCwKICAgICAgICAgICAgICAgICAgICAnJHtmaXh0dXJlcy5sZW5ndGh9IE1hdGNoZXMnKSwKICAgICAgICAgICAgICBdLAogICAgICAgICAgICApLAogICAgICAgICAgICBjb25zdCBTaXplZEJveChoZWlnaHQ6IDE2KSwKICAgICAgICAgICAgQ29udGFpbmVyKAogICAgICAgICAgICAgIHBhZGRpbmc6IGNvbnN0IEVkZ2VJbnNldHMuc3ltbWV0cmljKAogICAgICAgICAgICAgICAgICBob3Jpem9udGFsOiAxOCwgdmVydGljYWw6IDEyKSwKICAgICAgICAgICAgICBkZWNvcmF0aW9uOiBCb3hEZWNvcmF0aW9uKAogICAgICAgICAgICAgICAgY29sb3I6IGtXaGl0ZSwKICAgICAgICAgICAgICAgIGJvcmRlclJhZGl1czogQm9yZGVyUmFkaXVzLmNpcmN1bGFyKDE0KSwKICAgICAgICAgICAgICApLAogICAgICAgICAgICAgIGNoaWxkOiBjb25zdCBUZXh0KAogICAgICAgICAgICAgICAgJ1ZpZXcgVG91cm5hbWVudCDihpInLAogICAgICAgICAgICAgICAgc3R5bGU6IFRleHRTdHlsZSgKICAgICAgICAgICAgICAgICAgY29sb3I6IGtTdW5zZXRPcmFuZ2VEZWVwLAogICAgICAgICAgICAgICAgICBmb250U2l6ZTogMTQsCiAgICAgICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzgwMCwKICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgKSwKICAgICAgICAgIF0sCiAgICAgICAgKSwKICAgICAgKSwKICAgICk7CiAgfQoKICBXaWRnZXQgX2hlcm9DaGlwKEljb25EYXRhIGljb24sIFN0cmluZyB0ZXh0KSB7CiAgICByZXR1cm4gQ29udGFpbmVyKAogICAgICBwYWRkaW5nOiBjb25zdCBFZGdlSW5zZXRzLnN5bW1ldHJpYyhob3Jpem9udGFsOiAxMiwgdmVydGljYWw6IDcpLAogICAgICBkZWNvcmF0aW9uOiBCb3hEZWNvcmF0aW9uKAogICAgICAgIGNvbG9yOiBDb2xvcnMud2hpdGUud2l0aFZhbHVlcyhhbHBoYTogMC4xOCksCiAgICAgICAgYm9yZGVyUmFkaXVzOiBCb3JkZXJSYWRpdXMuY2lyY3VsYXIoMjApLAogICAgICAgIGJvcmRlcjogQm9yZGVyLmFsbCgKICAgICAgICAgIGNvbG9yOiBDb2xvcnMud2hpdGUud2l0aFZhbHVlcyhhbHBoYTogMC4zKSwKICAgICAgICApLAogICAgICApLAogICAgICBjaGlsZDogUm93KAogICAgICAgIG1haW5BeGlzU2l6ZTogTWFpbkF4aXNTaXplLm1pbiwKICAgICAgICBjaGlsZHJlbjogWwogICAgICAgICAgSWNvbihpY29uLCBjb2xvcjoga1doaXRlLCBzaXplOiAxNCksCiAgICAgICAgICBjb25zdCBTaXplZEJveCh3aWR0aDogNiksCiAgICAgICAgICBUZXh0KAogICAgICAgICAgICB0ZXh0LAogICAgICAgICAgICBzdHlsZTogY29uc3QgVGV4dFN0eWxlKAogICAgICAgICAgICAgIGNvbG9yOiBrV2hpdGUsCiAgICAgICAgICAgICAgZm9udFNpemU6IDEyLAogICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzcwMCwKICAgICAgICAgICAgKSwKICAgICAgICAgICksCiAgICAgICAgXSwKICAgICAgKSwKICAgICk7CiAgfQoKICAvLyAtLS0tLS0tLS0tIDMuIFF1aWNrIGFjdGlvbnMg4oCUIDJ4MiBvY2VhbiBncmlkIHdpdGggc3Vuc2V0IGljb25zIC0tLS0tLS0tLS0KICBXaWRnZXQgX3F1aWNrR3JpZChCdWlsZENvbnRleHQgY29udGV4dCkgewogICAgdm9pZCBwdXNoKFdpZGdldCBwYWdlKSA9PiBfcHVzaChjb250ZXh0LCBwYWdlKTsKICAgIGZpbmFsIGl0ZW1zID0gWwogICAgICBfUXVpY2tJdGVtKEljb25zLnNwb3J0c19jcmlja2V0LCAnTmV3IE1hdGNoJywgJ1F1aWNrIC8gQ3VzdG9tJywKICAgICAgICAgICgpID0+IHdpZGdldC5vblNlbGVjdFRhYigyKSksCiAgICAgIF9RdWlja0l0ZW0oSWNvbnMuZW1vamlfZXZlbnRzLCAnVG91cm5hbWVudHMnLCAnVmlldyAmIE1hbmFnZScsCiAgICAgICAgICAoKSA9PiBwdXNoKFRvdXJuYW1lbnRzU2NyZWVuKHN0b3JlOiBzdG9yZSkpKSwKICAgICAgX1F1aWNrSXRlbShJY29ucy5ncm91cHMsICdUZWFtcycsICdBZGQgLyBNYW5hZ2UnLAogICAgICAgICAgKCkgPT4gcHVzaChUZWFtc1NjcmVlbihzdG9yZTogc3RvcmUpKSksCiAgICAgIF9RdWlja0l0ZW0oSWNvbnMucGVyc29uLCAnUGxheWVycycsICdSZWdpc3RlcmVkJywKICAgICAgICAgICgpID0+IHB1c2goUmVnaXN0cmF0aW9uU2NyZWVuKHN0b3JlOiBzdG9yZSkpKSwKICAgIF07CiAgICByZXR1cm4gR3JpZFZpZXcuYnVpbGRlcigKICAgICAgc2hyaW5rV3JhcDogdHJ1ZSwKICAgICAgcGh5c2ljczogY29uc3QgTmV2ZXJTY3JvbGxhYmxlU2Nyb2xsUGh5c2ljcygpLAogICAgICBncmlkRGVsZWdhdGU6IGNvbnN0IFNsaXZlckdyaWREZWxlZ2F0ZVdpdGhGaXhlZENyb3NzQXhpc0NvdW50KAogICAgICAgIGNyb3NzQXhpc0NvdW50OiAyLAogICAgICAgIG1haW5BeGlzU3BhY2luZzogMTIsCiAgICAgICAgY3Jvc3NBeGlzU3BhY2luZzogMTIsCiAgICAgICAgY2hpbGRBc3BlY3RSYXRpbzogMS41NSwKICAgICAgKSwKICAgICAgaXRlbUNvdW50OiBpdGVtcy5sZW5ndGgsCiAgICAgIGl0ZW1CdWlsZGVyOiAoYywgaSkgPT4gX3F1aWNrQ2FyZChpdGVtc1tpXSksCiAgICApOwogIH0KCiAgV2lkZ2V0IF9xdWlja0NhcmQoX1F1aWNrSXRlbSBpdGVtKSB7CiAgICByZXR1cm4gTWF0ZXJpYWwoCiAgICAgIGNvbG9yOiBDb2xvcnMudHJhbnNwYXJlbnQsCiAgICAgIGNoaWxkOiBJbmtXZWxsKAogICAgICAgIGJvcmRlclJhZGl1czogQm9yZGVyUmFkaXVzLmNpcmN1bGFyKDIwKSwKICAgICAgICBvblRhcDogaXRlbS5vblRhcCwKICAgICAgICBjaGlsZDogQ29udGFpbmVyKAogICAgICAgICAgcGFkZGluZzogY29uc3QgRWRnZUluc2V0cy5hbGwoMTYpLAogICAgICAgICAgZGVjb3JhdGlvbjogQm94RGVjb3JhdGlvbigKICAgICAgICAgICAgZ3JhZGllbnQ6IGtPY2VhbkNhcmRHcmFkaWVudCwKICAgICAgICAgICAgYm9yZGVyUmFkaXVzOiBCb3JkZXJSYWRpdXMuY2lyY3VsYXIoMjApLAogICAgICAgICAgICBib3JkZXI6IEJvcmRlci5hbGwoCiAgICAgICAgICAgICAgY29sb3I6IGtPY2VhblN0ZWVsLndpdGhWYWx1ZXMoYWxwaGE6IDAuNCksCiAgICAgICAgICAgICAgd2lkdGg6IDEsCiAgICAgICAgICAgICksCiAgICAgICAgICAgIGJveFNoYWRvdzogWwogICAgICAgICAgICAgIEJveFNoYWRvdygKICAgICAgICAgICAgICAgIGNvbG9yOiBDb2xvcnMuYmxhY2sud2l0aFZhbHVlcyhhbHBoYTogMC4zNSksCiAgICAgICAgICAgICAgICBibHVyUmFkaXVzOiAxNCwKICAgICAgICAgICAgICAgIG9mZnNldDogY29uc3QgT2Zmc2V0KDAsIDYpLAogICAgICAgICAgICAgICksCiAgICAgICAgICAgIF0sCiAgICAgICAgICApLAogICAgICAgICAgY2hpbGQ6IENvbHVtbigKICAgICAgICAgICAgY3Jvc3NBeGlzQWxpZ25tZW50OiBDcm9zc0F4aXNBbGlnbm1lbnQuc3RhcnQsCiAgICAgICAgICAgIG1haW5BeGlzQWxpZ25tZW50OiBNYWluQXhpc0FsaWdubWVudC5jZW50ZXIsCiAgICAgICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICAgICAgQ29udGFpbmVyKAogICAgICAgICAgICAgICAgcGFkZGluZzogY29uc3QgRWRnZUluc2V0cy5hbGwoMTApLAogICAgICAgICAgICAgICAgZGVjb3JhdGlvbjogQm94RGVjb3JhdGlvbigKICAgICAgICAgICAgICAgICAgZ3JhZGllbnQ6IGtTdW5zZXRHcmFkaWVudCwKICAgICAgICAgICAgICAgICAgYm9yZGVyUmFkaXVzOiBCb3JkZXJSYWRpdXMuY2lyY3VsYXIoMTQpLAogICAgICAgICAgICAgICAgICBib3hTaGFkb3c6IFsKICAgICAgICAgICAgICAgICAgICBCb3hTaGFkb3coCiAgICAgICAgICAgICAgICAgICAgICBjb2xvcjoga1N1bnNldE9yYW5nZS53aXRoVmFsdWVzKGFscGhhOiAwLjQpLAogICAgICAgICAgICAgICAgICAgICAgYmx1clJhZGl1czogMTIsCiAgICAgICAgICAgICAgICAgICAgICBvZmZzZXQ6IGNvbnN0IE9mZnNldCgwLCA0KSwKICAgICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgICBdLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgIGNoaWxkOiBJY29uKGl0ZW0uaWNvbiwgY29sb3I6IGtXaGl0ZSwgc2l6ZTogMjIpLAogICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgY29uc3QgU2l6ZWRCb3goaGVpZ2h0OiAxMCksCiAgICAgICAgICAgICAgVGV4dCgKICAgICAgICAgICAgICAgIGl0ZW0udGl0bGUsCiAgICAgICAgICAgICAgICBtYXhMaW5lczogMSwKICAgICAgICAgICAgICAgIG92ZXJmbG93OiBUZXh0T3ZlcmZsb3cuZWxsaXBzaXMsCiAgICAgICAgICAgICAgICBzdHlsZTogY29uc3QgVGV4dFN0eWxlKAogICAgICAgICAgICAgICAgICBjb2xvcjoga1doaXRlLAogICAgICAgICAgICAgICAgICBmb250U2l6ZTogMTUsCiAgICAgICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzgwMCwKICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICBUZXh0KAogICAgICAgICAgICAgICAgaXRlbS5zdWJ0aXRsZSwKICAgICAgICAgICAgICAgIG1heExpbmVzOiAxLAogICAgICAgICAgICAgICAgb3ZlcmZsb3c6IFRleHRPdmVyZmxvdy5lbGxpcHNpcywKICAgICAgICAgICAgICAgIHN0eWxlOiBjb25zdCBUZXh0U3R5bGUoCiAgICAgICAgICAgICAgICAgIGNvbG9yOiBrT2NlYW5GYWludCwKICAgICAgICAgICAgICAgICAgZm9udFNpemU6IDEyLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICApLAogICAgICAgICAgICBdLAogICAgICAgICAgKSwKICAgICAgICApLAogICAgICApLAogICAgKTsKICB9CgogIC8vIChPbGQgNS1jYXJkIGFjdGlvbiByb3cgcmVtb3ZlZCDigJQgcmVwbGFjZWQgYnkgX3F1aWNrR3JpZCAyeDIuKQoKICAvLyAtLS0tLS0tLS0tIDMuIERlZmF1bHQgdG91cm5hbWVudCBjYXJkIC0tLS0tLS0tLS0KICAvLyAoT2xkIF90b3VybmFtZW50Q2FyZC9fbWV0YUNoaXAgcmVtb3ZlZCDigJQgcmVwbGFjZWQgYnkgX2hlcm9DYXJkLikKCiAgLy8vIERhdGUgcmFuZ2UgbGFiZWwgZnJvbSByZWFsIGZpeHR1cmUgZGF0ZXMsIGUuZy4gJzIyIE9jdCAtIDA4IE5vdiAyMDI2Jy4KICBTdHJpbmcgX2ZpeHR1cmVEYXRlUmFuZ2UoTGlzdDxNYXRjaD4gZml4dHVyZXMpIHsKICAgIGZpbmFsIGRhdGVzID0KICAgICAgICBmaXh0dXJlcy5tYXAoKG0pID0+IG0uZGF0ZUlzbykud2hlcmUoKGQpID0+IGQuaXNOb3RFbXB0eSkudG9MaXN0KCkKICAgICAgICAgIC4uc29ydCgpOwogICAgaWYgKGRhdGVzLmlzRW1wdHkpIHJldHVybiAnJzsKICAgIGZpbmFsIGZpcnN0ID0gZGF0ZXMuZmlyc3Q7CiAgICBmaW5hbCBsYXN0ID0gZGF0ZXMubGFzdDsKICAgIGlmIChmaXJzdC5zcGxpdCgnVCcpLmZpcnN0ID09IGxhc3Quc3BsaXQoJ1QnKS5maXJzdCkgewogICAgICByZXR1cm4gX3Nob3J0RGF0ZShmaXJzdCk7CiAgICB9CiAgICByZXR1cm4gJyR7X3Nob3J0RGF0ZShmaXJzdCl9IC0gJHtfc2hvcnREYXRlKGxhc3QpfSc7CiAgfQoKICAvLyAtLS0tLS0tLS0tIDQuIFF1aWNrIGFjdGlvbnMgZ3JpZCAoMiByb3dzIHggNCkgLS0tLS0tLS0tLQogIC8vIC0tLS0tLS0tLS0gNS4gUmVjZW50IG1hdGNoZXMgLS0tLS0tLS0tLQogIFdpZGdldCBfcmVjZW50TWF0Y2hlcyhCdWlsZENvbnRleHQgY29udGV4dCkgewogICAgZmluYWwgZG9uZSA9IHN0b3JlLm1hdGNoZXMKICAgICAgICAud2hlcmUoKG0pID0+IG0uc3RhdHVzID09ICdjb21wbGV0ZWQnKQogICAgICAgIC50b0xpc3QoKQogICAgICAuLnNvcnQoKGEsIGIpID0+IGIuZGF0ZUlzby5jb21wYXJlVG8oYS5kYXRlSXNvKSk7CiAgICBmaW5hbCBzaG93ID0gZG9uZS50YWtlKDMpLnRvTGlzdCgpOwogICAgaWYgKHNob3cuaXNFbXB0eSkgewogICAgICByZXR1cm4gU2NvcmVDYXJkKAogICAgICAgIHBhZGRpbmc6IGNvbnN0IEVkZ2VJbnNldHMuYWxsKDIwKSwKICAgICAgICBjaGlsZDogQ29sdW1uKAogICAgICAgICAgY2hpbGRyZW46IFsKICAgICAgICAgICAgY29uc3QgRW1wdHlTdGF0ZSgKICAgICAgICAgICAgICBpY29uOiBJY29ucy5zY29yZWJvYXJkX291dGxpbmVkLAogICAgICAgICAgICAgIHRpdGxlOiAnTm8gbWF0Y2hlcyB5ZXQnLAogICAgICAgICAgICAgIHN1YnRpdGxlOgogICAgICAgICAgICAgICAgICAnU3RhcnQgYSBuZXcgbWF0Y2ggb3Igb3BlbiBhIHRvdXJuYW1lbnQgdG8gdmlldyBtYXRjaCBoaXN0b3J5LicsCiAgICAgICAgICAgICksCiAgICAgICAgICAgIFNjb3JlQnV0dG9uKAogICAgICAgICAgICAgIGxhYmVsOiAnTmV3IE1hdGNoJywKICAgICAgICAgICAgICBpY29uOiBJY29ucy5hZGRfY2lyY2xlX291dGxpbmUsCiAgICAgICAgICAgICAga2luZDogU2NvcmVCdXR0b25LaW5kLmdob3N0LAogICAgICAgICAgICAgIG9uUHJlc3NlZDogKCkgPT4gd2lkZ2V0Lm9uU2VsZWN0VGFiKDIpLAogICAgICAgICAgICApLAogICAgICAgICAgXSwKICAgICAgICApLAogICAgICApOwogICAgfQogICAgcmV0dXJuIENvbHVtbigKICAgICAgY2hpbGRyZW46IFsKICAgICAgICBmb3IgKHZhciBpID0gMDsgaSA8IHNob3cubGVuZ3RoOyBpKyspIC4uLlsKICAgICAgICAgIGlmIChpID4gMCkgY29uc3QgU2l6ZWRCb3goaGVpZ2h0OiA4KSwKICAgICAgICAgIF9yZWNlbnRNYXRjaENhcmQoY29udGV4dCwgc2hvd1tpXSksCiAgICAgICAgXSwKICAgICAgXSwKICAgICk7CiAgfQoKICBXaWRnZXQgX3JlY2VudE1hdGNoQ2FyZChCdWlsZENvbnRleHQgY29udGV4dCwgTWF0Y2ggbSkgewogICAgZmluYWwgYSA9IHN0b3JlLnRlYW1OYW1lKG0udGVhbUFJZCk7CiAgICBmaW5hbCBiID0gc3RvcmUudGVhbU5hbWUobS50ZWFtQklkKTsKICAgIHJldHVybiBTY29yZUNhcmQoCiAgICAgIHBhZGRpbmc6IGNvbnN0IEVkZ2VJbnNldHMuYWxsKDEyKSwKICAgICAgb25UYXA6ICgpID0+CiAgICAgICAgICBfcHVzaChjb250ZXh0LCBTY29yZWNhcmRTY3JlZW4oc3RvcmU6IHN0b3JlLCBtYXRjaDogbSkpLAogICAgICBjaGlsZDogUm93KAogICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICBDYXB0YWluQXZhdGFyKHN0b3JlOiBzdG9yZSwgdGVhbUlkOiBtLnRlYW1BSWQsIHJhZGl1czogMTgpLAogICAgICAgICAgY29uc3QgU2l6ZWRCb3god2lkdGg6IDQpLAogICAgICAgICAgQ2FwdGFpbkF2YXRhcihzdG9yZTogc3RvcmUsIHRlYW1JZDogbS50ZWFtQklkLCByYWRpdXM6IDE4KSwKICAgICAgICAgIGNvbnN0IFNpemVkQm94KHdpZHRoOiAxMiksCiAgICAgICAgICBFeHBhbmRlZCgKICAgICAgICAgICAgY2hpbGQ6IENvbHVtbigKICAgICAgICAgICAgICBjcm9zc0F4aXNBbGlnbm1lbnQ6IENyb3NzQXhpc0FsaWdubWVudC5zdGFydCwKICAgICAgICAgICAgICBjaGlsZHJlbjogWwogICAgICAgICAgICAgICAgVGV4dCgKICAgICAgICAgICAgICAgICAgJyRhIHZzICRiJywKICAgICAgICAgICAgICAgICAgc3R5bGU6IGNvbnN0IFRleHRTdHlsZSgKICAgICAgICAgICAgICAgICAgICBjb2xvcjoga1doaXRlLAogICAgICAgICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzcwMCwKICAgICAgICAgICAgICAgICAgICBmb250U2l6ZTogMTQsCiAgICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgY29uc3QgU2l6ZWRCb3goaGVpZ2h0OiA0KSwKICAgICAgICAgICAgICAgIC4uLl9zY29yZUxpbmVzKG0pLm1hcCgKICAgICAgICAgICAgICAgICAgKGxpbmUpID0+IFBhZGRpbmcoCiAgICAgICAgICAgICAgICAgICAgcGFkZGluZzogY29uc3QgRWRnZUluc2V0cy5vbmx5KGJvdHRvbTogMSksCiAgICAgICAgICAgICAgICAgICAgY2hpbGQ6IFRleHQoCiAgICAgICAgICAgICAgICAgICAgICBsaW5lLAogICAgICAgICAgICAgICAgICAgICAgc3R5bGU6IGNvbnN0IFRleHRTdHlsZSgKICAgICAgICAgICAgICAgICAgICAgICAgICBjb2xvcjoga1NpbHZlciwgZm9udFNpemU6IDEyKSwKICAgICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgIGlmIChtLnJlc3VsdFRleHQuaXNOb3RFbXB0eSkKICAgICAgICAgICAgICAgICAgVGV4dCgKICAgICAgICAgICAgICAgICAgICBtLnJlc3VsdFRleHQsCiAgICAgICAgICAgICAgICAgICAgc3R5bGU6IGNvbnN0IFRleHRTdHlsZSgKICAgICAgICAgICAgICAgICAgICAgIGNvbG9yOiBrQ3lhbiwKICAgICAgICAgICAgICAgICAgICAgIGZvbnRTaXplOiAxMiwKICAgICAgICAgICAgICAgICAgICAgIGZvbnRXZWlnaHQ6IEZvbnRXZWlnaHQudzYwMCwKICAgICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgIF0sCiAgICAgICAgICAgICksCiAgICAgICAgICApLAogICAgICAgICAgY29uc3QgU3RhdHVzUGlsbCgnY29tcGxldGVkJyksCiAgICAgICAgXSwKICAgICAgKSwKICAgICk7CiAgfQoKICBMaXN0PFN0cmluZz4gX3Njb3JlTGluZXMoTWF0Y2ggbSkgewogICAgZmluYWwgbGluZXMgPSA8U3RyaW5nPltdOwogICAgZm9yIChmaW5hbCBpbm4gaW4gbS5pbm5pbmdzKSB7CiAgICAgIGZpbmFsIGJhdCA9IHN0b3JlLnRlYW1OYW1lKGlubi5iYXR0aW5nVGVhbUlkKTsKICAgICAgZmluYWwgb3ZlcnMgPSBpbm4uYmFsbHNQZXJPdmVyID4gMAogICAgICAgICAgPyAnJHtpbm4ubGVnYWxCYWxscyB+LyBpbm4uYmFsbHNQZXJPdmVyfS4ke2lubi5sZWdhbEJhbGxzICUgaW5uLmJhbGxzUGVyT3Zlcn0nCiAgICAgICAgICA6ICcke2lubi5sZWdhbEJhbGxzfSc7CiAgICAgIGxpbmVzLmFkZCgnJGJhdCAke2lubi50b3RhbFJ1bnN9LyR7aW5uLndpY2tldHN9ICgkb3ZlcnMgb3YpJyk7CiAgICB9CiAgICByZXR1cm4gbGluZXMudGFrZSgyKS50b0xpc3QoKTsKICB9Cn0KCg==
+// 60Score home dashboard — v1.1.2 redesign.
+// Built only from real persisted store data — nothing hardcoded.
+import 'package:flutter/material.dart';
+
+import '../models.dart';
+import '../store.dart';
+import '../theme.dart';
+import '../widgets/player_avatar.dart';
+import 'registration_screen.dart';
+import 'scorer_home_screen.dart';
+import 'scorecard_screen.dart';
+import 'settings_screen.dart';
+import 'teams_screen.dart';
+import 'tournaments_screen.dart';
+
+/// Short fixture date range, e.g. '2026-10-22T14:00:00' -> '22 Oct 2026'.
+String _shortDate(String iso) {
+  try {
+    final d = iso.split('T').first.split('-');
+    if (d.length != 3) return '';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final month = int.parse(d[1]);
+    if (month < 1 || month > 12) return '';
+    return '${d[2].trim().padLeft(2, '0')} ${months[month - 1]} ${d[0]}';
+  } catch (_) {
+    return '';
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  final Store store;
+  final VoidCallback onOpenDrawer;
+  final ValueChanged<int> onSelectTab;
+  const HomeScreen({super.key, required this.store, required this.onOpenDrawer, required this.onSelectTab});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _QuickItem {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _QuickItem(this.icon, this.title, this.subtitle, this.onTap);
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Store get store => widget.store;
+
+  void _openTournament(BuildContext context, Tournament t) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TournamentDetailScreen(store: store, tournament: t),
+      ),
+    );
+  }
+
+  void _push(BuildContext context, Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final defaultT = store.tournamentById(Store.defaultTournamentId);
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [kOceanBlack, kSunsetNavyDeep],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Branded header
+              BrandedHeader(
+                onMenu: widget.onOpenDrawer,
+                onSettings: () =>
+                    _push(context, SettingsScreen(store: store)),
+              ),
+              const SizedBox(height: 16),
+              // 2. HERO — featured tournament
+              _heroCard(context, defaultT),
+              const SizedBox(height: 20),
+              // 3. Quick actions (2x2 premium grid)
+              _sectionTitle('Quick Actions', Icons.flash_on),
+              const SizedBox(height: 10),
+              _quickGrid(context),
+              const SizedBox(height: 20),
+              // 4. Recent matches
+              _sectionTitle('Recent Matches', Icons.history,
+                  trailing:
+                      ViewAllLink(onTap: () => widget.onSelectTab(1))),
+              const SizedBox(height: 10),
+              _recentMatches(context),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Small premium section heading — orange accent bar.
+  Widget _sectionTitle(String title, IconData icon, {Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 20,
+            decoration: BoxDecoration(
+              gradient: kSunsetGradient,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Icon(icon, color: kSunsetOrange, size: 18),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: kWhite,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+
+  // ---------- 2. HERO card — sunset gradient, big tournament name ----------
+  Widget _heroCard(BuildContext context, Tournament? t) {
+    if (t == null) {
+      return const EmptyState(
+        icon: Icons.emoji_events_outlined,
+        title: 'No tournament yet',
+        subtitle: 'The default tournament will appear here after setup.',
+      );
+    }
+    final fixtures =
+        store.matches.where((m) => m.tournamentId == t.id).toList();
+    final dateRange = _fixtureDateRange(fixtures);
+    final teamCount = t.teamIds.length;
+    return GestureDetector(
+      onTap: () => _openTournament(context, t),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [kSunsetOrange, kSunsetNavy],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: kSunsetOrangeSoft.withValues(alpha: 0.5),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: kSunsetOrange.withValues(alpha: 0.35),
+              blurRadius: 28,
+              offset: const Offset(0, 10),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                ),
+              ),
+              child: const Text(
+                '★ FEATURED TOURNAMENT',
+                style: TextStyle(
+                  color: kWhite,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              t.name,
+              style: const TextStyle(
+                color: kWhite,
+                fontSize: 27,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.3,
+                height: 1.15,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _heroChip(Icons.groups, '$teamCount Teams'),
+                if (dateRange.isNotEmpty)
+                  _heroChip(Icons.calendar_month, dateRange),
+                _heroChip(Icons.sports_cricket,
+                    '${fixtures.length} Matches'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 18, vertical: 12),
+              decoration: BoxDecoration(
+                color: kWhite,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Text(
+                'View Tournament →',
+                style: TextStyle(
+                  color: kSunsetOrangeDeep,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _heroChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: kWhite, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: const TextStyle(
+              color: kWhite,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- 3. Quick actions — 2x2 ocean grid with sunset icons ----------
+  Widget _quickGrid(BuildContext context) {
+    void push(Widget page) => _push(context, page);
+    final items = [
+      _QuickItem(Icons.sports_cricket, 'New Match', 'Quick / Custom',
+          () => widget.onSelectTab(2)),
+      _QuickItem(Icons.emoji_events, 'Tournaments', 'View & Manage',
+          () => push(TournamentsScreen(store: store))),
+      _QuickItem(Icons.groups, 'Teams', 'Add / Manage',
+          () => push(TeamsScreen(store: store))),
+      _QuickItem(Icons.person, 'Players', 'Registered',
+          () => push(RegistrationScreen(store: store))),
+    ];
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.55,
+      ),
+      itemCount: items.length,
+      itemBuilder: (c, i) => _quickCard(items[i]),
+    );
+  }
+
+  Widget _quickCard(_QuickItem item) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: item.onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: kOceanCardGradient,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: kOceanSteel.withValues(alpha: 0.4),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: kSunsetGradient,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: kSunsetOrange.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(item.icon, color: kWhite, size: 22),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: kWhite,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                item.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: kOceanFaint,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // (Old 5-card action row removed — replaced by _quickGrid 2x2.)
+
+  // ---------- 3. Default tournament card ----------
+  // (Old _tournamentCard/_metaChip removed — replaced by _heroCard.)
+
+  /// Date range label from real fixture dates, e.g. '22 Oct - 08 Nov 2026'.
+  String _fixtureDateRange(List<Match> fixtures) {
+    final dates =
+        fixtures.map((m) => m.dateIso).where((d) => d.isNotEmpty).toList()
+          ..sort();
+    if (dates.isEmpty) return '';
+    final first = dates.first;
+    final last = dates.last;
+    if (first.split('T').first == last.split('T').first) {
+      return _shortDate(first);
+    }
+    return '${_shortDate(first)} - ${_shortDate(last)}';
+  }
+
+  // ---------- 4. Quick actions grid (2 rows x 4) ----------
+  // ---------- 5. Recent matches ----------
+  Widget _recentMatches(BuildContext context) {
+    final done = store.matches
+        .where((m) => m.status == 'completed')
+        .toList()
+      ..sort((a, b) => b.dateIso.compareTo(a.dateIso));
+    final show = done.take(3).toList();
+    if (show.isEmpty) {
+      return ScoreCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const EmptyState(
+              icon: Icons.scoreboard_outlined,
+              title: 'No matches yet',
+              subtitle:
+                  'Start a new match or open a tournament to view match history.',
+            ),
+            ScoreButton(
+              label: 'New Match',
+              icon: Icons.add_circle_outline,
+              kind: ScoreButtonKind.ghost,
+              onPressed: () => widget.onSelectTab(2),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (var i = 0; i < show.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _recentMatchCard(context, show[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _recentMatchCard(BuildContext context, Match m) {
+    final a = store.teamName(m.teamAId);
+    final b = store.teamName(m.teamBId);
+    return ScoreCard(
+      padding: const EdgeInsets.all(12),
+      onTap: () =>
+          _push(context, ScorecardScreen(store: store, match: m)),
+      child: Row(
+        children: [
+          CaptainAvatar(store: store, teamId: m.teamAId, radius: 18),
+          const SizedBox(width: 4),
+          CaptainAvatar(store: store, teamId: m.teamBId, radius: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$a vs $b',
+                  style: const TextStyle(
+                    color: kWhite,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ..._scoreLines(m).map(
+                  (line) => Padding(
+                    padding: const EdgeInsets.only(bottom: 1),
+                    child: Text(
+                      line,
+                      style: const TextStyle(
+                          color: kSilver, fontSize: 12),
+                    ),
+                  ),
+                ),
+                if (m.resultText.isNotEmpty)
+                  Text(
+                    m.resultText,
+                    style: const TextStyle(
+                      color: kCyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const StatusPill('completed'),
+        ],
+      ),
+    );
+  }
+
+  List<String> _scoreLines(Match m) {
+    final lines = <String>[];
+    for (final inn in m.innings) {
+      final bat = store.teamName(inn.battingTeamId);
+      final overs = inn.ballsPerOver > 0
+          ? '${inn.legalBalls ~/ inn.ballsPerOver}.${inn.legalBalls % inn.ballsPerOver}'
+          : '${inn.legalBalls}';
+      lines.add('$bat ${inn.totalRuns}/${inn.wickets} ($overs ov)');
+    }
+    return lines.take(2).toList();
+  }
+}
+

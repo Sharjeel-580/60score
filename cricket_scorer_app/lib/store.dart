@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'draft.dart';
 import 'models.dart';
+import 'sync_service.dart';
 import 'tournament_engine.dart';
 
 class Store extends ChangeNotifier implements PlayoffStore {
@@ -31,6 +32,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
   static const _kDrafts = 'score60_drafts_v1';
   static const _kManual = 'score60_manualstats_v1';
   static const _kWelcome = 'score60_welcome_v1';
+  static const _kLastModified = 'score60_last_modified_v1';
 
   static int _counter = 0;
   static String newId(String prefix) {
@@ -388,10 +390,26 @@ class Store extends ChangeNotifier implements PlayoffStore {
     await p.setBool(_kWelcome, welcomeDone);
   }
 
+  /// Wall-clock ms of the last local change (used by cloud sync).
+  Future<int> getLastModified() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_kLastModified) ?? 0;
+  }
+
+  Future<void> setLastModified(int ms) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kLastModified, ms);
+  }
+
   @override
-  Future<void> persist() async {
+  Future<void> persist({bool skipSync = false}) async {
     await _saveAll();
+    await setLastModified(DateTime.now().millisecondsSinceEpoch);
     notifyListeners();
+    if (!skipSync) {
+      // Fire-and-forget cloud push when logged in (no-op when offline).
+      SyncService().schedulePush(this);
+    }
   }
 
   // ---------- lookups ----------

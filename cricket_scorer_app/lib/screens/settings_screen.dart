@@ -1,1 +1,353 @@
-Ly8gU2V0dGluZ3Mgc2NyZWVuICjCpzI2KTogbm90aWZpY2F0aW9uIHByZWZlcmVuY2VzLCBkYXRhIG1hbmFnZW1lbnQKLy8gKGJhY2t1cC9yZXN0b3JlLCBwbGF5ZXIgaW1wb3J0LWV4cG9ydCksIHJlc2V0IGFwcCAowqcyOSksIGFwcGVhcmFuY2UKLy8gbm90ZSwgYW5kIGFwcCBpbmZvLiBPZmZsaW5lLWZpcnN0IOKAlCBubyBhY2NvdW50cywgbm8gY2xvdWQuCmltcG9ydCAncGFja2FnZTpmbHV0dGVyL21hdGVyaWFsLmRhcnQnOwppbXBvcnQgJ3BhY2thZ2U6c2hhcmVkX3ByZWZlcmVuY2VzL3NoYXJlZF9wcmVmZXJlbmNlcy5kYXJ0JzsKCmltcG9ydCAnLi4vc3RvcmUuZGFydCc7CmltcG9ydCAnLi4vdGhlbWUuZGFydCc7CmltcG9ydCAnLi4vYXV0aF9zZXJ2aWNlLmRhcnQnOwppbXBvcnQgJ2Fib3V0X3NjcmVlbi5kYXJ0JzsKaW1wb3J0ICdiYWNrdXBfc2NyZWVuLmRhcnQnOwppbXBvcnQgJ2xvZ2luX3NjcmVlbi5kYXJ0JzsKaW1wb3J0ICdyZWdpc3RyYXRpb25fc2NyZWVuLmRhcnQnOwoKY2xhc3MgU2V0dGluZ3NTY3JlZW4gZXh0ZW5kcyBTdGF0ZWZ1bFdpZGdldCB7CiAgZmluYWwgU3RvcmUgc3RvcmU7CiAgY29uc3QgU2V0dGluZ3NTY3JlZW4oe3N1cGVyLmtleSwgcmVxdWlyZWQgdGhpcy5zdG9yZX0pOwoKICBAb3ZlcnJpZGUKICBTdGF0ZTxTZXR0aW5nc1NjcmVlbj4gY3JlYXRlU3RhdGUoKSA9PiBfU2V0dGluZ3NTY3JlZW5TdGF0ZSgpOwp9CgpjbGFzcyBfU2V0dGluZ3NTY3JlZW5TdGF0ZSBleHRlbmRzIFN0YXRlPFNldHRpbmdzU2NyZWVuPiB7CiAgc3RhdGljIGNvbnN0IF9rTm90aWZNYXRjaCA9ICdzZXRfbm90aWZfbWF0Y2gnOwogIHN0YXRpYyBjb25zdCBfa05vdGlmQmFja3VwID0gJ3NldF9ub3RpZl9iYWNrdXAnOwoKICBib29sIF9ub3RpZk1hdGNoID0gdHJ1ZTsKICBib29sIF9ub3RpZkJhY2t1cCA9IHRydWU7CiAgYm9vbCBfbG9hZGVkUHJlZnMgPSBmYWxzZTsKCiAgQG92ZXJyaWRlCiAgdm9pZCBpbml0U3RhdGUoKSB7CiAgICBzdXBlci5pbml0U3RhdGUoKTsKICAgIF9sb2FkUHJlZnMoKTsKICB9CgogIEZ1dHVyZTx2b2lkPiBfbG9hZFByZWZzKCkgYXN5bmMgewogICAgdHJ5IHsKICAgICAgZmluYWwgcHJlZnMgPSBhd2FpdCBTaGFyZWRQcmVmZXJlbmNlcy5nZXRJbnN0YW5jZSgpOwogICAgICBfbm90aWZNYXRjaCA9IHByZWZzLmdldEJvb2woX2tOb3RpZk1hdGNoKSA/PyB0cnVlOwogICAgICBfbm90aWZCYWNrdXAgPSBwcmVmcy5nZXRCb29sKF9rTm90aWZCYWNrdXApID8/IHRydWU7CiAgICB9IGNhdGNoIChfKSB7fQogICAgaWYgKG1vdW50ZWQpIHNldFN0YXRlKCgpID0+IF9sb2FkZWRQcmVmcyA9IHRydWUpOwogIH0KCiAgRnV0dXJlPHZvaWQ+IF9zYXZlUHJlZihTdHJpbmcga2V5LCBib29sIHZhbHVlKSBhc3luYyB7CiAgICB0cnkgewogICAgICBmaW5hbCBwcmVmcyA9IGF3YWl0IFNoYXJlZFByZWZlcmVuY2VzLmdldEluc3RhbmNlKCk7CiAgICAgIGF3YWl0IHByZWZzLnNldEJvb2woa2V5LCB2YWx1ZSk7CiAgICB9IGNhdGNoIChfKSB7fQogIH0KCiAgdm9pZCBfb3BlbihXaWRnZXQgcGFnZSkgewogICAgTmF2aWdhdG9yLm9mKGNvbnRleHQpLnB1c2goTWF0ZXJpYWxQYWdlUm91dGUoYnVpbGRlcjogKF8pID0+IHBhZ2UpKTsKICB9CgogIEZ1dHVyZTx2b2lkPiBfY29uZmlybVJlc2V0KCkgYXN5bmMgewogICAgZmluYWwgb2sgPSBhd2FpdCBzaG93RGlhbG9nPGJvb2w+KAogICAgICBjb250ZXh0OiBjb250ZXh0LAogICAgICBidWlsZGVyOiAoYykgPT4gQWxlcnREaWFsb2coCiAgICAgICAgdGl0bGU6IGNvbnN0IFRleHQoJ1Jlc2V0IEFwcCcpLAogICAgICAgIGNvbnRlbnQ6IGNvbnN0IFRleHQoCiAgICAgICAgICAnRGVsZXRlcyBhbGwgdGVhbXMsIHBsYXllcnMsIG1hdGNoZXMsIHRvdXJuYW1lbnRzLCBkcmFmdHMgYW5kICcKICAgICAgICAgICdyZXN0b3JlcyB0aGUgZGVmYXVsdCBTdXBlciBTaXh0eSBMZWFndWUgU2Vhc29uIDJLMjYgd2l0aCBpdHMgJwogICAgICAgICAgJzE4IGZpeHR1cmVzLiBCYWNrdXBzIGFuZCBleHBvcnRlZCBmaWxlcyBhcmUga2VwdC4nLAogICAgICAgICksCiAgICAgICAgYWN0aW9uczogWwogICAgICAgICAgVGV4dEJ1dHRvbigKICAgICAgICAgICAgb25QcmVzc2VkOiAoKSA9PiBOYXZpZ2F0b3IucG9wKGMsIGZhbHNlKSwKICAgICAgICAgICAgY2hpbGQ6IGNvbnN0IFRleHQoJ0NhbmNlbCcpLAogICAgICAgICAgKSwKICAgICAgICAgIEZpbGxlZEJ1dHRvbigKICAgICAgICAgICAgb25QcmVzc2VkOiAoKSA9PiBOYXZpZ2F0b3IucG9wKGMsIHRydWUpLAogICAgICAgICAgICBzdHlsZTogRmlsbGVkQnV0dG9uLnN0eWxlRnJvbShiYWNrZ3JvdW5kQ29sb3I6IGtSZWQpLAogICAgICAgICAgICBjaGlsZDogY29uc3QgVGV4dCgnUmVzZXQgZXZlcnl0aGluZycpLAogICAgICAgICAgKSwKICAgICAgICBdLAogICAgICApLAogICAgKTsKICAgIGlmIChvayAhPSB0cnVlIHx8ICFtb3VudGVkKSByZXR1cm47CiAgICBhd2FpdCB3aWRnZXQuc3RvcmUucmVzZXRBcHAoKTsKICAgIGlmICghbW91bnRlZCkgcmV0dXJuOwogICAgU2NhZmZvbGRNZXNzZW5nZXIub2YoY29udGV4dCkuc2hvd1NuYWNrQmFyKAogICAgICBjb25zdCBTbmFja0JhcigKICAgICAgICBjb250ZW50OiBUZXh0KCdBcHAgcmVzZXQg4oCUIGRlZmF1bHQgdG91cm5hbWVudCByZXN0b3JlZCcpLAogICAgICApLAogICAgKTsKICB9CgogIFdpZGdldCBfc2V0dGluZ3NSb3coewogICAgcmVxdWlyZWQgSWNvbkRhdGEgaWNvbiwKICAgIHJlcXVpcmVkIFN0cmluZyB0aXRsZSwKICAgIHJlcXVpcmVkIFN0cmluZyBzdWJ0aXRsZSwKICAgIHJlcXVpcmVkIFZvaWRDYWxsYmFjayBvblRhcCwKICB9KSB7CiAgICByZXR1cm4gTGlzdFRpbGUoCiAgICAgIGxlYWRpbmc6IEljb24oaWNvbiwgY29sb3I6IGtDeWFuKSwKICAgICAgdGl0bGU6IFRleHQodGl0bGUsIHN0eWxlOiBjb25zdCBUZXh0U3R5bGUoY29sb3I6IGtXaGl0ZSkpLAogICAgICBzdWJ0aXRsZTogVGV4dCgKICAgICAgICBzdWJ0aXRsZSwKICAgICAgICBzdHlsZTogY29uc3QgVGV4dFN0eWxlKGNvbG9yOiBDb2xvcnMud2hpdGU1NCwgZm9udFNpemU6IDEyKSwKICAgICAgKSwKICAgICAgdHJhaWxpbmc6IGNvbnN0IEljb24oSWNvbnMuY2hldnJvbl9yaWdodCwgY29sb3I6IENvbG9ycy53aGl0ZTU0KSwKICAgICAgb25UYXA6IG9uVGFwLAogICAgKTsKICB9CgogIEBvdmVycmlkZQogIFdpZGdldCBidWlsZChCdWlsZENvbnRleHQgY29udGV4dCkgewogICAgZmluYWwgc3RvcmUgPSB3aWRnZXQuc3RvcmU7CiAgICByZXR1cm4gU2NhZmZvbGQoCiAgICAgIGFwcEJhcjogQXBwQmFyKHRpdGxlOiBjb25zdCBUZXh0KCdTZXR0aW5ncycpKSwKICAgICAgYm9keTogTGlzdFZpZXcoCiAgICAgICAgcGFkZGluZzogY29uc3QgRWRnZUluc2V0cy5mcm9tTFRSQigxNiwgNCwgMTYsIDI0KSwKICAgICAgICBjaGlsZHJlbjogWwogICAgICAgICAgY29uc3QgU2VjdGlvblRpdGxlKAogICAgICAgICAgICBpY29uOiBJY29ucy5hY2NvdW50X2NpcmNsZV9vdXRsaW5lZCwKICAgICAgICAgICAgdGl0bGU6ICdBY2NvdW50ICYgU3luYycsCiAgICAgICAgICApLAogICAgICAgICAgU2NvcmVDYXJkKAogICAgICAgICAgICBwYWRkaW5nOiBFZGdlSW5zZXRzLnplcm8sCiAgICAgICAgICAgIGNoaWxkOiBBbmltYXRlZEJ1aWxkZXIoCiAgICAgICAgICAgICAgYW5pbWF0aW9uOiBBdXRoU2VydmljZSgpLAogICAgICAgICAgICAgIGJ1aWxkZXI6IChjb250ZXh0LCBfKSB7CiAgICAgICAgICAgICAgICBmaW5hbCBhdXRoID0gQXV0aFNlcnZpY2UoKTsKICAgICAgICAgICAgICAgIGlmIChhdXRoLmlzTG9nZ2VkSW4pIHsKICAgICAgICAgICAgICAgICAgcmV0dXJuIENvbHVtbigKICAgICAgICAgICAgICAgICAgICBjaGlsZHJlbjogWwogICAgICAgICAgICAgICAgICAgICAgTGlzdFRpbGUoCiAgICAgICAgICAgICAgICAgICAgICAgIGxlYWRpbmc6IGNvbnN0IEljb24oSWNvbnMudmVyaWZpZWRfdXNlciwKICAgICAgICAgICAgICAgICAgICAgICAgICAgIGNvbG9yOiBrR3JlZW4pLAogICAgICAgICAgICAgICAgICAgICAgICB0aXRsZTogY29uc3QgVGV4dCgnTG9nZ2VkIGluJywKICAgICAgICAgICAgICAgICAgICAgICAgICAgIHN0eWxlOiBUZXh0U3R5bGUoY29sb3I6IGtXaGl0ZSkpLAogICAgICAgICAgICAgICAgICAgICAgICBzdWJ0aXRsZTogVGV4dCgKICAgICAgICAgICAgICAgICAgICAgICAgICBhdXRoLmRpc3BsYXlOYW1lLAogICAgICAgICAgICAgICAgICAgICAgICAgIHN0eWxlOiBjb25zdCBUZXh0U3R5bGUoCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGNvbG9yOiBDb2xvcnMud2hpdGU1NCwgZm9udFNpemU6IDEyKSwKICAgICAgICAgICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICAgICAgICBjb25zdCBEaXZpZGVyKGhlaWdodDogMSksCiAgICAgICAgICAgICAgICAgICAgICBfc2V0dGluZ3NSb3coCiAgICAgICAgICAgICAgICAgICAgICAgIGljb246IEljb25zLmxvZ291dCwKICAgICAgICAgICAgICAgICAgICAgICAgdGl0bGU6ICdMb2cgb3V0JywKICAgICAgICAgICAgICAgICAgICAgICAgc3VidGl0bGU6ICdEYXRhIHN0YXlzIG9uIHRoaXMgZGV2aWNlJywKICAgICAgICAgICAgICAgICAgICAgICAgb25UYXA6ICgpIGFzeW5jIHsKICAgICAgICAgICAgICAgICAgICAgICAgICBhd2FpdCBhdXRoLnNpZ25PdXQoKTsKICAgICAgICAgICAgICAgICAgICAgICAgICBpZiAobW91bnRlZCkgc2V0U3RhdGUoKCkge30pOwogICAgICAgICAgICAgICAgICAgICAgICB9LAogICAgICAgICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgICAgICBdLAogICAgICAgICAgICAgICAgICApOwogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgcmV0dXJuIF9zZXR0aW5nc1JvdygKICAgICAgICAgICAgICAgICAgaWNvbjogSWNvbnMubG9naW4sCiAgICAgICAgICAgICAgICAgIHRpdGxlOiAnTG9nIGluIC8gU2lnbiB1cCcsCiAgICAgICAgICAgICAgICAgIHN1YnRpdGxlOgogICAgICAgICAgICAgICAgICAgICAgJ0VtYWlsLCBHb29nbGUgb3IgcGhvbmUg4oCUIHN5bmMgZGF0YSBhY3Jvc3MgZGV2aWNlcycsCiAgICAgICAgICAgICAgICAgIG9uVGFwOiAoKSBhc3luYyB7CiAgICAgICAgICAgICAgICAgICAgYXdhaXQgTmF2aWdhdG9yLm9mKGNvbnRleHQpLnB1c2goTWF0ZXJpYWxQYWdlUm91dGUoCiAgICAgICAgICAgICAgICAgICAgICAgIGJ1aWxkZXI6IChfKSA9PiBjb25zdCBMb2dpblNjcmVlbigpKSk7CiAgICAgICAgICAgICAgICAgICAgaWYgKG1vdW50ZWQpIHNldFN0YXRlKCgpIHt9KTsKICAgICAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgICAgICk7CiAgICAgICAgICAgICAgfSwKICAgICAgICAgICAgKSwKICAgICAgICAgICksCiAgICAgICAgICBjb25zdCBTZWN0aW9uVGl0bGUoCiAgICAgICAgICAgIGljb246IEljb25zLm5vdGlmaWNhdGlvbnNfb3V0bGluZWQsCiAgICAgICAgICAgIHRpdGxlOiAnTm90aWZpY2F0aW9ucycsCiAgICAgICAgICApLAogICAgICAgICAgY29uc3QgUGFkZGluZygKICAgICAgICAgICAgcGFkZGluZzogRWRnZUluc2V0cy5mcm9tTFRSQig0LCAwLCA0LCAyKSwKICAgICAgICAgICAgY2hpbGQ6IFRleHQoCiAgICAgICAgICAgICAgJ1ByZWZlcmVuY2VzIG9ubHkg4oCUIG5vIGNsb3VkLCByZW1pbmRlcnMgc3RheSBvbiB0aGlzIGRldmljZS4nLAogICAgICAgICAgICAgIHN0eWxlOiBUZXh0U3R5bGUoY29sb3I6IENvbG9ycy53aGl0ZTU0LCBmb250U2l6ZTogMTMpLAogICAgICAgICAgICApLAogICAgICAgICAgKSwKICAgICAgICAgIFNjb3JlQ2FyZCgKICAgICAgICAgICAgcGFkZGluZzogRWRnZUluc2V0cy56ZXJvLAogICAgICAgICAgICBjaGlsZDogQ29sdW1uKAogICAgICAgICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICAgICAgICBTd2l0Y2hMaXN0VGlsZSgKICAgICAgICAgICAgICAgICAgdmFsdWU6IF9ub3RpZk1hdGNoLAogICAgICAgICAgICAgICAgICBvbkNoYW5nZWQ6IF9sb2FkZWRQcmVmcwogICAgICAgICAgICAgICAgICAgICAgPyAodikgewogICAgICAgICAgICAgICAgICAgICAgICAgIHNldFN0YXRlKCgpID0+IF9ub3RpZk1hdGNoID0gdik7CiAgICAgICAgICAgICAgICAgICAgICAgICAgX3NhdmVQcmVmKF9rTm90aWZNYXRjaCwgdik7CiAgICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgIDogbnVsbCwKICAgICAgICAgICAgICAgICAgdGl0bGU6IGNvbnN0IFRleHQoCiAgICAgICAgICAgICAgICAgICAgJ01hdGNoIHJlbWluZGVycycsCiAgICAgICAgICAgICAgICAgICAgc3R5bGU6IFRleHRTdHlsZShjb2xvcjoga1doaXRlKSwKICAgICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgICAgc3VidGl0bGU6IGNvbnN0IFRleHQoCiAgICAgICAgICAgICAgICAgICAgJ1JlbWluZCBiZWZvcmUgdXBjb21pbmcgZml4dHVyZXMnLAogICAgICAgICAgICAgICAgICAgIHN0eWxlOiBUZXh0U3R5bGUoY29sb3I6IENvbG9ycy53aGl0ZTU0LCBmb250U2l6ZTogMTIpLAogICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgICBhY3RpdmVUaHVtYkNvbG9yOiBrQ3lhbiwKICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICBjb25zdCBEaXZpZGVyKGhlaWdodDogMSksCiAgICAgICAgICAgICAgICBTd2l0Y2hMaXN0VGlsZSgKICAgICAgICAgICAgICAgICAgdmFsdWU6IF9ub3RpZkJhY2t1cCwKICAgICAgICAgICAgICAgICAgb25DaGFuZ2VkOiBfbG9hZGVkUHJlZnMKICAgICAgICAgICAgICAgICAgICAgID8gKHYpIHsKICAgICAgICAgICAgICAgICAgICAgICAgICBzZXRTdGF0ZSgoKSA9PiBfbm90aWZCYWNrdXAgPSB2KTsKICAgICAgICAgICAgICAgICAgICAgICAgICBfc2F2ZVByZWYoX2tOb3RpZkJhY2t1cCwgdik7CiAgICAgICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICAgIDogbnVsbCwKICAgICAgICAgICAgICAgICAgdGl0bGU6IGNvbnN0IFRleHQoCiAgICAgICAgICAgICAgICAgICAgJ0JhY2t1cCByZW1pbmRlcnMnLAogICAgICAgICAgICAgICAgICAgIHN0eWxlOiBUZXh0U3R5bGUoY29sb3I6IGtXaGl0ZSksCiAgICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICAgIHN1YnRpdGxlOiBjb25zdCBUZXh0KAogICAgICAgICAgICAgICAgICAgICdSZW1pbmQgd2hlbiBubyByZWNlbnQgYmFja3VwIGV4aXN0cycsCiAgICAgICAgICAgICAgICAgICAgc3R5bGU6IFRleHRTdHlsZShjb2xvcjogQ29sb3JzLndoaXRlNTQsIGZvbnRTaXplOiAxMiksCiAgICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICAgIGFjdGl2ZVRodW1iQ29sb3I6IGtDeWFuLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICBdLAogICAgICAgICAgICApLAogICAgICAgICAgKSwKICAgICAgICAgIGNvbnN0IFNlY3Rpb25UaXRsZSgKICAgICAgICAgICAgaWNvbjogSWNvbnMuc3RvcmFnZV9vdXRsaW5lZCwKICAgICAgICAgICAgdGl0bGU6ICdEYXRhIE1hbmFnZW1lbnQnLAogICAgICAgICAgKSwKICAgICAgICAgIFNjb3JlQ2FyZCgKICAgICAgICAgICAgcGFkZGluZzogRWRnZUluc2V0cy56ZXJvLAogICAgICAgICAgICBjaGlsZDogQ29sdW1uKAogICAgICAgICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICAgICAgICBfc2V0dGluZ3NSb3coCiAgICAgICAgICAgICAgICAgIGljb246IEljb25zLmJhY2t1cCwKICAgICAgICAgICAgICAgICAgdGl0bGU6ICdCYWNrdXAgJiBSZXN0b3JlJywKICAgICAgICAgICAgICAgICAgc3VidGl0bGU6ICdNYW51YWwsIGF1dG9tYXRpYyBhbmQgRG93bmxvYWRzIGJhY2t1cHMnLAogICAgICAgICAgICAgICAgICBvblRhcDogKCkgPT4gX29wZW4oQmFja3VwU2NyZWVuKHN0b3JlOiBzdG9yZSkpLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgIGNvbnN0IERpdmlkZXIoaGVpZ2h0OiAxKSwKICAgICAgICAgICAgICAgIF9zZXR0aW5nc1JvdygKICAgICAgICAgICAgICAgICAgaWNvbjogSWNvbnMuaW1wb3J0X2V4cG9ydCwKICAgICAgICAgICAgICAgICAgdGl0bGU6ICdQbGF5ZXIgaW1wb3J0L2V4cG9ydCcsCiAgICAgICAgICAgICAgICAgIHN1YnRpdGxlOiAnRXhjZWwgLyBDU1YgcGxheWVyIGxpc3RzJywKICAgICAgICAgICAgICAgICAgb25UYXA6ICgpID0+IF9vcGVuKFJlZ2lzdHJhdGlvblNjcmVlbihzdG9yZTogc3RvcmUpKSwKICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgXSwKICAgICAgICAgICAgKSwKICAgICAgICAgICksCiAgICAgICAgICBjb25zdCBTZWN0aW9uVGl0bGUoCiAgICAgICAgICAgIGljb246IEljb25zLnBhbGV0dGVfb3V0bGluZWQsCiAgICAgICAgICAgIHRpdGxlOiAnQXBwZWFyYW5jZScsCiAgICAgICAgICApLAogICAgICAgICAgLy8gSW5mbyBvbmx5IOKAlCB0aGUgYXBwIHNoaXBzIHdpdGggYSBzaW5nbGUgZGFyayBuYXZ5IHRoZW1lOwogICAgICAgICAgLy8gdGhlcmUgaXMgbm8gc3RvcmVkIHRoZW1lIHByZWZlcmVuY2UgdG8gdG9nZ2xlLgogICAgICAgICAgY29uc3QgU2NvcmVDYXJkKAogICAgICAgICAgICBjaGlsZDogUm93KAogICAgICAgICAgICAgIGNoaWxkcmVuOiBbCiAgICAgICAgICAgICAgICBJY29uKEljb25zLmRhcmtfbW9kZSwgY29sb3I6IGtHb2xkKSwKICAgICAgICAgICAgICAgIFNpemVkQm94KHdpZHRoOiAxMiksCiAgICAgICAgICAgICAgICBFeHBhbmRlZCgKICAgICAgICAgICAgICAgICAgY2hpbGQ6IFRleHQoCiAgICAgICAgICAgICAgICAgICAgJ0RhcmsgdGhlbWUgKGRlZmF1bHQpJywKICAgICAgICAgICAgICAgICAgICBzdHlsZTogVGV4dFN0eWxlKGNvbG9yOiBrV2hpdGUpLAogICAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICBdLAogICAgICAgICAgICApLAogICAgICAgICAgKSwKICAgICAgICAgIGNvbnN0IFNpemVkQm94KGhlaWdodDogMTIpLAogICAgICAgICAgU2NvcmVDYXJkKAogICAgICAgICAgICBwYWRkaW5nOiBFZGdlSW5zZXRzLnplcm8sCiAgICAgICAgICAgIGNoaWxkOiBFeHBhbnNpb25UaWxlKAogICAgICAgICAgICAgIGxlYWRpbmc6IGNvbnN0IEljb24oCiAgICAgICAgICAgICAgICBJY29ucy53YXJuaW5nX2FtYmVyX3JvdW5kZWQsCiAgICAgICAgICAgICAgICBjb2xvcjoga1JlZCwKICAgICAgICAgICAgICApLAogICAgICAgICAgICAgIHRpdGxlOiBjb25zdCBUZXh0KAogICAgICAgICAgICAgICAgJ1Jlc2V0IEFwcCcsCiAgICAgICAgICAgICAgICBzdHlsZTogVGV4dFN0eWxlKAogICAgICAgICAgICAgICAgICBjb2xvcjoga1doaXRlLAogICAgICAgICAgICAgICAgICBmb250V2VpZ2h0OiBGb250V2VpZ2h0Lnc3MDAsCiAgICAgICAgICAgICAgICApLAogICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgc3VidGl0bGU6IGNvbnN0IFRleHQoCiAgICAgICAgICAgICAgICAnQWR2YW5jZWQg4oCUIHJlc3RvcmUgZGVmYXVsdCBkYXRhJywKICAgICAgICAgICAgICAgIHN0eWxlOiBUZXh0U3R5bGUoY29sb3I6IENvbG9ycy53aGl0ZTU0LCBmb250U2l6ZTogMTIpLAogICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgaWNvbkNvbG9yOiBrUmVkLAogICAgICAgICAgICAgIGNvbGxhcHNlZEljb25Db2xvcjogQ29sb3JzLndoaXRlNTQsCiAgICAgICAgICAgICAgY2hpbGRyZW46IFsKICAgICAgICAgICAgICAgIFBhZGRpbmcoCiAgICAgICAgICAgICAgICAgIHBhZGRpbmc6IGNvbnN0IEVkZ2VJbnNldHMuZnJvbUxUUkIoMTYsIDAsIDE2LCAxNiksCiAgICAgICAgICAgICAgICAgIGNoaWxkOiBDb2x1bW4oCiAgICAgICAgICAgICAgICAgICAgY3Jvc3NBeGlzQWxpZ25tZW50OiBDcm9zc0F4aXNBbGlnbm1lbnQuc3RyZXRjaCwKICAgICAgICAgICAgICAgICAgICBjaGlsZHJlbjogWwogICAgICAgICAgICAgICAgICAgICAgU2NvcmVCdXR0b24oCiAgICAgICAgICAgICAgICAgICAgICAgIGxhYmVsOiAnUmVzZXQgQXBwJywKICAgICAgICAgICAgICAgICAgICAgICAgaWNvbjogSWNvbnMuZGVsZXRlX2ZvcmV2ZXIsCiAgICAgICAgICAgICAgICAgICAgICAgIGtpbmQ6IFNjb3JlQnV0dG9uS2luZC5kYW5nZXIsCiAgICAgICAgICAgICAgICAgICAgICAgIG9uUHJlc3NlZDogX2NvbmZpcm1SZXNldCwKICAgICAgICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgICAgICAgXSwKICAgICAgICAgICAgICAgICAgKSwKICAgICAgICAgICAgICAgICksCiAgICAgICAgICAgICAgXSwKICAgICAgICAgICAgKSwKICAgICAgICAgICksCiAgICAgICAgICBjb25zdCBTZWN0aW9uVGl0bGUoCiAgICAgICAgICAgIGljb246IEljb25zLmluZm9fb3V0bGluZSwKICAgICAgICAgICAgdGl0bGU6ICdBYm91dCAmIEFwcCBJbmZvJywKICAgICAgICAgICksCiAgICAgICAgICBTY29yZUNhcmQoCiAgICAgICAgICAgIHBhZGRpbmc6IEVkZ2VJbnNldHMuemVybywKICAgICAgICAgICAgY2hpbGQ6IF9zZXR0aW5nc1JvdygKICAgICAgICAgICAgICBpY29uOiBJY29ucy5pbmZvX291dGxpbmUsCiAgICAgICAgICAgICAgdGl0bGU6ICdBYm91dCA2MFNjb3JlJywKICAgICAgICAgICAgICBzdWJ0aXRsZTogJ1ZlcnNpb24sIGNyZWRpdHMgYW5kIGRlc2NyaXB0aW9uJywKICAgICAgICAgICAgICBvblRhcDogKCkgPT4gX29wZW4oY29uc3QgQWJvdXRTY3JlZW4oKSksCiAgICAgICAgICAgICksCiAgICAgICAgICApLAogICAgICAgIF0sCiAgICAgICksCiAgICApOwogIH0KfQo=
+// Settings screen (§26): notification preferences, data management
+// (backup/restore, player import-export), reset app (§29), appearance
+// note, and app info. Offline-first — no accounts, no cloud.
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../store.dart';
+import '../theme.dart';
+import '../auth_service.dart';
+import '../sync_service.dart';
+import 'about_screen.dart';
+import 'backup_screen.dart';
+import 'login_screen.dart';
+import 'registration_screen.dart';
+
+class SettingsScreen extends StatefulWidget {
+  final Store store;
+  const SettingsScreen({super.key, required this.store});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  static const _kNotifMatch = 'set_notif_match';
+  static const _kNotifBackup = 'set_notif_backup';
+
+  bool _notifMatch = true;
+  bool _notifBackup = true;
+  bool _loadedPrefs = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefs();
+  }
+
+  Future<void> _loadPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _notifMatch = prefs.getBool(_kNotifMatch) ?? true;
+      _notifBackup = prefs.getBool(_kNotifBackup) ?? true;
+    } catch (_) {}
+    if (mounted) setState(() => _loadedPrefs = true);
+  }
+
+  Future<void> _savePref(String key, bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (_) {}
+  }
+
+  void _open(Widget page) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _confirmReset() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Reset App'),
+        content: const Text(
+          'Deletes all teams, players, matches, tournaments, drafts and '
+          'restores the default Super Sixty League Season 2K26 with its '
+          '18 fixtures. Backups and exported files are kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: FilledButton.styleFrom(backgroundColor: kRed),
+            child: const Text('Reset everything'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await widget.store.resetApp();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('App reset — default tournament restored'),
+      ),
+    );
+  }
+
+  Widget _settingsRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: kCyan),
+      title: Text(title, style: const TextStyle(color: kWhite)),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+      onTap: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        children: [
+          const SectionTitle(
+            icon: Icons.account_circle_outlined,
+            title: 'Account & Sync',
+          ),
+          ScoreCard(
+            padding: EdgeInsets.zero,
+            child: AnimatedBuilder(
+              animation: AuthService(),
+              builder: (context, _) {
+                final auth = AuthService();
+                if (auth.isLoggedIn) {
+                  final sync = SyncService();
+                  final lastSync = sync.lastSyncAt;
+                  return Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.verified_user,
+                            color: kGreen),
+                        title: const Text('Logged in',
+                            style: TextStyle(color: kWhite)),
+                        subtitle: Text(
+                          auth.displayName,
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.cloud_sync,
+                            color: kCyan),
+                        title: const Text('Cloud sync',
+                            style: TextStyle(color: kWhite)),
+                        subtitle: Text(
+                          sync.lastError != null
+                              ? 'Last attempt failed — will retry '
+                                  'automatically'
+                              : lastSync == null
+                                  ? 'Data syncs automatically when online'
+                                  : 'Last synced: '
+                                      '${lastSync.day}/${lastSync.month} '
+                                      '${lastSync.hour}:'
+                                      '${lastSync.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                        trailing: TextButton(
+                          child: const Text('Sync now'),
+                          onPressed: () async {
+                            await sync.pull(store);
+                            await store.persist();
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _settingsRow(
+                        icon: Icons.logout,
+                        title: 'Log out',
+                        subtitle: 'Data stays on this device',
+                        onTap: () async {
+                          await auth.signOut();
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                    ],
+                  );
+                }
+                return _settingsRow(
+                  icon: Icons.login,
+                  title: 'Log in / Sign up',
+                  subtitle:
+                      'Email, Google or phone — sync data across devices',
+                  onTap: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => LoginScreen(store: store)));
+                    if (mounted) setState(() {});
+                  },
+                );
+              },
+            ),
+          ),
+          const SectionTitle(
+            icon: Icons.notifications_outlined,
+            title: 'Notifications',
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 0, 4, 2),
+            child: Text(
+              'Preferences only — no cloud, reminders stay on this device.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+          ),
+          ScoreCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  value: _notifMatch,
+                  onChanged: _loadedPrefs
+                      ? (v) {
+                          setState(() => _notifMatch = v);
+                          _savePref(_kNotifMatch, v);
+                        }
+                      : null,
+                  title: const Text(
+                    'Match reminders',
+                    style: TextStyle(color: kWhite),
+                  ),
+                  subtitle: const Text(
+                    'Remind before upcoming fixtures',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  activeThumbColor: kCyan,
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  value: _notifBackup,
+                  onChanged: _loadedPrefs
+                      ? (v) {
+                          setState(() => _notifBackup = v);
+                          _savePref(_kNotifBackup, v);
+                        }
+                      : null,
+                  title: const Text(
+                    'Backup reminders',
+                    style: TextStyle(color: kWhite),
+                  ),
+                  subtitle: const Text(
+                    'Remind when no recent backup exists',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  activeThumbColor: kCyan,
+                ),
+              ],
+            ),
+          ),
+          const SectionTitle(
+            icon: Icons.storage_outlined,
+            title: 'Data Management',
+          ),
+          ScoreCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                _settingsRow(
+                  icon: Icons.backup,
+                  title: 'Backup & Restore',
+                  subtitle: 'Manual, automatic and Downloads backups',
+                  onTap: () => _open(BackupScreen(store: store)),
+                ),
+                const Divider(height: 1),
+                _settingsRow(
+                  icon: Icons.import_export,
+                  title: 'Player import/export',
+                  subtitle: 'Excel / CSV player lists',
+                  onTap: () => _open(RegistrationScreen(store: store)),
+                ),
+              ],
+            ),
+          ),
+          const SectionTitle(
+            icon: Icons.palette_outlined,
+            title: 'Appearance',
+          ),
+          // Info only — the app ships with a single dark navy theme;
+          // there is no stored theme preference to toggle.
+          const ScoreCard(
+            child: Row(
+              children: [
+                Icon(Icons.dark_mode, color: kGold),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Dark theme (default)',
+                    style: TextStyle(color: kWhite),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          ScoreCard(
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              leading: const Icon(
+                Icons.warning_amber_rounded,
+                color: kRed,
+              ),
+              title: const Text(
+                'Reset App',
+                style: TextStyle(
+                  color: kWhite,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: const Text(
+                'Advanced — restore default data',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              iconColor: kRed,
+              collapsedIconColor: Colors.white54,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ScoreButton(
+                        label: 'Reset App',
+                        icon: Icons.delete_forever,
+                        kind: ScoreButtonKind.danger,
+                        onPressed: _confirmReset,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SectionTitle(
+            icon: Icons.info_outline,
+            title: 'About & App Info',
+          ),
+          ScoreCard(
+            padding: EdgeInsets.zero,
+            child: _settingsRow(
+              icon: Icons.info_outline,
+              title: 'About 60Score',
+              subtitle: 'Version, credits and description',
+              onTap: () => _open(const AboutScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
