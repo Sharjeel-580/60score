@@ -613,7 +613,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
     );
     return Card(
       child: ExpansionTile(
-        initiallyExpanded: true,
+        // v1.2.2: the live wagon wheel starts CLOSED (was
+        // initiallyExpanded: true, so it sat open from the first
+        // ball and the scorer had to close it by hand). It opens
+        // only when the scorer taps it. Keyed per striker so a new
+        // batsman never inherits an open wheel.
+        key: ValueKey('live-wagon-$striker'),
+        initiallyExpanded: false,
         title: Text(
           'Wagon wheel - live (${nameOf(striker)})',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
