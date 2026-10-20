@@ -2,6 +2,8 @@
 //
 // Renders a branded card off-screen, captures it as PNG and opens the
 // system share sheet. ASCII-safe, offline, no extra packages needed.
+import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -12,6 +14,7 @@ import 'scoring.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'widgets/player_avatar.dart';
+import 'widgets/share_preview.dart';
 
 Future<void> shareMatchSummaryImage(
   BuildContext context,
@@ -43,11 +46,24 @@ Future<void> shareMatchSummaryImage(
     final img = await boundary.toImage(pixelRatio: 2.5);
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
     if (bytes != null) {
-      await shareBytes(
-        'summary_${match.id}.png',
-        bytes.buffer.asUint8List(),
-        text: '60Score match summary',
+      final png = bytes.buffer.asUint8List();
+      // v1.2.2: fit-to-screen preview inside the SafeArea before
+      // sharing, so the tall card can be checked whole (its top no
+      // longer runs under the camera/notch). The captured image
+      // itself is unchanged.
+      if (!context.mounted) return;
+      final ok = await showSharePreview(
+        context,
+        title: 'Match Summary',
+        images: [png],
       );
+      if (ok) {
+        await shareBytes(
+          'summary_${match.id}.png',
+          png,
+          text: '60Score match summary',
+        );
+      }
     }
   } finally {
     entry.remove();
@@ -60,6 +76,16 @@ class _SummaryCard extends StatelessWidget {
   const _SummaryCard({required this.store, required this.match});
 
   Player? _playerOf(String pid) => store.findPlayer(pid);
+
+  /// Decoded tournament logo bytes, or null when unset/undecodable.
+  Uint8List? _logoBytes(String b64) {
+    if (b64.isEmpty) return null;
+    try {
+      return base64Decode(b64);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Aggregate batting + bowling figures for the POTM across all innings.
   Map<String, int> _potmStats(String pid) {
@@ -169,23 +195,60 @@ class _SummaryCard extends StatelessWidget {
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 5,
+                horizontal: 16,
+                vertical: 7,
               ),
               decoration: BoxDecoration(
                 color: kGold.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: kGold.withValues(alpha: 0.6),
                 ),
               ),
-              child: Text(
-                tournament.name,
-                style: const TextStyle(
-                  color: kGold,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // v1.2.2 (item 10): the tournament's own logo when
+                  // set; a default trophy icon when it has none.
+                  Builder(
+                    builder: (_) {
+                      final logo = _logoBytes(tournament.logoBase64);
+                      if (logo == null) {
+                        return const Icon(
+                          Icons.emoji_events,
+                          color: kGold,
+                          size: 24,
+                        );
+                      }
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.memory(
+                          logo,
+                          width: 28,
+                          height: 28,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.emoji_events,
+                            color: kGold,
+                            size: 24,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      tournament.name,
+                      // v1.2.2 (item 9): noticeably bigger name.
+                      style: const TextStyle(
+                        color: kGold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -275,7 +338,8 @@ class _SummaryCard extends StatelessWidget {
           ),
           child: Column(
             children: [
-              CaptainAvatar(store: store, teamId: teamId),
+              // v1.2.2: bigger captain photos (was default radius 20).
+              CaptainAvatar(store: store, teamId: teamId, radius: 34),
               const SizedBox(height: 6),
               Text(
                 store.teamName(teamId).toUpperCase(),
@@ -539,11 +603,13 @@ class _SummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // v1.2.2: bigger POTM photo; the block itself stays
+              // the same compact size.
               PlayerAvatar(
                 photoBase64: potmPhoto.isEmpty ? null : potmPhoto,
                 role: pl?.role ?? 'Batter',
                 name: name,
-                radius: 52,
+                radius: 62,
                 fallbackIcon: Icons.person,
               ),
               const SizedBox(width: 14),
