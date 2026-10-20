@@ -11,7 +11,19 @@ import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
   final Store? store;
-  const LoginScreen({super.key, this.store});
+
+  /// Gate mode: the screen is shown right after the splash when nobody
+  /// is logged in. There is no route to pop — [onGatePassed] fires when
+  /// the user logs in OR taps "Continue as Guest".
+  final bool gateMode;
+  final VoidCallback? onGatePassed;
+
+  const LoginScreen({
+    super.key,
+    this.store,
+    this.gateMode = false,
+    this.onGatePassed,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -62,9 +74,27 @@ class _LoginScreenState extends State<LoginScreen>
       if (store != null) {
         await SyncService().pull(store);
       }
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      final gatePassed = widget.onGatePassed;
+      if (gatePassed != null) {
+        gatePassed();
+      } else {
+        Navigator.pop(context, true);
+      }
     } else {
       setState(() => _error = result.message ?? 'Something went wrong.');
+    }
+  }
+
+  Future<void> _continueAsGuest() async {
+    // Remembered on-device: a returning guest skips the gate.
+    await _auth.setGuestMode();
+    if (!mounted) return;
+    final gatePassed = widget.onGatePassed;
+    if (gatePassed != null) {
+      gatePassed();
+    } else {
+      Navigator.pop(context, false);
     }
   }
 
@@ -76,6 +106,7 @@ class _LoginScreenState extends State<LoginScreen>
         backgroundColor: kOceanBlack,
         foregroundColor: kWhite,
         elevation: 0,
+        automaticallyImplyLeading: !widget.gateMode,
         title: const Text('Account',
             style: TextStyle(fontWeight: FontWeight.w800)),
       ),
@@ -162,9 +193,65 @@ class _LoginScreenState extends State<LoginScreen>
                   ],
                 ),
               ),
+              if (widget.gateMode) _guestBar(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Gate-only footer: guests skip login and use the app offline with
+  /// local data (cloud sync stays login-only; public tournament
+  /// search still works).
+  Widget _guestBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: Divider(
+                      color: kOceanSteel.withValues(alpha: 0.4))),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Text('or',
+                    style:
+                        TextStyle(color: kOceanFaint, fontSize: 12)),
+              ),
+              Expanded(
+                  child: Divider(
+                      color: kOceanSteel.withValues(alpha: 0.4))),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _continueAsGuest,
+              icon: const Icon(Icons.person_outline, size: 19),
+              label: const Text('Continue as Guest'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kWhite,
+                side: BorderSide(
+                    color: kOceanSteel.withValues(alpha: 0.7)),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Guests keep data on this device only.',
+            style: TextStyle(color: kOceanFaint, fontSize: 11),
+          ),
+        ],
       ),
     );
   }
