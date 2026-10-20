@@ -1,1 +1,27 @@
-cGx1Z2luTWFuYWdlbWVudCB7CiAgICB2YWwgZmx1dHRlclNka1BhdGggPQogICAgICAgIHJ1biB7CiAgICAgICAgICAgIHZhbCBwcm9wZXJ0aWVzID0gamF2YS51dGlsLlByb3BlcnRpZXMoKQogICAgICAgICAgICBmaWxlKCJsb2NhbC5wcm9wZXJ0aWVzIikuaW5wdXRTdHJlYW0oKS51c2UgeyBwcm9wZXJ0aWVzLmxvYWQoaXQpIH0KICAgICAgICAgICAgdmFsIGZsdXR0ZXJTZGtQYXRoID0gcHJvcGVydGllcy5nZXRQcm9wZXJ0eSgiZmx1dHRlci5zZGsiKQogICAgICAgICAgICByZXF1aXJlKGZsdXR0ZXJTZGtQYXRoICE9IG51bGwpIHsgImZsdXR0ZXIuc2RrIG5vdCBzZXQgaW4gbG9jYWwucHJvcGVydGllcyIgfQogICAgICAgICAgICBmbHV0dGVyU2RrUGF0aAogICAgICAgIH0KCiAgICBpbmNsdWRlQnVpbGQoIiRmbHV0dGVyU2RrUGF0aC9wYWNrYWdlcy9mbHV0dGVyX3Rvb2xzL2dyYWRsZSIpCgogICAgcmVwb3NpdG9yaWVzIHsKICAgICAgICBnb29nbGUoKQogICAgICAgIG1hdmVuQ2VudHJhbCgpCiAgICAgICAgZ3JhZGxlUGx1Z2luUG9ydGFsKCkKICAgIH0KfQoKcGx1Z2lucyB7CiAgICBpZCgiZGV2LmZsdXR0ZXIuZmx1dHRlci1wbHVnaW4tbG9hZGVyIikgdmVyc2lvbiAiMS4wLjAiCiAgICBpZCgiY29tLmFuZHJvaWQuYXBwbGljYXRpb24iKSB2ZXJzaW9uICI5LjEuMCIgYXBwbHkgZmFsc2UKICAgIGlkKCJvcmcuamV0YnJhaW5zLmtvdGxpbi5hbmRyb2lkIikgdmVyc2lvbiAiMi40LjAiIGFwcGx5IGZhbHNlCiAgICBpZCgiY29tLmdvb2dsZS5nbXMuZ29vZ2xlLXNlcnZpY2VzIikgdmVyc2lvbiAiNC40LjIiIGFwcGx5IGZhbHNlCn0KCmluY2x1ZGUoIjphcHAiKQo=
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.1.0" apply false
+    id("org.jetbrains.kotlin.android") version "2.4.0" apply false
+    id("com.google.gms.google-services") version "4.4.2" apply false
+}
+
+include(":app")
