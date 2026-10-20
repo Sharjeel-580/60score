@@ -8,6 +8,9 @@
 // - Fields: teams, tournaments, matches, regPlayers, drafts, manualStats
 //   (each a JSON string, same format as local), updatedAt (ms epoch),
 //   device (device model for the "last synced from" note).
+// - Player photos travel separately, one document per player in
+//   users/{uid}/photos/{playerId} (see photo_sync.dart) — photoBase64
+//   is stripped from the backup JSON so this document stays small.
 // - Push: debounced 5s after any Store.persist(), only when logged in.
 // - Pull: after login and on app start (if logged in). Last-write-wins
 //   by timestamp — the newer side (local or cloud) wins, never merged.
@@ -25,6 +28,10 @@
 //              allow read, write: if request.auth != null
 //                  && request.auth.uid == uid;
 //            }
+//            match /users/{uid}/photos/{photoId} {
+//              allow read, write: if request.auth != null
+//                  && request.auth.uid == uid;
+//            }
 //          }
 //        }
 //   3. Publish.
@@ -36,6 +43,7 @@ import 'package:flutter/foundation.dart';
 
 import 'auth_service.dart';
 import 'models.dart';
+import 'photo_sync.dart';
 import 'store.dart';
 
 class SyncService {
@@ -64,6 +72,16 @@ class SyncService {
         .doc(_kDoc);
   }
 
+  CollectionReference<Map<String, dynamic>>? _photosRef() {
+    final auth = AuthService();
+    if (!auth.firebaseReady || !auth.isLoggedIn) return null;
+    final uid = auth.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('photos');
+  }
+
   /// Called from Store.persist(). Debounced push — safe to call often.
   void schedulePush(Store store) {
     if (_applyingRemote) return;
@@ -78,12 +96,17 @@ class SyncService {
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
       await ref.set({
-        'teams': jsonEncode(store.teams.map((t) => t.toJson()).toList()),
+        // Photos are stripped here — they sync via the photos
+        // subcollection (PhotoSync) so this document stays small.
+        'teams': jsonEncode(store.teams
+            .map((t) => PhotoSync.stripPhotos(t.toJson()))
+            .toList()),
         'tournaments':
             jsonEncode(store.tournaments.map((t) => t.toJson()).toList()),
         'matches': jsonEncode(store.matches.map((m) => m.toJson()).toList()),
-        'regPlayers':
-            jsonEncode(store.regPlayers.map((r) => r.toJson()).toList()),
+        'regPlayers': jsonEncode(store.regPlayers
+            .map((r) => PhotoSync.stripPhotos(r.toJson()))
+            .toList()),
         'drafts': jsonEncode(store.drafts.map((d) => d.toJson()).toList()),
         'manualStats':
             jsonEncode(store.manualStats.map((e) => e.toJson()).toList()),
@@ -91,6 +114,8 @@ class SyncService {
         'appVersion': '1.2.0',
       }, SetOptions(merge: true));
       await store.setLastModified(now);
+      final photos = _photosRef();
+      if (photos != null) await PhotoSync.pushPhotos(photos, store);
       _lastSyncAt = DateTime.now();
       _lastError = null;
     } catch (e) {
@@ -114,7 +139,16 @@ class SyncService {
       final data = snap.data()!;
       final remoteAt = (data['updatedAt'] as num?)?.toInt() ?? 0;
       final localAt = await store.getLastModified();
-      if (remoteAt <= localAt) return false;
+      if (remoteAt <= localAt) {
+        // Main state is current, but photos may still be missing (e.g.
+        // a photo upload succeeded after this device's last full pull).
+        final photos = _photosRef();
+        if (photos != null && await PhotoSync.pullPhotos(photos, store)) {
+          await store.persist(skipSync: true);
+          _lastSyncAt = DateTime.now();
+        }
+        return false;
+      }
 
       _applyingRemote = true;
       try {
@@ -133,6 +167,13 @@ class SyncService {
         store.manualStats =
             _decode(data['manualStats'], ManualStatEntry.fromJson) ??
                 store.manualStats;
+        // The backup JSON carries no photos (stripped on push); fill
+        // them in from the photos subcollection before persisting, so
+        // one persist saves the complete state. Backups written by
+        // older builds may still carry photos inline — those survive,
+        // and any newer cloud photo below simply overwrites them.
+        final photos = _photosRef();
+        if (photos != null) await PhotoSync.pullPhotos(photos, store);
         await store.setLastModified(remoteAt);
         await store.persist(skipSync: true);
       } finally {
