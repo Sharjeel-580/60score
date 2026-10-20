@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../auth_service.dart';
 import '../models.dart';
 import '../points_table_share.dart';
+import '../publish_service.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
@@ -903,6 +905,29 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
       ((_playoffUpdate?.finalQualifiers ?? tournament.qualifiedTeamIds)
           .isNotEmpty);
 
+  /// Publish / unpublish this tournament (owner only, login required).
+  /// Manual action only — publishing is never automatic.
+  Future<void> _togglePublish() async {
+    final wasPublished = tournament.published;
+    final svc = PublishService();
+    final err = wasPublished
+        ? await svc.unpublish(store, tournament)
+        : await svc.publish(store, tournament);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          err ??
+              (wasPublished
+                  ? 'Unpublished — it no longer appears in Search.'
+                  : 'Published — anyone can find it in Search '
+                      '(view-only).'),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openFixture(Match m) async {
     late final Widget screen;
     switch (m.status) {
@@ -1018,6 +1043,17 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
         appBar: AppBar(
           title: Text(tournament.name),
           actions: [
+            if (AuthService().isLoggedIn)
+              IconButton(
+                icon: Icon(
+                  tournament.published ? Icons.public : Icons.public_off,
+                  color: tournament.published ? kGreen : null,
+                ),
+                tooltip: tournament.published
+                    ? 'Published — tap to unpublish'
+                    : 'Publish (public, view-only)',
+                onPressed: _togglePublish,
+              ),
             IconButton(
               icon: const Icon(Icons.share_outlined),
               tooltip: 'Share points table',
@@ -1028,6 +1064,9 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
             IconButton(
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {
+                if (tournament.published) {
+                  PublishService().deletePublishedDoc(tournament.id);
+                }
                 await store.deleteTournament(tournament.id);
                 if (context.mounted) Navigator.pop(context);
               },
