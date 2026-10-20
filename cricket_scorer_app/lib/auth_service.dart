@@ -1,1 +1,215 @@
-Ly8gNjBTY29yZSBhY2NvdW50IHNlcnZpY2Ug4oCUIGxvZ2luICsgY2xvdWQgc3luYy4KLy8gU3VwcG9ydHM6IEVtYWlsL3Bhc3N3b3JkLCBHb29nbGUgU2lnbi1JbiwgUGhvbmUgT1RQIChhbGwgdmlhIEZpcmViYXNlIEF1dGgpLgovLyBUaGUgYXBwIGlzIG9mZmxpbmUtZmlyc3Q6IGV2ZXJ5dGhpbmcgd29ya3Mgd2l0aG91dCBsb2dpbi4gTG9nZ2luZyBpbgovLyBlbmFibGVzIGNyb3NzLWRldmljZSBkYXRhIHN5bmMgdmlhIENsb3VkIEZpcmVzdG9yZS4KLy8KLy8gU0VUVVAgKG9uZS10aW1lLCBieSB0aGUgYXBwIG93bmVyKToKLy8gICAxLiBDcmVhdGUgYSBGaXJlYmFzZSBwcm9qZWN0IGF0IGNvbnNvbGUuZmlyZWJhc2UuZ29vZ2xlLmNvbQovLyAgIDIuIEFkZCBhbiBBbmRyb2lkIGFwcCAocGFja2FnZTogY29tLmV4YW1wbGUuY3JpY2tldF9zY29yZXJfYXBwIOKAlCB1cGRhdGUKLy8gICAgICB0byB0aGUgcmVhbCBhcHBsaWNhdGlvbklkKSBhbmQgZG93bmxvYWQgZ29vZ2xlLXNlcnZpY2VzLmpzb24KLy8gICAzLiBQbGFjZSBnb29nbGUtc2VydmljZXMuanNvbiBpbiBhbmRyb2lkL2FwcC8KLy8gICA0LiBJbiBGaXJlYmFzZSBjb25zb2xlID4gQXV0aGVudGljYXRpb24gPiBTaWduLWluIG1ldGhvZCwgZW5hYmxlOgovLyAgICAgIEVtYWlsL1Bhc3N3b3JkLCBHb29nbGUsIGFuZCBQaG9uZS4KLy8gVW50aWwgZ29vZ2xlLXNlcnZpY2VzLmpzb24gaXMgcHJlc2VudCwgdGhpcyBzZXJ2aWNlIHN0YXlzIGluIG9mZmxpbmUgbW9kZQovLyBhbmQgZXZlcnkgbWV0aG9kIHJlcG9ydHMgW0F1dGhVbmF2YWlsYWJsZV0uCmltcG9ydCAncGFja2FnZTpmaXJlYmFzZV9hdXRoL2ZpcmViYXNlX2F1dGguZGFydCc7CmltcG9ydCAncGFja2FnZTpmaXJlYmFzZV9jb3JlL2ZpcmViYXNlX2NvcmUuZGFydCc7CmltcG9ydCAncGFja2FnZTpmbHV0dGVyL2ZvdW5kYXRpb24uZGFydCc7CmltcG9ydCAncGFja2FnZTpnb29nbGVfc2lnbl9pbi9nb29nbGVfc2lnbl9pbi5kYXJ0JzsKCi8vLyBSZXN1bHQgb2YgYW4gYXV0aCBhdHRlbXB0LgplbnVtIEF1dGhTdGF0dXMgewogIG9rLAogIC8vLyBGaXJlYmFzZSBpcyBub3QgY29uZmlndXJlZCAobm8gZ29vZ2xlLXNlcnZpY2VzLmpzb24pIOKAlCBvZmZsaW5lIG1vZGUuCiAgdW5hdmFpbGFibGUsCiAgLy8vIFdyb25nIGNyZWRlbnRpYWxzIC8gaW52YWxpZCBjb2RlLgogIGludmFsaWRDcmVkZW50aWFscywKICAvLy8gQW55IG90aGVyIGZhaWx1cmUgKG5ldHdvcmssIGV0Yy4pLgogIGZhaWxlZCwKfQoKY2xhc3MgQXV0aFJlc3VsdCB7CiAgZmluYWwgQXV0aFN0YXR1cyBzdGF0dXM7CiAgZmluYWwgU3RyaW5nPyBtZXNzYWdlOwogIGNvbnN0IEF1dGhSZXN1bHQodGhpcy5zdGF0dXMsIFt0aGlzLm1lc3NhZ2VdKTsKfQoKY2xhc3MgQXV0aFNlcnZpY2UgZXh0ZW5kcyBDaGFuZ2VOb3RpZmllciB7CiAgc3RhdGljIGZpbmFsIEF1dGhTZXJ2aWNlIF9pbnN0YW5jZSA9IEF1dGhTZXJ2aWNlLl9pbnRlcm5hbCgpOwogIGZhY3RvcnkgQXV0aFNlcnZpY2UoKSA9PiBfaW5zdGFuY2U7CiAgQXV0aFNlcnZpY2UuX2ludGVybmFsKCk7CgogIGJvb2wgX2ZpcmViYXNlUmVhZHkgPSBmYWxzZTsKICBib29sIGdldCBmaXJlYmFzZVJlYWR5ID0+IF9maXJlYmFzZVJlYWR5OwoKICBVc2VyPyBnZXQgY3VycmVudFVzZXIgPT4KICAgICAgX2ZpcmViYXNlUmVhZHkgPyBGaXJlYmFzZUF1dGguaW5zdGFuY2UuY3VycmVudFVzZXIgOiBudWxsOwogIGJvb2wgZ2V0IGlzTG9nZ2VkSW4gPT4gY3VycmVudFVzZXIgIT0gbnVsbDsKICBTdHJpbmcgZ2V0IGRpc3BsYXlOYW1lID0+CiAgICAgIGN1cnJlbnRVc2VyPy5kaXNwbGF5TmFtZSA/PyBjdXJyZW50VXNlcj8uZW1haWwgPz8gY3VycmVudFVzZXI/LnBob25lTnVtYmVyID8/ICcnOwoKICAvLy8gQ2FsbCBvbmNlIGF0IHN0YXJ0dXAuIE5ldmVyIHRocm93cyDigJQgZmFsbHMgYmFjayB0byBvZmZsaW5lIG1vZGUuCiAgRnV0dXJlPHZvaWQ+IGluaXQoKSBhc3luYyB7CiAgICB0cnkgewogICAgICBhd2FpdCBGaXJlYmFzZS5pbml0aWFsaXplQXBwKCk7CiAgICAgIF9maXJlYmFzZVJlYWR5ID0gdHJ1ZTsKICAgICAgRmlyZWJhc2VBdXRoLmluc3RhbmNlLmF1dGhTdGF0ZUNoYW5nZXMoKS5saXN0ZW4oKF8pIHsKICAgICAgICBub3RpZnlMaXN0ZW5lcnMoKTsKICAgICAgfSk7CiAgICB9IGNhdGNoIChfKSB7CiAgICAgIC8vIE5vIGdvb2dsZS1zZXJ2aWNlcy5qc29uIChvciBvdGhlciBpbml0IGZhaWx1cmUpOiBzdGF5IG9mZmxpbmUuCiAgICAgIF9maXJlYmFzZVJlYWR5ID0gZmFsc2U7CiAgICB9CiAgICBub3RpZnlMaXN0ZW5lcnMoKTsKICB9CgogIEF1dGhSZXN1bHQgX2d1YXJkKCkgewogICAgaWYgKCFfZmlyZWJhc2VSZWFkeSkgewogICAgICByZXR1cm4gY29uc3QgQXV0aFJlc3VsdChBdXRoU3RhdHVzLnVuYXZhaWxhYmxlLAogICAgICAgICAgJ0Nsb3VkIGFjY291bnQgaXMgbm90IHNldCB1cCB5ZXQuIFRoZSBhcHAgd29ya3MgZnVsbHkgb2ZmbGluZS4nKTsKICAgIH0KICAgIHJldHVybiBjb25zdCBBdXRoUmVzdWx0KEF1dGhTdGF0dXMub2spOwogIH0KCiAgLy8gLS0tLS0tLS0tLSBFbWFpbCAvIHBhc3N3b3JkIC0tLS0tLS0tLS0KCiAgRnV0dXJlPEF1dGhSZXN1bHQ+IHNpZ25JbldpdGhFbWFpbChTdHJpbmcgZW1haWwsIFN0cmluZyBwYXNzd29yZCkgYXN5bmMgewogICAgZmluYWwgZyA9IF9ndWFyZCgpOwogICAgaWYgKGcuc3RhdHVzICE9IEF1dGhTdGF0dXMub2spIHJldHVybiBnOwogICAgdHJ5IHsKICAgICAgYXdhaXQgRmlyZWJhc2VBdXRoLmluc3RhbmNlCiAgICAgICAgICAuc2lnbkluV2l0aEVtYWlsQW5kUGFzc3dvcmQoZW1haWw6IGVtYWlsLnRyaW0oKSwgcGFzc3dvcmQ6IHBhc3N3b3JkKTsKICAgICAgbm90aWZ5TGlzdGVuZXJzKCk7CiAgICAgIHJldHVybiBjb25zdCBBdXRoUmVzdWx0KEF1dGhTdGF0dXMub2spOwogICAgfSBvbiBGaXJlYmFzZUF1dGhFeGNlcHRpb24gY2F0Y2ggKGUpIHsKICAgICAgcmV0dXJuIEF1dGhSZXN1bHQoQXV0aFN0YXR1cy5pbnZhbGlkQ3JlZGVudGlhbHMsIF9mcmllbmRseShlKSk7CiAgICB9IGNhdGNoIChlKSB7CiAgICAgIHJldHVybiBBdXRoUmVzdWx0KEF1dGhTdGF0dXMuZmFpbGVkLCBlLnRvU3RyaW5nKCkpOwogICAgfQogIH0KCiAgRnV0dXJlPEF1dGhSZXN1bHQ+IHNpZ25VcFdpdGhFbWFpbChTdHJpbmcgZW1haWwsIFN0cmluZyBwYXNzd29yZCkgYXN5bmMgewogICAgZmluYWwgZyA9IF9ndWFyZCgpOwogICAgaWYgKGcuc3RhdHVzICE9IEF1dGhTdGF0dXMub2spIHJldHVybiBnOwogICAgdHJ5IHsKICAgICAgYXdhaXQgRmlyZWJhc2VBdXRoLmluc3RhbmNlLmNyZWF0ZVVzZXJXaXRoRW1haWxBbmRQYXNzd29yZCgKICAgICAgICAgIGVtYWlsOiBlbWFpbC50cmltKCksIHBhc3N3b3JkOiBwYXNzd29yZCk7CiAgICAgIG5vdGlmeUxpc3RlbmVycygpOwogICAgICByZXR1cm4gY29uc3QgQXV0aFJlc3VsdChBdXRoU3RhdHVzLm9rKTsKICAgIH0gb24gRmlyZWJhc2VBdXRoRXhjZXB0aW9uIGNhdGNoIChlKSB7CiAgICAgIHJldHVybiBBdXRoUmVzdWx0KEF1dGhTdGF0dXMuaW52YWxpZENyZWRlbnRpYWxzLCBfZnJpZW5kbHkoZSkpOwogICAgfSBjYXRjaCAoZSkgewogICAgICByZXR1cm4gQXV0aFJlc3VsdChBdXRoU3RhdHVzLmZhaWxlZCwgZS50b1N0cmluZygpKTsKICAgIH0KICB9CgogIC8vIC0tLS0tLS0tLS0gR29vZ2xlIC0tLS0tLS0tLS0KCiAgRnV0dXJlPEF1dGhSZXN1bHQ+IHNpZ25JbldpdGhHb29nbGUoKSBhc3luYyB7CiAgICBmaW5hbCBnID0gX2d1YXJkKCk7CiAgICBpZiAoZy5zdGF0dXMgIT0gQXV0aFN0YXR1cy5vaykgcmV0dXJuIGc7CiAgICB0cnkgewogICAgICBmaW5hbCBnb29nbGVVc2VyID0gYXdhaXQgR29vZ2xlU2lnbkluKCkuc2lnbkluKCk7CiAgICAgIGlmIChnb29nbGVVc2VyID09IG51bGwpIHsKICAgICAgICByZXR1cm4gY29uc3QgQXV0aFJlc3VsdCgKICAgICAgICAgICAgQXV0aFN0YXR1cy5mYWlsZWQsICdHb29nbGUgc2lnbi1pbiB3YXMgY2FuY2VsbGVkLicpOwogICAgICB9CiAgICAgIGZpbmFsIGdvb2dsZUF1dGggPSBhd2FpdCBnb29nbGVVc2VyLmF1dGhlbnRpY2F0aW9uOwogICAgICBmaW5hbCBjcmVkZW50aWFsID0gR29vZ2xlQXV0aFByb3ZpZGVyLmNyZWRlbnRpYWwoCiAgICAgICAgYWNjZXNzVG9rZW46IGdvb2dsZUF1dGguYWNjZXNzVG9rZW4sCiAgICAgICAgaWRUb2tlbjogZ29vZ2xlQXV0aC5pZFRva2VuLAogICAgICApOwogICAgICBhd2FpdCBGaXJlYmFzZUF1dGguaW5zdGFuY2Uuc2lnbkluV2l0aENyZWRlbnRpYWwoY3JlZGVudGlhbCk7CiAgICAgIG5vdGlmeUxpc3RlbmVycygpOwogICAgICByZXR1cm4gY29uc3QgQXV0aFJlc3VsdChBdXRoU3RhdHVzLm9rKTsKICAgIH0gb24gRmlyZWJhc2VBdXRoRXhjZXB0aW9uIGNhdGNoIChlKSB7CiAgICAgIHJldHVybiBBdXRoUmVzdWx0KEF1dGhTdGF0dXMuZmFpbGVkLCBfZnJpZW5kbHkoZSkpOwogICAgfSBjYXRjaCAoZSkgewogICAgICByZXR1cm4gQXV0aFJlc3VsdChBdXRoU3RhdHVzLmZhaWxlZCwgZS50b1N0cmluZygpKTsKICAgIH0KICB9CgogIC8vIC0tLS0tLS0tLS0gUGhvbmUgT1RQIC0tLS0tLS0tLS0KCiAgLy8vIFN0YXJ0cyBwaG9uZSB2ZXJpZmljYXRpb24uIFtvbkNvZGVTZW50XSByZWNlaXZlcyB0aGUgdmVyaWZpY2F0aW9uSWQKICAvLy8gdG8ga2VlcCB3aGlsZSB0aGUgdXNlciB0eXBlcyB0aGUgU01TIGNvZGUuCiAgRnV0dXJlPEF1dGhSZXN1bHQ+IHN0YXJ0UGhvbmVWZXJpZmljYXRpb24oCiAgICBTdHJpbmcgcGhvbmVOdW1iZXIsIHsKICAgIHJlcXVpcmVkIHZvaWQgRnVuY3Rpb24oU3RyaW5nIHZlcmlmaWNhdGlvbklkKSBvbkNvZGVTZW50LAogICAgdm9pZCBGdW5jdGlvbihTdHJpbmcgbWVzc2FnZSk/IG9uRmFpbGVkLAogIH0pIGFzeW5jIHsKICAgIGZpbmFsIGcgPSBfZ3VhcmQoKTsKICAgIGlmIChnLnN0YXR1cyAhPSBBdXRoU3RhdHVzLm9rKSByZXR1cm4gZzsKICAgIHRyeSB7CiAgICAgIGF3YWl0IEZpcmViYXNlQXV0aC5pbnN0YW5jZS52ZXJpZnlQaG9uZU51bWJlcigKICAgICAgICBwaG9uZU51bWJlcjogcGhvbmVOdW1iZXIudHJpbSgpLAogICAgICAgIHZlcmlmaWNhdGlvbkNvbXBsZXRlZDogKGNyZWRlbnRpYWwpIGFzeW5jIHsKICAgICAgICAgIGF3YWl0IEZpcmViYXNlQXV0aC5pbnN0YW5jZS5zaWduSW5XaXRoQ3JlZGVudGlhbChjcmVkZW50aWFsKTsKICAgICAgICAgIG5vdGlmeUxpc3RlbmVycygpOwogICAgICAgIH0sCiAgICAgICAgdmVyaWZpY2F0aW9uRmFpbGVkOiAoZSkgewogICAgICAgICAgb25GYWlsZWQ/LmNhbGwoX2ZyaWVuZGx5KGUpKTsKICAgICAgICB9LAogICAgICAgIGNvZGVTZW50OiAodmVyaWZpY2F0aW9uSWQsIF8pID0+IG9uQ29kZVNlbnQodmVyaWZpY2F0aW9uSWQpLAogICAgICAgIGNvZGVBdXRvUmV0cmlldmFsVGltZW91dDogKF8pIHt9LAogICAgICAgIHRpbWVvdXQ6IGNvbnN0IER1cmF0aW9uKHNlY29uZHM6IDYwKSwKICAgICAgKTsKICAgICAgcmV0dXJuIGNvbnN0IEF1dGhSZXN1bHQoQXV0aFN0YXR1cy5vayk7CiAgICB9IGNhdGNoIChlKSB7CiAgICAgIHJldHVybiBBdXRoUmVzdWx0KEF1dGhTdGF0dXMuZmFpbGVkLCBlLnRvU3RyaW5nKCkpOwogICAgfQogIH0KCiAgRnV0dXJlPEF1dGhSZXN1bHQ+IGNvbmZpcm1QaG9uZUNvZGUoCiAgICAgIFN0cmluZyB2ZXJpZmljYXRpb25JZCwgU3RyaW5nIHNtc0NvZGUpIGFzeW5jIHsKICAgIGZpbmFsIGcgPSBfZ3VhcmQoKTsKICAgIGlmIChnLnN0YXR1cyAhPSBBdXRoU3RhdHVzLm9rKSByZXR1cm4gZzsKICAgIHRyeSB7CiAgICAgIGZpbmFsIGNyZWRlbnRpYWwgPSBQaG9uZUF1dGhQcm92aWRlci5jcmVkZW50aWFsKAogICAgICAgIHZlcmlmaWNhdGlvbklkOiB2ZXJpZmljYXRpb25JZCwKICAgICAgICBzbXNDb2RlOiBzbXNDb2RlLnRyaW0oKSwKICAgICAgKTsKICAgICAgYXdhaXQgRmlyZWJhc2VBdXRoLmluc3RhbmNlLnNpZ25JbldpdGhDcmVkZW50aWFsKGNyZWRlbnRpYWwpOwogICAgICBub3RpZnlMaXN0ZW5lcnMoKTsKICAgICAgcmV0dXJuIGNvbnN0IEF1dGhSZXN1bHQoQXV0aFN0YXR1cy5vayk7CiAgICB9IG9uIEZpcmViYXNlQXV0aEV4Y2VwdGlvbiBjYXRjaCAoZSkgewogICAgICByZXR1cm4gQXV0aFJlc3VsdChBdXRoU3RhdHVzLmludmFsaWRDcmVkZW50aWFscywgX2ZyaWVuZGx5KGUpKTsKICAgIH0gY2F0Y2ggKGUpIHsKICAgICAgcmV0dXJuIEF1dGhSZXN1bHQoQXV0aFN0YXR1cy5mYWlsZWQsIGUudG9TdHJpbmcoKSk7CiAgICB9CiAgfQoKICAvLyAtLS0tLS0tLS0tIFNpZ24gb3V0IC0tLS0tLS0tLS0KCiAgRnV0dXJlPHZvaWQ+IHNpZ25PdXQoKSBhc3luYyB7CiAgICBpZiAoIV9maXJlYmFzZVJlYWR5KSByZXR1cm47CiAgICB0cnkgewogICAgICBhd2FpdCBHb29nbGVTaWduSW4oKS5zaWduT3V0KCk7CiAgICB9IGNhdGNoIChfKSB7fQogICAgYXdhaXQgRmlyZWJhc2VBdXRoLmluc3RhbmNlLnNpZ25PdXQoKTsKICAgIG5vdGlmeUxpc3RlbmVycygpOwogIH0KCiAgU3RyaW5nIF9mcmllbmRseShGaXJlYmFzZUF1dGhFeGNlcHRpb24gZSkgewogICAgc3dpdGNoIChlLmNvZGUpIHsKICAgICAgY2FzZSAnaW52YWxpZC1lbWFpbCc6CiAgICAgICAgcmV0dXJuICdFbWFpbCBhZGRyZXNzIGlzIG5vdCB2YWxpZC4nOwogICAgICBjYXNlICd1c2VyLW5vdC1mb3VuZCc6CiAgICAgIGNhc2UgJ3dyb25nLXBhc3N3b3JkJzoKICAgICAgY2FzZSAnaW52YWxpZC1jcmVkZW50aWFsJzoKICAgICAgICByZXR1cm4gJ1dyb25nIGVtYWlsIG9yIHBhc3N3b3JkLic7CiAgICAgIGNhc2UgJ2VtYWlsLWFscmVhZHktaW4tdXNlJzoKICAgICAgICByZXR1cm4gJ1RoaXMgZW1haWwgaXMgYWxyZWFkeSByZWdpc3RlcmVkLiBUcnkgbG9nZ2luZyBpbi4nOwogICAgICBjYXNlICd3ZWFrLXBhc3N3b3JkJzoKICAgICAgICByZXR1cm4gJ1Bhc3N3b3JkIGlzIHRvbyB3ZWFrIChtaW4gNiBjaGFyYWN0ZXJzKS4nOwogICAgICBjYXNlICdpbnZhbGlkLXZlcmlmaWNhdGlvbi1jb2RlJzoKICAgICAgICByZXR1cm4gJ1dyb25nIFNNUyBjb2RlLiBUcnkgYWdhaW4uJzsKICAgICAgY2FzZSAndG9vLW1hbnktcmVxdWVzdHMnOgogICAgICAgIHJldHVybiAnVG9vIG1hbnkgYXR0ZW1wdHMuIFBsZWFzZSB3YWl0IGFuZCB0cnkgYWdhaW4uJzsKICAgICAgY2FzZSAnbmV0d29yay1yZXF1ZXN0LWZhaWxlZCc6CiAgICAgICAgcmV0dXJuICdObyBpbnRlcm5ldCBjb25uZWN0aW9uLic7CiAgICAgIGRlZmF1bHQ6CiAgICAgICAgcmV0dXJuIGUubWVzc2FnZSA/PyAnU29tZXRoaW5nIHdlbnQgd3JvbmcuJzsKICAgIH0KICB9Cn0K
+// 60Score account service — login + cloud sync.
+// Supports: Email/password, Google Sign-In, Phone OTP (all via Firebase Auth).
+// The app is offline-first: everything works without login. Logging in
+// enables cross-device data sync via Cloud Firestore.
+//
+// SETUP (one-time, by the app owner):
+//   1. Create a Firebase project at console.firebase.google.com
+//   2. Add an Android app (package: com.example.cricket_scorer_app — update
+//      to the real applicationId) and download google-services.json
+//   3. Place google-services.json in android/app/
+//   4. In Firebase console > Authentication > Sign-in method, enable:
+//      Email/Password, Google, and Phone.
+// Until google-services.json is present, this service stays in offline mode
+// and every method reports [AuthUnavailable].
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+/// Result of an auth attempt.
+enum AuthStatus {
+  ok,
+  /// Firebase is not configured (no google-services.json) — offline mode.
+  unavailable,
+  /// Wrong credentials / invalid code.
+  invalidCredentials,
+  /// Any other failure (network, etc.).
+  failed,
+}
+
+class AuthResult {
+  final AuthStatus status;
+  final String? message;
+  const AuthResult(this.status, [this.message]);
+}
+
+class AuthService extends ChangeNotifier {
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
+
+  bool _firebaseReady = false;
+  bool get firebaseReady => _firebaseReady;
+
+  User? get currentUser =>
+      _firebaseReady ? FirebaseAuth.instance.currentUser : null;
+  bool get isLoggedIn => currentUser != null;
+  String get displayName =>
+      currentUser?.displayName ?? currentUser?.email ?? currentUser?.phoneNumber ?? '';
+
+  /// Call once at startup. Never throws — falls back to offline mode.
+  Future<void> init() async {
+    try {
+      await Firebase.initializeApp();
+      _firebaseReady = true;
+      FirebaseAuth.instance.authStateChanges().listen((_) {
+        notifyListeners();
+      });
+    } catch (_) {
+      // No google-services.json (or other init failure): stay offline.
+      _firebaseReady = false;
+    }
+    notifyListeners();
+  }
+
+  AuthResult _guard() {
+    if (!_firebaseReady) {
+      return const AuthResult(AuthStatus.unavailable,
+          'Cloud account is not set up yet. The app works fully offline.');
+    }
+    return const AuthResult(AuthStatus.ok);
+  }
+
+  // ---------- Email / password ----------
+
+  Future<AuthResult> signInWithEmail(String email, String password) async {
+    final g = _guard();
+    if (g.status != AuthStatus.ok) return g;
+    try {
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email.trim(), password: password);
+      notifyListeners();
+      return const AuthResult(AuthStatus.ok);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(AuthStatus.invalidCredentials, _friendly(e));
+    } catch (e) {
+      return AuthResult(AuthStatus.failed, e.toString());
+    }
+  }
+
+  Future<AuthResult> signUpWithEmail(String email, String password) async {
+    final g = _guard();
+    if (g.status != AuthStatus.ok) return g;
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email.trim(), password: password);
+      notifyListeners();
+      return const AuthResult(AuthStatus.ok);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(AuthStatus.invalidCredentials, _friendly(e));
+    } catch (e) {
+      return AuthResult(AuthStatus.failed, e.toString());
+    }
+  }
+
+  // ---------- Google ----------
+
+  Future<AuthResult> signInWithGoogle() async {
+    final g = _guard();
+    if (g.status != AuthStatus.ok) return g;
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        return const AuthResult(
+            AuthStatus.failed, 'Google sign-in was cancelled.');
+      }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      notifyListeners();
+      return const AuthResult(AuthStatus.ok);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(AuthStatus.failed, _friendly(e));
+    } catch (e) {
+      return AuthResult(AuthStatus.failed, e.toString());
+    }
+  }
+
+  // ---------- Phone OTP ----------
+
+  /// Starts phone verification. [onCodeSent] receives the verificationId
+  /// to keep while the user types the SMS code.
+  Future<AuthResult> startPhoneVerification(
+    String phoneNumber, {
+    required void Function(String verificationId) onCodeSent,
+    void Function(String message)? onFailed,
+  }) async {
+    final g = _guard();
+    if (g.status != AuthStatus.ok) return g;
+    try {
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phoneNumber.trim(),
+        verificationCompleted: (credential) async {
+          await FirebaseAuth.instance.signInWithCredential(credential);
+          notifyListeners();
+        },
+        verificationFailed: (e) {
+          onFailed?.call(_friendly(e));
+        },
+        codeSent: (verificationId, _) => onCodeSent(verificationId),
+        codeAutoRetrievalTimeout: (_) {},
+        timeout: const Duration(seconds: 60),
+      );
+      return const AuthResult(AuthStatus.ok);
+    } catch (e) {
+      return AuthResult(AuthStatus.failed, e.toString());
+    }
+  }
+
+  Future<AuthResult> confirmPhoneCode(
+      String verificationId, String smsCode) async {
+    final g = _guard();
+    if (g.status != AuthStatus.ok) return g;
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode.trim(),
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      notifyListeners();
+      return const AuthResult(AuthStatus.ok);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(AuthStatus.invalidCredentials, _friendly(e));
+    } catch (e) {
+      return AuthResult(AuthStatus.failed, e.toString());
+    }
+  }
+
+  // ---------- Sign out ----------
+
+  Future<void> signOut() async {
+    if (!_firebaseReady) return;
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
+    await FirebaseAuth.instance.signOut();
+    notifyListeners();
+  }
+
+  String _friendly(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-email':
+        return 'Email address is not valid.';
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Wrong email or password.';
+      case 'email-already-in-use':
+        return 'This email is already registered. Try logging in.';
+      case 'weak-password':
+        return 'Password is too weak (min 6 characters).';
+      case 'invalid-verification-code':
+        return 'Wrong SMS code. Try again.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait and try again.';
+      case 'network-request-failed':
+        return 'No internet connection.';
+      default:
+        return e.message ?? 'Something went wrong.';
+    }
+  }
+}
