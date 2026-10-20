@@ -9,7 +9,9 @@ import 'theme.dart';
 import 'auth_service.dart';
 import 'backup_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/match_setup_screen.dart';
+import 'screens/published_search_screen.dart';
 import 'screens/scorer_home_screen.dart';
 import 'screens/tournaments_screen.dart';
 import 'screens/stats_screen.dart';
@@ -53,6 +55,7 @@ class SplashGate extends StatefulWidget {
 class _SplashGateState extends State<SplashGate> {
   final Store store = Store();
   bool _ready = false;
+  bool _gatePassed = false;
 
   @override
   void initState() {
@@ -65,9 +68,37 @@ class _SplashGateState extends State<SplashGate> {
     await store.load();
     // Daily automatic backup (keeps last 14) — fire and forget.
     runDailyAutoBackup(store);
+    // Let Firebase auth settle (bounded) so the login-gate decision
+    // below sees the real sign-in state, restored sessions included.
+    await AuthService().waitReady(const Duration(seconds: 2));
     await minSplash;
     if (!mounted) return;
-    setState(() => _ready = true);
+    setState(() {
+      _ready = true;
+      _gatePassed = !_gateNeeded();
+    });
+    if (_gatePassed) _scheduleWelcome();
+  }
+
+  /// The login gate appears only when Firebase is live, nobody is
+  /// signed in, and this device has not chosen Guest mode. When
+  /// Firebase failed to initialize (offline first run, unconfigured
+  /// build) the gate never appears — the guest path is always open.
+  bool _gateNeeded() {
+    final auth = AuthService();
+    if (!auth.firebaseReady) return false;
+    if (auth.isLoggedIn) return false;
+    if (auth.guestMode) return false;
+    return true;
+  }
+
+  void _onGatePassed() {
+    if (!mounted) return;
+    setState(() => _gatePassed = true);
+    _scheduleWelcome();
+  }
+
+  void _scheduleWelcome() {
     if (!store.welcomeDone) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcome());
     }
@@ -126,6 +157,13 @@ class _SplashGateState extends State<SplashGate> {
   Widget build(BuildContext context) {
     if (!_ready) {
       return const _SplashView();
+    }
+    if (!_gatePassed) {
+      return LoginScreen(
+        store: store,
+        gateMode: true,
+        onGatePassed: _onGatePassed,
+      );
     }
     return AnimatedBuilder(
       animation: store,
@@ -401,9 +439,10 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// Sidebar per the approved reference: 7 items only —
+  /// Sidebar per the approved reference:
   /// Home, Tournaments, Teams & Players, Drafting, Statistics,
-  /// Settings, About 60Score.
+  /// Settings, About 60Score — plus Search Tournaments (v1.3.0,
+  /// public published-tournament search / follow).
   Widget _buildDrawer() {
     return Drawer(
       width: math.min(320.0, MediaQuery.of(context).size.width * 0.82),
@@ -464,6 +503,13 @@ class _HomeShellState extends State<HomeShell> {
                     label: 'Tournaments',
                     onTap: () => _closeDrawerAndPush(
                       TournamentsScreen(store: store),
+                    ),
+                  ),
+                  _drawerCard(
+                    icon: Icons.search,
+                    label: 'Search Tournaments',
+                    onTap: () => _closeDrawerAndPush(
+                      const PublishedSearchScreen(),
                     ),
                   ),
                   _drawerCard(
