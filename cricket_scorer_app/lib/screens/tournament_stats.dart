@@ -390,7 +390,8 @@ class TournamentStatsTab extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              childAspectRatio: 0.92,
+              // v1.2.2: was 0.92 (tall cards, lots of empty space).
+              childAspectRatio: 1.2,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
             ),
@@ -424,14 +425,18 @@ class TournamentStatsTab extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          s.value,
-                          style: const TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            color: kCyan,
+                        // v1.2.2: no misleading big "0"/"0-0" headline
+                        // when there is no data — just label + empty note.
+                        if (hasData) ...[
+                          Text(
+                            s.value,
+                            style: const TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.bold,
+                              color: kCyan,
+                            ),
                           ),
-                        ),
+                        ],
                         const SizedBox(height: 2),
                         Text(
                           s.label,
