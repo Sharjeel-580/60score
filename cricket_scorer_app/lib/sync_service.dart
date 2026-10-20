@@ -87,8 +87,22 @@ class SyncService {
     if (_applyingRemote) return;
     final ref = _docRef();
     if (ref == null) return;
+    final uid = AuthService().currentUser!.uid;
     _pushTimer?.cancel();
-    _pushTimer = Timer(const Duration(seconds: 5), () => _push(ref, store));
+    _pushTimer = Timer(const Duration(seconds: 5), () {
+      // The identity may have changed while this timer was pending
+      // (log-out, account switch): never write one identity's data
+      // into another account's backup document.
+      if (AuthService().currentUser?.uid != uid) return;
+      if (store.identityId != uid) return;
+      _push(ref, store);
+    });
+  }
+
+  /// Cancels a pending debounced push (identity switches, log-out).
+  void cancelPending() {
+    _pushTimer?.cancel();
+    _pushTimer = null;
   }
 
   Future<void> _push(
