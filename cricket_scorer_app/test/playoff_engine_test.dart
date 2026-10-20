@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cricket_scorer_app/models.dart';
 import 'package:cricket_scorer_app/scoring.dart';
-import 'package:cricket_scorer_app/store.dart';
 import 'package:cricket_scorer_app/tournament_engine.dart';
 
 /// In-memory PlayoffStore for engine tests (no SharedPreferences).
@@ -43,26 +42,92 @@ class FakeStore implements PlayoffStore {
   }
 }
 
-const _tids = [
-  'seed_team_0', // AB Knights
-  'seed_team_1', // Shazi Hawks
-  'seed_team_2', // MA Kings
-  'seed_team_3', // Ali Panthers
-  'seed_team_4', // Adi Dolphins
-  'seed_team_5', // US Lions
-];
+// The app ships with zero seeded content, so the tests build their own
+// tournament, teams and fixtures — nothing comes from Store defaults.
+const _tournamentId = 'cup_1';
+const _tids = ['team_0', 'team_1', 'team_2', 'team_3', 'team_4', 'team_5'];
+const _teamNames = ['Alpha', 'Bravo', 'Comets', 'Dynamos', 'Eagles', 'Falcons'];
 
 Tournament _tournament() => Tournament(
-  id: Store.defaultTournamentId,
-  name: Store.defaultTournamentName,
+  id: _tournamentId,
+  name: 'Test Cup',
   teamIds: List.of(_tids),
-  venue: Store.defaultVenue,
+  venue: 'Test Ground',
 );
 
 List<Team> _teams() => [
-  for (var i = 0; i < 6; i++)
-    Team(id: _tids[i], name: Store.defaultTeamNames[i]),
+  for (var i = 0; i < 6; i++) Team(id: _tids[i], name: _teamNames[i]),
 ];
+
+Match _fixture({
+  required String id,
+  required String a,
+  required String b,
+  required String stage,
+  String title = '',
+}) {
+  return Match(
+    id: id,
+    tournamentId: _tournamentId,
+    teamAId: a,
+    teamBId: b,
+    xiA: const [],
+    xiB: const [],
+    tossWinnerId: '',
+    status: 'upcoming',
+    stage: stage,
+    oversLimit: 10,
+    ballsPerOver: 6,
+    venue: 'Test Ground',
+    dateIso: '2026-10-22T14:00:00',
+    matchTitle: title,
+  );
+}
+
+/// A full fixture list for the test tournament: a 15-match round-robin
+/// league (every pair of the 6 teams once) + 2 semifinals + the final,
+/// with playoff teams TBD — the same structure a user would create by
+/// hand in the app.
+List<Match> _fixtures() {
+  final out = <Match>[];
+  var n = 0;
+  for (var i = 0; i < _tids.length; i++) {
+    for (var j = i + 1; j < _tids.length; j++) {
+      n++;
+      out.add(
+        _fixture(
+          id: 'lg${n.toString().padLeft(2, '0')}',
+          a: _tids[i],
+          b: _tids[j],
+          stage: 'league',
+          title: 'Match $n',
+        ),
+      );
+    }
+  }
+  out.add(
+    _fixture(
+      id: 'sf1',
+      a: '',
+      b: '',
+      stage: 'semifinal1',
+      title: 'Semi Final 1',
+    ),
+  );
+  out.add(
+    _fixture(
+      id: 'sf2',
+      a: '',
+      b: '',
+      stage: 'semifinal2',
+      title: 'Semi Final 2',
+    ),
+  );
+  out.add(
+    _fixture(id: 'fin', a: '', b: '', stage: 'final', title: 'Grand Final'),
+  );
+  return out;
+}
 
 /// Completed league match with hand-set innings figures.
 Match leagueResult({
@@ -80,7 +145,7 @@ Match leagueResult({
 }) {
   final m = Match(
     id: id,
-    tournamentId: Store.defaultTournamentId,
+    tournamentId: _tournamentId,
     teamAId: a,
     teamBId: b,
     xiA: const [],
@@ -115,73 +180,6 @@ Match leagueResult({
 }
 
 void main() {
-  group('Default fixture seeding', () {
-    test('builds exactly 18 fixtures: 15 league + 3 playoffs', () {
-      final fixtures = Store.buildDefaultFixtures([]);
-      expect(fixtures.length, 18);
-      expect(
-        fixtures.where((m) => m.stage == 'league').length,
-        15,
-      );
-      expect(
-        fixtures.where((m) => m.stage != 'league').length,
-        3,
-      );
-    });
-
-    test('league fixtures match the official schedule', () {
-      final fixtures = Store.buildDefaultFixtures([]);
-      Match byId(String id) => fixtures.firstWhere((m) => m.id == id);
-      // Spot-check spec rows: (id, date, time, teamA, teamB)
-      final checks = {
-        'ssl2_m01': ['2026-10-22T14:00:00', 'seed_team_1', 'seed_team_4'],
-        'ssl2_m02': ['2026-10-23T15:00:00', 'seed_team_0', 'seed_team_3'],
-        'ssl2_m08': ['2026-10-29T14:00:00', 'seed_team_0', 'seed_team_1'],
-        'ssl2_m15': ['2026-11-05T14:00:00', 'seed_team_3', 'seed_team_5'],
-      };
-      checks.forEach((id, v) {
-        final m = byId(id);
-        expect(m.dateIso, v[0], reason: '$id date/time');
-        expect(m.teamAId, v[1], reason: '$id teamA');
-        expect(m.teamBId, v[2], reason: '$id teamB');
-        expect(m.venue, Store.defaultVenue);
-        expect(m.status, 'upcoming');
-        expect(m.tournamentId, Store.defaultTournamentId);
-      });
-    });
-
-    test('dates are plain local strings (no UTC shift possible)', () {
-      final fixtures = Store.buildDefaultFixtures([]);
-      for (final m in fixtures) {
-        expect(m.dateIso.contains('T'), isTrue);
-        expect(m.dateIso.endsWith('Z'), isFalse);
-        expect(m.dateIso.contains('+'), isFalse);
-      }
-    });
-
-    test('playoff fixtures start with TBD teams', () {
-      final fixtures = Store.buildDefaultFixtures([]);
-      final sf1 = fixtures.firstWhere((m) => m.id == 'ssl2_sf1');
-      final sf2 = fixtures.firstWhere((m) => m.id == 'ssl2_sf2');
-      final fin = fixtures.firstWhere((m) => m.id == 'ssl2_final');
-      expect(sf1.stage, 'semifinal1');
-      expect(sf1.dateIso, '2026-11-06T15:00:00');
-      expect(sf2.dateIso, '2026-11-07T14:00:00');
-      expect(fin.dateIso, '2026-11-08T14:00:00');
-      for (final m in [sf1, sf2, fin]) {
-        expect(m.teamAId, isEmpty);
-        expect(m.teamBId, isEmpty);
-        expect(m.status, 'upcoming');
-      }
-    });
-
-    test('seeding is idempotent (no duplicates on re-run)', () {
-      final first = Store.buildDefaultFixtures([]);
-      final second = Store.buildDefaultFixtures(first);
-      expect(second, isEmpty);
-    });
-  });
-
   group('League points table', () {
     test('derives from results; playoff matches excluded', () {
       final t = _tournament();
@@ -199,7 +197,7 @@ void main() {
         ),
         // A playoff match must NOT pollute the league table.
         leagueResult(
-          id: 'ssl2_sf1',
+          id: 'play1',
           a: _tids[2],
           b: _tids[3],
           aRuns: 200,
@@ -226,15 +224,27 @@ void main() {
       final matches = [
         // A beats B narrowly
         leagueResult(
-          id: 'r1', a: _tids[0], b: _tids[1],
-          aRuns: 100, aWkts: 5, aBalls: 60,
-          bRuns: 99, bWkts: 9, bBalls: 60,
+          id: 'r1',
+          a: _tids[0],
+          b: _tids[1],
+          aRuns: 100,
+          aWkts: 5,
+          aBalls: 60,
+          bRuns: 99,
+          bWkts: 9,
+          bBalls: 60,
         ),
         // C crushes D
         leagueResult(
-          id: 'r2', a: _tids[2], b: _tids[3],
-          aRuns: 150, aWkts: 2, aBalls: 60,
-          bRuns: 60, bWkts: 10, bBalls: 40,
+          id: 'r2',
+          a: _tids[2],
+          b: _tids[3],
+          aRuns: 150,
+          aWkts: 2,
+          aBalls: 60,
+          bRuns: 60,
+          bWkts: 10,
+          bBalls: 40,
         ),
       ];
       final table = leaguePointsTable(t, matches);
@@ -247,8 +257,8 @@ void main() {
 
   group('Automatic qualification', () {
     FakeStore setup(List<Match> league) {
-      final fixtures = Store.buildDefaultFixtures([]);
-      // Add every seeded fixture unless the test overrode it.
+      final fixtures = _fixtures();
+      // Add every fixture unless the test overrode it.
       for (final f in fixtures) {
         if (league.every((m) => m.id != f.id)) league.add(f);
       }
@@ -260,9 +270,10 @@ void main() {
     }
 
     test('top 4 qualify; SF1 = 1v4, SF2 = 2v3', () async {
-      // Complete every seeded league fixture with teamA winning.
+      // Complete every league fixture with teamA winning.
       final store = setup([]);
-      for (final m in store.matches.where((m) => m.stage == 'league').toList()) {
+      for (final m
+          in store.matches.where((m) => m.stage == 'league').toList()) {
         final res = leagueResult(
           id: m.id,
           a: m.teamAId,
@@ -277,14 +288,14 @@ void main() {
         store.matches.remove(m);
         store.matches.add(res);
       }
-      final update = await applyPlayoffUpdate(store, Store.defaultTournamentId);
+      final update = await applyPlayoffUpdate(store, _tournamentId);
       expect(update.changed, isTrue);
       expect(update.finalQualifiers.length, 4);
-      final t = store.tournamentById(Store.defaultTournamentId)!;
+      final t = store.tournamentById(_tournamentId)!;
       expect(t.qualificationFinalized, isTrue);
 
-      final sf1 = store.matches.firstWhere((m) => m.id == 'ssl2_sf1');
-      final sf2 = store.matches.firstWhere((m) => m.id == 'ssl2_sf2');
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
+      final sf2 = store.matches.firstWhere((m) => m.id == 'sf2');
       // 1v4 and 2v3 in rank order
       expect(sf1.teamAId, update.finalQualifiers[0]);
       expect(sf1.teamBId, update.finalQualifiers[3]);
@@ -295,72 +306,78 @@ void main() {
     test('semifinal winners enter the grand final slots', () async {
       final store = setup([]);
       // Finalize league quickly: mark all completed via noResult-free wins.
-      for (final m in store.matches.where((m) => m.stage == 'league').toList()) {
+      for (final m
+          in store.matches.where((m) => m.stage == 'league').toList()) {
         m.status = 'completed';
         m.innings.addAll([
           InningsState(
-            battingTeamId: m.teamAId,
-            bowlingTeamId: m.teamBId,
-            battingXI: const [],
-            bowlingXI: const [],
-            oversLimit: 10,
-            ballsPerOver: 6,
-          )..totalRuns = 100
-           ..legalBalls = 60,
+              battingTeamId: m.teamAId,
+              bowlingTeamId: m.teamBId,
+              battingXI: const [],
+              bowlingXI: const [],
+              oversLimit: 10,
+              ballsPerOver: 6,
+            )
+            ..totalRuns = 100
+            ..legalBalls = 60,
           InningsState(
-            battingTeamId: m.teamBId,
-            bowlingTeamId: m.teamAId,
-            battingXI: const [],
-            bowlingXI: const [],
-            oversLimit: 10,
-            ballsPerOver: 6,
-          )..totalRuns = 90
-           ..legalBalls = 60,
+              battingTeamId: m.teamBId,
+              bowlingTeamId: m.teamAId,
+              battingXI: const [],
+              bowlingXI: const [],
+              oversLimit: 10,
+              ballsPerOver: 6,
+            )
+            ..totalRuns = 90
+            ..legalBalls = 60,
         ]);
       }
-      var update = await applyPlayoffUpdate(store, Store.defaultTournamentId);
+      var update = await applyPlayoffUpdate(store, _tournamentId);
       expect(update.finalQualifiers.length, 4);
 
       // Complete SF1: teamA wins.
-      final sf1 = store.matches.firstWhere((m) => m.id == 'ssl2_sf1');
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
       sf1.status = 'completed';
       sf1.innings.addAll([
         InningsState(
-          battingTeamId: sf1.teamAId,
-          bowlingTeamId: sf1.teamBId,
-          battingXI: const [],
-          bowlingXI: const [],
-          oversLimit: 10,
-          ballsPerOver: 6,
-        )..totalRuns = 140
-         ..legalBalls = 60,
+            battingTeamId: sf1.teamAId,
+            bowlingTeamId: sf1.teamBId,
+            battingXI: const [],
+            bowlingXI: const [],
+            oversLimit: 10,
+            ballsPerOver: 6,
+          )
+          ..totalRuns = 140
+          ..legalBalls = 60,
         InningsState(
-          battingTeamId: sf1.teamBId,
-          bowlingTeamId: sf1.teamAId,
-          battingXI: const [],
-          bowlingXI: const [],
-          oversLimit: 10,
-          ballsPerOver: 6,
-        )..totalRuns = 120
-         ..legalBalls = 60,
+            battingTeamId: sf1.teamBId,
+            bowlingTeamId: sf1.teamAId,
+            battingXI: const [],
+            bowlingXI: const [],
+            oversLimit: 10,
+            ballsPerOver: 6,
+          )
+          ..totalRuns = 120
+          ..legalBalls = 60,
       ]);
-      update = await applyPlayoffUpdate(store, Store.defaultTournamentId);
-      final fin = store.matches.firstWhere((m) => m.id == 'ssl2_final');
+      update = await applyPlayoffUpdate(store, _tournamentId);
+      final fin = store.matches.firstWhere((m) => m.id == 'fin');
       expect(fin.teamAId, sf1.teamAId); // SF1 winner -> slot A
       expect(fin.teamBId, isEmpty); // SF2 unfinished -> slot B stays TBD
     });
 
     test('started playoffs are never reseeded', () async {
       final store = setup([]);
-      for (final m in store.matches.where((m) => m.stage == 'league').toList()) {
+      for (final m
+          in store.matches.where((m) => m.stage == 'league').toList()) {
         m.status = 'completed';
       }
-      await applyPlayoffUpdate(store, Store.defaultTournamentId);
-      final sf1 = store.matches.firstWhere((m) => m.id == 'ssl2_sf1');
+      await applyPlayoffUpdate(store, _tournamentId);
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
       final seededA = sf1.teamAId;
       sf1.status = 'live'; // semifinal underway
       // A correction now changes the table...
-      final update = await applyPlayoffUpdate(store, Store.defaultTournamentId);
+      final update = await applyPlayoffUpdate(store, _tournamentId);
       expect(sf1.teamAId, seededA); // ...but the started semi is untouched
       expect(update.needsConfirmation || !update.changed, isTrue);
     });
@@ -368,9 +385,7 @@ void main() {
     test('provisional qualifiers are conservative', () {
       // Team 0 has max points already; others can still catch up on points
       // except team 5 which cannot reach top 4.
-      final table = [
-        for (var i = 0; i < 6; i++) PointsRow(_tids[i]),
-      ];
+      final table = [for (var i = 0; i < 6; i++) PointsRow(_tids[i])];
       table[0].points = 20; // unbeatable
       final upcoming = <Match>[];
       final q = guaranteedQualifiers(table, upcoming);
