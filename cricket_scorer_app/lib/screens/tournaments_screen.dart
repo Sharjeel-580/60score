@@ -1,12 +1,163 @@
 // Tournaments list: view all tournaments, add new, edit names, delete.
 // The default tournament (Super Sixty League) stays, but users can manage
 // their own tournaments freely.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
 import 'scorer_home_screen.dart';
+
+/// Create/edit tournament dialog (name, venue, optional logo).
+///
+/// Shared by the Tournaments screen and the New Match setup flow
+/// (v1.2.2 "New Tournament" option). Returns the saved tournament, or
+/// null when cancelled or the name is empty. Nothing is created until
+/// the user taps Save.
+Future<Tournament?> showTournamentEditDialog(
+  BuildContext context,
+  Store store,
+  Tournament? existing,
+) async {
+  final nameCtrl = TextEditingController(text: existing?.name ?? '');
+  final venueCtrl = TextEditingController(text: existing?.venue ?? '');
+  var logoBase64 = existing?.logoBase64 ?? '';
+
+  Future<void> pickLogo(StateSetter setD) async {
+    final picker = ImagePicker();
+    final img = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 75,
+    );
+    if (img != null) {
+      final bytes = await img.readAsBytes();
+      setD(() => logoBase64 = base64Encode(bytes));
+    }
+  }
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setD) => AlertDialog(
+        title: Text(existing == null ? 'New tournament' : 'Edit tournament'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Tournament name *',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: venueCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Venue (optional)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Optional tournament logo (shown on the match summary).
+              Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: kPanel2,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: kCyan.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: logoBase64.isEmpty
+                        ? const Icon(
+                            Icons.emoji_events_outlined,
+                            color: Colors.white54,
+                          )
+                        : Image.memory(
+                            base64Decode(logoBase64),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const Icon(
+                              Icons.emoji_events_outlined,
+                              color: Colors.white54,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Tournament logo (optional)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => pickLogo(setD),
+                              child: Text(
+                                logoBase64.isEmpty ? 'Add' : 'Change',
+                              ),
+                            ),
+                            if (logoBase64.isNotEmpty)
+                              TextButton(
+                                onPressed: () =>
+                                    setD(() => logoBase64 = ''),
+                                child: const Text('Remove'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (saved != true || nameCtrl.text.trim().isEmpty) return null;
+  if (existing == null) {
+    final t = Tournament(
+      id: Store.newId('tournament'),
+      name: nameCtrl.text.trim(),
+      teamIds: [],
+      venue: venueCtrl.text.trim(),
+      logoBase64: logoBase64,
+    );
+    await store.upsertTournament(t);
+    return t;
+  }
+  existing.name = nameCtrl.text.trim();
+  existing.venue = venueCtrl.text.trim();
+  existing.logoBase64 = logoBase64;
+  await store.persist();
+  return existing;
+}
 
 class TournamentsScreen extends StatefulWidget {
   final Store store;
@@ -36,60 +187,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   }
 
   Future<void> _editTournament(Tournament? existing) async {
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final venueCtrl = TextEditingController(text: existing?.venue ?? '');
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text(existing == null ? 'New tournament' : 'Edit tournament'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Tournament name *',
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: venueCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Venue (optional)',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (saved == true && nameCtrl.text.trim().isNotEmpty) {
-      if (existing == null) {
-        final t = Tournament(
-          id: Store.newId('tournament'),
-          name: nameCtrl.text.trim(),
-          teamIds: [],
-          venue: venueCtrl.text.trim(),
-        );
-        await store.upsertTournament(t);
-      } else {
-        existing.name = nameCtrl.text.trim();
-        existing.venue = venueCtrl.text.trim();
-        await store.persist();
-      }
-      if (mounted) setState(() {});
-    }
+    final t = await showTournamentEditDialog(context, store, existing);
+    if (t != null && mounted) setState(() {});
   }
 
   Future<void> _deleteTournament(Tournament t) async {
