@@ -28,6 +28,18 @@ android {
     }
 
     signingConfigs {
+        // Fixed debug key checked into the repo so EVERY CI build has the
+        // same signing fingerprint — Firebase (Google/Phone login) keeps
+        // working across builds instead of breaking on each new debug key.
+        getByName("debug") {
+            val fixedDebugKey = rootProject.file("debug-fixed.keystore")
+            if (fixedDebugKey.exists()) {
+                storeFile = fixedDebugKey
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("release") {
             if (keystorePropertiesFile.exists()) {
                 keyAlias = keystoreProperties["keyAlias"] as String
