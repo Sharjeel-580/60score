@@ -1,4 +1,21 @@
-# 60Score release APK builder (GitHub Actions)
+# 60Score release APK + AAB builder (GitHub Actions) — DRAFT, NOT yet applied.
+# Why CI: the dev VM cannot run Gradle, so release builds are done here.
+# Trigger: push to main, a v* tag, or manual run from the Actions tab.
+# Artifacts:
+#   60score-v1.1.0+2-apk  (app-release.apk, debug-signed release — unchanged behavior)
+#   60score-release-aab   (app-release.aab, release-keystore-signed — only when the
+#                          KEYSTORE_* secrets are set in repo Settings > Secrets and variables > Actions)
+#
+# Required secrets (repo Settings > Secrets and variables > Actions):
+#   KEYSTORE_BASE64          base64 of the release keystore (.jks)
+#   KEYSTORE_STORE_PASSWORD  keystore store password
+#   KEYSTORE_KEY_PASSWORD    keystore key password
+#   KEYSTORE_KEY_ALIAS       keystore alias (60score)
+#
+# Signing behavior:
+#   - Sideload APK: built BEFORE key.properties exists -> debug signing (as today).
+#   - Release AAB: built AFTER key.properties is written from secrets -> release signing.
+#   If secrets are missing, the AAB steps are skipped (no failure).
 name: Build 60Score APK
 
 on:
@@ -46,4 +63,39 @@ jobs:
         with:
           name: 60score-v1.1.0+2-apk
           path: cricket_scorer_app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      # Release keystore for the AAB (Play Store upload bundle).
+      # `secrets` context cannot be used in `if:` conditions, so we check the
+      # secret's presence through an env var and record the result in GITHUB_ENV.
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/60score-release.jks"
+            {
+              echo "storePassword=$KEYSTORE_STORE_PASSWORD"
+              echo "keyPassword=$KEYSTORE_KEY_PASSWORD"
+              echo "keyAlias=$KEYSTORE_KEY_ALIAS"
+              echo "storeFile=$RUNNER_TEMP/60score-release.jks"
+            } > android/key.properties
+            echo "HAVE_KEYSTORE=true" >> "$GITHUB_ENV"
+          else
+            echo "KEYSTORE_BASE64 secret not set — skipping release AAB."
+          fi
+
+      - name: Build release AAB
+        if: env.HAVE_KEYSTORE == 'true'
+        run: flutter build appbundle --release
+
+      - name: Upload AAB
+        if: env.HAVE_KEYSTORE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: 60score-release-aab
+          path: cricket_scorer_app/build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
