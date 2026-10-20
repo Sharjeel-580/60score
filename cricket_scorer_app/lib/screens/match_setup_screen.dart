@@ -1496,8 +1496,9 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         oversLimit: overs,
         ballsPerOver: ballsPerOver,
         venue: venueCtrl.text.trim(),
-        // Local date + time as a plain string (never UTC), same format as
-        // the seeded fixtures, so the schedule survives timezone shifts.
+        // Local date + time as a plain string (never UTC), the same
+        // dateIso format used everywhere, so the schedule survives
+        // timezone shifts.
         dateIso:
             '${date.year}-${p2(date.month)}-${p2(date.day)}T${p2(date.hour)}:${p2(date.minute)}:00',
         matchTitle: titleCtrl.text.trim(),
