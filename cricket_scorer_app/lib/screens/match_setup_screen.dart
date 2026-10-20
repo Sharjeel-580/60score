@@ -5,6 +5,7 @@ import '../store.dart';
 import '../theme.dart';
 import 'scoring_screen.dart';
 import 'settings_screen.dart';
+import 'tournaments_screen.dart' show showTournamentEditDialog;
 
 class MatchSetupScreen extends StatefulWidget {
   final Store store;
@@ -264,6 +265,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
               const SizedBox(height: 10),
               _tournamentPicker(),
             ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _newTournament,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New Tournament'),
+              ),
+            ),
             const SizedBox(height: 12),
             _formatSection(),
             _teamsSection(),
@@ -463,6 +472,25 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         ),
       ],
     );
+  }
+
+  /// v1.2.2: create a brand-new tournament right from match setup
+  /// (the same form the Tournaments screen uses) and attach it to
+  /// this match. Nothing is created unless the user saves the form.
+  Future<void> _newTournament() async {
+    final t = await showTournamentEditDialog(context, store, null);
+    if (t == null || !mounted) return;
+    setState(() {
+      tournamentId = t.id;
+      // Same preselect the tournament dropdown applies on change.
+      if (t.teamIds.length >= 2) {
+        teamAId = t.teamIds[0];
+        teamBId = t.teamIds[1];
+        _preselect();
+        tossWinnerId = teamAId;
+      }
+      _showTossDetail = false;
+    });
   }
 
   /// Which tournament a Tournament Match belongs to (the old optional
