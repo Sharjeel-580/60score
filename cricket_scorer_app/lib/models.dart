@@ -90,6 +90,7 @@ class Tournament {
   String name;
   List<String> teamIds;
   String venue;
+  String logoBase64; // optional tournament logo (base64 JPEG), '' if none
   Map<String, int> pointsAdjustments; // teamId -> extra (custom) points
   /// Final (locked) playoff qualification: ordered team IDs, rank 1..4.
   /// Empty until the league stage is finalized. Derived by the playoff
@@ -103,6 +104,7 @@ class Tournament {
     required this.name,
     List<String>? teamIds,
     this.venue = '',
+    this.logoBase64 = '',
     Map<String, int>? pointsAdjustments,
     List<String>? qualifiedTeamIds,
     this.qualificationFinalized = false,
@@ -115,6 +117,7 @@ class Tournament {
     'name': name,
     'teamIds': teamIds,
     'venue': venue,
+    'logoBase64': logoBase64,
     'pointsAdjustments': pointsAdjustments,
     'qualifiedTeamIds': qualifiedTeamIds,
     'qualificationFinalized': qualificationFinalized,
@@ -130,6 +133,7 @@ class Tournament {
       name: j['name'] as String,
       teamIds: ((j['teamIds'] as List?) ?? []).map((e) => e as String).toList(),
       venue: j['venue'] as String? ?? '',
+      logoBase64: j['logoBase64'] as String? ?? '',
       pointsAdjustments: adj,
       qualifiedTeamIds:
           ((j['qualifiedTeamIds'] as List?) ?? [])
