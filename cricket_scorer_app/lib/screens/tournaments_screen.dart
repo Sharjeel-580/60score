@@ -161,6 +161,160 @@ Future<Tournament?> showTournamentEditDialog(
   return existing;
 }
 
+/// One tournament row in the list (extracted so the layout is
+/// widget-testable). Layout rule (v1.3.2, bug #R2): the name owns an
+/// Expanded column — up to 2 lines with ellipsis — while the
+/// Published badge sits ABOVE the compact action buttons in the
+/// right-hand column, so badge + actions can never squeeze the name
+/// into one letter per line on a narrow phone.
+class TournamentCard extends StatelessWidget {
+  final Tournament tournament;
+  final int teamCount;
+  final int matchCount;
+  final bool loggedIn;
+  final VoidCallback onTap;
+  final VoidCallback onTogglePublish;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const TournamentCard({
+    super.key,
+    required this.tournament,
+    required this.teamCount,
+    required this.matchCount,
+    required this.loggedIn,
+    required this.onTap,
+    required this.onTogglePublish,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  Widget _actionButton({
+    required Widget icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: IconButton(
+        icon: icon,
+        tooltip: tooltip,
+        iconSize: 20,
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = tournament;
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+          child: Row(
+            children: [
+              const CircleAvatar(
+                backgroundColor: kPanel2,
+                child: Icon(Icons.emoji_events, color: kCyan),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${t.venue.isEmpty ? "No venue" : t.venue} • '
+                      '$teamCount teams • $matchCount matches',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (t.published) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: kGreen.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: kGreen.withValues(alpha: 0.5)),
+                      ),
+                      child: const Text(
+                        'Published',
+                        style: TextStyle(
+                          color: kGreen,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                  ],
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (loggedIn)
+                        _actionButton(
+                          icon: Icon(
+                            t.published ? Icons.public : Icons.public_off,
+                            color: t.published ? kGreen : null,
+                          ),
+                          tooltip: t.published
+                              ? 'Unpublish'
+                              : 'Publish (public, view-only)',
+                          onPressed: onTogglePublish,
+                        ),
+                      _actionButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'Rename',
+                        onPressed: onEdit,
+                      ),
+                      _actionButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: kRed,
+                        ),
+                        tooltip: 'Delete',
+                        onPressed: onDelete,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class TournamentsScreen extends StatefulWidget {
   final Store store;
   const TournamentsScreen({super.key, required this.store});
@@ -287,95 +441,25 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
                 final matchCount = store.matches
                     .where((m) => m.tournamentId == t.id)
                     .length;
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: kPanel2,
-                      child: const Icon(
-                        Icons.emoji_events,
-                        color: kCyan,
+                return TournamentCard(
+                  tournament: t,
+                  teamCount: teamCount,
+                  matchCount: matchCount,
+                  loggedIn: loggedIn,
+                  onTogglePublish: () => _togglePublish(t),
+                  onEdit: () => _editTournament(t),
+                  onDelete: () => _deleteTournament(t),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TournamentDetailScreen(
+                        store: store,
+                        tournament: t,
                       ),
                     ),
-                    title: Row(
-                      children: [
-                        Flexible(child: Text(t.name)),
-                        if (t.published) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: kGreen.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: kGreen.withValues(alpha: 0.5)),
-                            ),
-                            child: const Text(
-                              'Published',
-                              style: TextStyle(
-                                color: kGreen,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    subtitle: Text(
-                      '${t.venue.isEmpty ? "No venue" : t.venue} • '
-                      '$teamCount teams • $matchCount matches',
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (loggedIn)
-                          IconButton(
-                            icon: Icon(
-                              t.published
-                                  ? Icons.public
-                                  : Icons.public_off,
-                              size: 20,
-                              color: t.published ? kGreen : null,
-                            ),
-                            tooltip: t.published
-                                ? 'Unpublish'
-                                : 'Publish (public, view-only)',
-                            onPressed: () => _togglePublish(t),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 20),
-                          tooltip: 'Rename',
-                          onPressed: () => _editTournament(t),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            size: 20,
-                            color: kRed,
-                          ),
-                          tooltip: 'Delete',
-                          onPressed: () => _deleteTournament(t),
-                        ),
-                      ],
-                    ),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => TournamentDetailScreen(
-                          store: store,
-                          tournament: t,
-                        ),
-                      ),
-                    ).then((_) {
-                      if (mounted) setState(() {});
-                    }),
-                  ),
+                  ).then((_) {
+                    if (mounted) setState(() {});
+                  }),
                 );
               },
             ),
