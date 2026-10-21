@@ -106,8 +106,7 @@ player photo/avatar + name + value when data exists, small elegant
 empty state when not, Ocean-theme accents; same data/engine, only
 the presentation changes.
 
-## #3 — Har naye account ki apni auto-profile + ID + apne stats alag (2026-10-21)
-Dazy: owner ke account ke ilawa jo bhi banda Google se login kare ya
+## #3 — Har naye account ki apni auto-profile + ID + apne stats alag (2026-10-21)Dazy: owner ke account ke ilawa jo bhi banda Google se login kare ya
 email se naya account banaye, us ke liye:
 - Ek NEW profile khud ban jani chahiye — us ki apni PLAYER profile.
 - Us ki ek apni ID ban jani chahiye (unique user/player ID).
@@ -164,3 +163,89 @@ Points #1/#1b/#1c/#1d/#3 ka majmua — final design:
   aaj subah us ne "xharitarat580" likhi thi wo typo thi). Owner
   account = xharitarar580@gmail.com (yehi Firebase project wala
   account bhi hai).
+
+---
+
+# v1.3.1 RETEST points (2026-10-21, build delivered 12:57)
+
+## #R1 — Data asal account (580) mein nahi, 550 wale backup mein hai
+- Dazy ne uninstall karke v1.3.1 install ki, 580 se Google login —
+  Super Sixty nahi mila, edit bhi nahi. Search bhi khali.
+- Server check (Muse, Firebase console): **published_tournaments
+  collection exist hi nahi karti** — Super Sixty kabhi publish nahi
+  hua tha (local flag Published dikhata hai lekin server doc nahi
+  bana) → search khali hona bug nahi.
+- 2 user backups maujood: uid ZWbPNOWBY2... (profile "xharitarar550"
+  — tournaments mein "Super sixty league" hai; live update ho raha
+  tha) aur uid oUQwZgAx... (profile "Muhammad Sharjeel", contact
+  xharitarar580@gmail.com). Asal league data 550 wale backup mein
+  lagta hai — purani app mein phone par active account wahi tha.
+- 550 se login par tournament aa gaya LEKIN khali shell: 0 teams,
+  0 matches (screenshot 13:12). Dono backups ki teams/matches
+  tafseel verify ho rahi hai — asal data kahan hai pakka karna hai.
+- ⚠️ Mashkook bug: fresh (khali) scope ka sync push login ke baad
+  pull se pehle fire ho to cloud backup overwrite ho sakta hai
+  (push-before-pull race) — v1.3.2 mein fix: pehla pull complete
+  hone tak push band.
+- **VERIFIED (13:17, dono backups ka full read):** 580 backup =
+  bilkul khali (0/0/0). 550 backup = sirf 1 tournament "Super sixty
+  league" (id tournament_1792570168972264_1 — AAJ 13:09 par bana,
+  Dazy ne khud add kiya tha naam-wale screenshot ke liye), teams [],
+  matches [], baqi sab []. **Cloud mein asal purana data kahin
+  nahi bacha.** Phone ka data uninstall ke saath gaya; purana setup
+  zyada tar purana SEED tha (6 teams + 18 fixtures) — seed code git
+  history mein mehfooz hai (9dcc4e3 se pehle ke commits, e.g.
+  d2cac2c). **Recovery plan (Dazy ki haan baqi):** seed JSON history
+  se nikaal kar 550 ke backup mein server-side likhna → app pull se
+  pura setup wapas. Dazy ke khud add karda extras (players/photos)
+  recover nahi honge.
+- **✅ RESTORE + PUBLISH DONE (13:45, Dazy ki haan par):** seed
+  payload tayyar + validate (restore/app_data_fields.json,
+  published_doc.json; generator tool/restore_gen.dart) aur console
+  se 550 backup mein likha gaya (matches 8559 chars verified,
+  updatedAt 1792571343037, profile untouched) + published doc
+  `published_tournaments/seed_tournament_ssl2` banaya gaya (data
+  9234 chars verified). **Publish ki asal wajah bhi pakri gayi:**
+  local `published` flag backup/pull se aa sakta hai baghair server
+  write ke; pull `skipSync` par khatam hota hai (republish kabhi
+  arm nahi hota); `_writeDoc` ki har error chup chaap swallow hoti
+  hai, badge sirf local flag se banta hai — v1.3.2 mein fix:
+  publish par saaf error/confirmation + pull ke baad republish arm
+  + size guard. Dazy ka live test baqi: 550 login → pull → data;
+  guest search → preview.
+
+## #R2 — Tournaments list card: naam har letter alag line par
+(screenshot: ~/workspace/user/files/406551_7_h3m6.jpg)
+Tournament card par naam ("Super sixty league") ek letter per line
+wrap ho raha hai — title column boht tang hai (badge + action icons
+ke saath layout squeeze). Fix: title ko proper width/Expanded mile,
+naam ek-do lines mein saaf aye.
+
+## #R3 — Statistics screen ke upar wala "Statistics" heading
+(2026-10-21, screenshot: ~/workspace/user/files/406552_8_ub0o.jpg)
+Dazy: upar jo "Statistics" likha hai — "isko khatam kar do ya isko
+thora sa achhe tareeqe mein kar do". Screenshot mein heading
+doubled/ghosted bhi lag raha hai (app bar title + body header
+overlap ki surat). Fix direction: duplicate heading khatam — sirf
+ek saaf title rahega; body wala bara header hata diya jayega.
+Cards ki nayi shakal is screenshot mein theek nazar ayi (icons,
+compact, chhota "No data yet") — redesign confirm.
+
+## #R4 — Owner account par EMAIL + PASSWORD login (Dazy, 2026-10-21)
+Dazy ki hidayat: us ke apne account ke liye email + password login
+lazmi ho — har mobile par Google lagana mumkin nahi hota; wo sirf
+email aur password daal kar login kare aur saara data editable
+mile. Password Dazy KHUD set karega (Firebase reset/set link se jo
+us ki email par jayega) — password na chat mein ayega, na Muse
+banayega (security rule, us ko bata diya gaya hai).
+PENDING FAISLA: password kis account par lage — 550 (data wahi hai)
+ya 580 (designated owner)? Dazy ke jawab par: (a) 550 owner final →
+kOwnerEmail constant 550 karna hoga agle build mein + reset link
+550 par; (b) data 580 transfer → pehle transfer, phir reset 580 par.
+Dazy ne ye bhi kaha: "in cheezon ko note karo, behtar karo, theek
+karo" — R1–R4 sab v1.3.2 batch mein fix honge.
+**FAISLA (2026-10-21 13:15): "550 he rehny do"** — owner/app account
+FINAL = xharitarar550@gmail.com. Data wahi rahega, publish wahi se
+hoga, password bhi 550 par lagega (reset link Firebase se bhijwaya
+ja raha hai — Dazy khud set karega). 580 sirf Firebase/Play
+developer account rahega. v1.3.2 mein kOwnerEmail bhi 550 hoga.
