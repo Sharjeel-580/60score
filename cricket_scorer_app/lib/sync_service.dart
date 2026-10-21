@@ -45,7 +45,93 @@ import 'account_profile.dart';
 import 'auth_service.dart';
 import 'models.dart';
 import 'photo_sync.dart';
+import 'publish_service.dart';
 import 'store.dart';
+
+/// Push guard for ONE account activation (v1.3.2, bug #R1).
+///
+/// The race this closes: right after login the account's scope is
+/// activated and local edits (or the profile ensure) schedule a
+/// debounced push — if that push lands BEFORE the activation's first
+/// pull has read the cloud backup, it overwrites the backup with
+/// whatever the local scope happens to hold (on a fresh device: a
+/// completely empty dataset), and the next pull then "restores" the
+/// empty copy over the real data. So:
+///
+/// - No push for an identity may run until that identity's first
+///   pull has settled (completed). Pushes requested earlier are
+///   deferred and flushed once, when the pull settles — but only if
+///   the flush itself is safe:
+/// - An all-empty dataset is NEVER flushed over a remote backup in
+///   an activation whose first pull imported nothing (the exact
+///   shape of the #R1 data loss).
+///
+/// The guard tracks one uid at a time; a different uid (or an
+/// explicit reset on identity switch) starts a fresh guarded window.
+class SyncPushGuard {
+  String? _uid;
+  bool _pullSettled = false;
+  bool _pullImported = false;
+  bool _remoteDocSeen = false;
+  bool _deferred = false;
+
+  /// Whether [s] carries no user data at all.
+  static bool datasetIsEmpty(Store s) =>
+      s.tournaments.isEmpty && s.teams.isEmpty && s.matches.isEmpty;
+
+  /// Starts a fresh guarded window (identity switches, log-out).
+  void reset() {
+    _uid = null;
+    _pullSettled = false;
+    _pullImported = false;
+    _remoteDocSeen = false;
+    _deferred = false;
+  }
+
+  void _track(String uid) {
+    if (_uid != uid) {
+      reset();
+      _uid = uid;
+    }
+  }
+
+  /// A push for [uid] may run only once this activation's first pull
+  /// has settled.
+  bool allowsPush(String uid) {
+    _track(uid);
+    return _pullSettled;
+  }
+
+  /// Records that a push for [uid] was requested while the gate was
+  /// closed.
+  void defer(String uid) {
+    _track(uid);
+    _deferred = true;
+  }
+
+  /// Whether an all-empty push must be suppressed right now: the
+  /// dataset is empty, a remote backup exists, and this activation's
+  /// first pull brought nothing in.
+  bool emptyPushSuppressed(bool emptyDataset) =>
+      emptyDataset && !_pullImported && _remoteDocSeen;
+
+  /// Settles the guard with the first pull's outcome for [uid].
+  /// Returns true when a deferred push should be flushed now.
+  bool settle(
+    String uid, {
+    required bool imported,
+    required bool docSeen,
+    required bool emptyDataset,
+  }) {
+    _track(uid);
+    _pullSettled = true;
+    _pullImported = imported;
+    _remoteDocSeen = docSeen;
+    if (!_deferred) return false;
+    _deferred = false;
+    return !emptyPushSuppressed(emptyDataset);
+  }
+}
 
 class SyncService {
   static final SyncService _instance = SyncService._internal();
@@ -57,8 +143,21 @@ class SyncService {
   DateTime? _lastSyncAt;
   String? _lastError;
 
+  /// First-pull push guard for the current activation (bug #R1).
+  final SyncPushGuard _guard = SyncPushGuard();
+
   DateTime? get lastSyncAt => _lastSyncAt;
   String? get lastError => _lastError;
+
+  /// After a pull applied remote data, published tournaments in the
+  /// imported data must reach the public collection: the import
+  /// persist runs with skipSync (which also skips the republish
+  /// arming), so pull arms the re-publish itself (v1.3.2, bug #R1).
+  static bool shouldArmRepublishAfterPull({
+    required bool applied,
+    required bool hasPublished,
+  }) =>
+      applied && hasPublished;
 
   static const _kDoc = 'app_data';
 
@@ -96,14 +195,25 @@ class SyncService {
       // into another account's backup document.
       if (AuthService().currentUser?.uid != uid) return;
       if (store.identityId != uid) return;
+      // Push guard (v1.3.2): until this activation's first pull has
+      // settled, a push could overwrite the cloud backup with a
+      // not-yet-pulled local scope. Defer — pull() flushes the push
+      // when it settles.
+      if (!_guard.allowsPush(uid)) {
+        _guard.defer(uid);
+        return;
+      }
       _push(ref, store);
     });
   }
 
   /// Cancels a pending debounced push (identity switches, log-out).
+  /// Also restarts the push guard: the next identity's first push
+  /// waits for its own first pull.
   void cancelPending() {
     _pushTimer?.cancel();
     _pushTimer = null;
+    _guard.reset();
   }
 
   Future<void> _push(
@@ -146,14 +256,29 @@ class SyncService {
 
   /// Pull remote state into [store] when the cloud copy is newer.
   /// Returns true when remote data was applied.
+  ///
+  /// Every completed pull SETTLES the push guard for this activation
+  /// (see [SyncPushGuard]): pushes deferred during the guarded
+  /// window are flushed once, and when remote data was applied, a
+  /// re-publish is armed so published tournaments restored by the
+  /// pull actually reach the public collection (bug #R1). A pull
+  /// that FAILS leaves the guard closed — pushes stay deferred until
+  /// a pull completes (next app start or "Sync now").
   Future<bool> pull(Store store) async {
     final ref = _docRef();
     if (ref == null) return false;
+    final uid = AuthService().currentUser!.uid;
     try {
       final snap = await ref.get();
       if (!snap.exists) {
-        // First login on this account: push local state up as the baseline.
-        await _push(ref, store);
+        // First login on this account: push local state up as the
+        // baseline — unless the local dataset is completely empty
+        // (nothing worth backing up yet; the first real change will
+        // push). The pull has completed either way.
+        if (!SyncPushGuard.datasetIsEmpty(store)) {
+          await _push(ref, store);
+        }
+        _settleAfterPull(store, uid, imported: false, docSeen: false);
         return false;
       }
       final data = snap.data()!;
@@ -167,6 +292,7 @@ class SyncService {
           await store.persist(skipSync: true);
           _lastSyncAt = DateTime.now();
         }
+        _settleAfterPull(store, uid, imported: false, docSeen: true);
         return false;
       }
 
@@ -203,11 +329,42 @@ class SyncService {
       }
       _lastSyncAt = DateTime.now();
       _lastError = null;
+      _settleAfterPull(store, uid, imported: true, docSeen: true);
       return true;
     } catch (e) {
       _lastError = e.toString();
       debugPrint('Sync pull failed: $e');
       return false;
+    }
+  }
+
+  /// Settles the push guard after a completed pull and runs the two
+  /// follow-ups the pull owes: arm a re-publish when the imported
+  /// data carries published tournaments, and flush a push that was
+  /// deferred during the guarded window (the guard itself refuses
+  /// the flush when it would send an all-empty dataset over a remote
+  /// backup the pull did not import).
+  void _settleAfterPull(
+    Store store,
+    String uid, {
+    required bool imported,
+    required bool docSeen,
+  }) {
+    final flush = _guard.settle(
+      uid,
+      imported: imported,
+      docSeen: docSeen,
+      emptyDataset: SyncPushGuard.datasetIsEmpty(store),
+    );
+    if (shouldArmRepublishAfterPull(
+      applied: imported,
+      hasPublished: PublishService.hasPublished(store),
+    )) {
+      PublishService().scheduleRepublish(store);
+    }
+    if (flush && store.identityId == uid) {
+      final ref = _docRef();
+      if (ref != null) _push(ref, store);
     }
   }
 

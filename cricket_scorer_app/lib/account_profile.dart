@@ -12,7 +12,7 @@ import 'store.dart';
 /// only ever be claimed into THIS account — it is the owner's data;
 /// any other account starts with its own empty workspace and the
 /// legacy keys stay untouched so the owner can still claim later.
-const String kOwnerEmail = 'xharitarar580@gmail.com';
+const String kOwnerEmail = 'xharitarar550@gmail.com';
 
 /// Deterministic 6-character user code for [uid], e.g. "60S-K7QX2M".
 /// Two FNV-1a passes over the uid give enough spread; the result is
