@@ -105,6 +105,24 @@ void main() {
     expect(find.text('No data yet'), findsWidgets);
   });
 
+  testWidgets('stats tab has no duplicate in-body Statistics heading '
+      '(R3) but keeps its actions menu', (tester) async {
+    narrowView(tester);
+    final s = await _storeWithData();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: TournamentStatsTab(store: s, tournament: s.tournaments.first),
+      ),
+    ));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    // The host screens title this content themselves; the tab must
+    // not render a second "Statistics" heading.
+    expect(find.text('Statistics'), findsNothing);
+    expect(find.byIcon(Icons.more_vert), findsOneWidget);
+    expect(find.text('Most Runs'), findsOneWidget);
+  });
+
   testWidgets('profile screen shows the guest prompt when logged out',
       (tester) async {
     narrowView(tester);

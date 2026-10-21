@@ -139,4 +139,50 @@ void main() {
       expect(PublishService.decodeSlice('{"teams": []}'), isNull);
     });
   });
+
+  group('Published slice photo stripping (v1.3.2)', () {
+    test('encodeSlice strips player photos like the backup push', () {
+      final s = Store();
+      s.teams = [
+        Team(id: 'ta', name: 'Alpha', players: [
+          Player(id: 'p1', name: 'Player One', photoBase64: 'TEAM_PHOTO'),
+        ]),
+      ];
+      s.tournaments = [
+        Tournament(
+          id: 'cup',
+          name: 'City Cup',
+          teamIds: const ['ta'],
+          published: true,
+        ),
+      ];
+      s.regPlayers = [
+        RegPlayer(id: 'p1', name: 'Player One', photoBase64: 'REG_PHOTO'),
+      ];
+      final slice = PublishService.buildSlice(s, s.tournaments.single);
+      final encoded = PublishService.encodeSlice(slice);
+      // No photo payloads anywhere in the public document — photos
+      // travel via the owner's private photos subcollection, so a
+      // photo-heavy tournament cannot blow the 1 MiB document limit.
+      expect(encoded.contains('TEAM_PHOTO'), isFalse);
+      expect(encoded.contains('REG_PHOTO'), isFalse);
+      // …but the players themselves survive the round-trip intact.
+      final back = PublishService.decodeSlice(encoded);
+      expect(back, isNotNull);
+      expect(back!.teams.single.players.single.name, 'Player One');
+      expect(back.teams.single.players.single.photoBase64, '');
+      expect(back.regPlayers.single.photoBase64, '');
+    });
+
+    test('hasPublished reflects the local flags', () {
+      final s = Store();
+      expect(PublishService.hasPublished(s), isFalse);
+      s.tournaments = [Tournament(id: 'a', name: 'Draft Cup')];
+      expect(PublishService.hasPublished(s), isFalse);
+      s.tournaments = [
+        Tournament(id: 'b', name: 'Live Cup', published: true),
+      ];
+      expect(PublishService.hasPublished(s), isTrue);
+    });
+  });
 }
