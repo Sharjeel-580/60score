@@ -12,8 +12,11 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../publish_service.dart';
+import '../scoring.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
+import '../widgets/player_avatar.dart';
+import '../widgets/stat_category_card.dart';
 import 'fixture_detail_screen.dart';
 
 /// Tournament logo from base64 (or the default trophy icon), shared by
@@ -155,7 +158,7 @@ class _PublishedTournamentScreenState
 
   Widget _body(PublishedTournament pub) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           _header(pub),
@@ -163,6 +166,7 @@ class _PublishedTournamentScreenState
             tabs: [
               Tab(text: 'Fixtures & Results'),
               Tab(text: 'Points Table'),
+              Tab(text: 'Statistics'),
               Tab(text: 'Teams'),
             ],
           ),
@@ -171,6 +175,7 @@ class _PublishedTournamentScreenState
               children: [
                 _fixturesTab(pub),
                 _pointsTab(pub),
+                _statsTab(pub),
                 _teamsTab(pub),
               ],
             ),
@@ -288,9 +293,19 @@ class _PublishedTournamentScreenState
         ? m.resultText
         : '${formatFixtureDate(m.dateIso)}'
             '${m.venue.isNotEmpty ? ' · ${m.venue}' : ''}';
+    final canScorecard = m.status == 'completed' && m.innings.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: ScoreCard(
+        onTap: canScorecard
+            ? () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        _PublishedScorecardScreen(pub: pub, match: m),
+                  ),
+                )
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -319,6 +334,21 @@ class _PublishedTournamentScreenState
               subtitle,
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
+            if (canScorecard) ...[
+              const SizedBox(height: 6),
+              const Row(
+                children: [
+                  Icon(Icons.receipt_long,
+                      size: 13, color: Colors.white38),
+                  SizedBox(width: 5),
+                  Text(
+                    'Tap to view the full scorecard',
+                    style:
+                        TextStyle(color: Colors.white38, fontSize: 11.5),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -426,6 +456,175 @@ class _PublishedTournamentScreenState
     );
   }
 
+  // ---------- Statistics (read-only, from the snapshot slice) ----
+
+  Widget _statsTab(PublishedTournament pub) {
+    final cats = _pubCategories(pub);
+    if (cats.every((c) => c.rows.isEmpty)) {
+      return const EmptyState(
+        icon: Icons.bar_chart_outlined,
+        title: 'No statistics yet',
+        subtitle:
+            'Top performers appear here once matches are completed.',
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 1.45,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemCount: cats.length,
+      itemBuilder: (c, i) {
+        final cat = cats[i];
+        final leaderId = cat.rows.isEmpty ? '' : cat.rows.first.playerId;
+        return StatCategoryCard(
+          icon: cat.icon,
+          accent: cat.accent,
+          label: cat.label,
+          hasData: cat.rows.isNotEmpty,
+          value: cat.value,
+          playerName:
+              leaderId.isEmpty ? '' : _slicePlayerName(pub, leaderId),
+          teamName: leaderId.isEmpty ? '' : _sliceTeamOf(pub, leaderId),
+          detail: cat.detail,
+          photoBase64:
+              leaderId.isEmpty ? '' : _slicePlayerPhoto(pub, leaderId),
+          role: leaderId.isEmpty
+              ? 'Batter'
+              : _slicePlayerRole(pub, leaderId),
+          onTap: cat.rows.isEmpty
+              ? null
+              : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => _PublishedLeaderboardScreen(
+                        pub: pub,
+                        category: cat,
+                      ),
+                    ),
+                  ),
+        );
+      },
+    );
+  }
+
+  /// Top-performer categories computed from the SNAPSHOT's own matches
+  /// with the same career engine the owner app uses — no Store, no
+  /// local data involved.
+  List<_PubCategory> _pubCategories(PublishedTournament pub) {
+    final career =
+        computeCareerStats(pub.matches, tournamentId: pub.tournament.id);
+    final list = career.values.toList();
+
+    List<_PubRow> rowsOf(
+      List<CareerStats> sorted,
+      String Function(CareerStats c) primary,
+      String Function(CareerStats c) secondary,
+      bool Function(CareerStats c) include,
+    ) => sorted
+        .where(include)
+        .take(5)
+        .map((c) => _PubRow(c.playerId, primary(c), secondary(c)))
+        .toList();
+
+    final byRuns = [...list]..sort((a, b) => b.runs.compareTo(a.runs));
+    final byWkts = [...list]
+      ..sort((a, b) => b.wickets.compareTo(a.wickets));
+    final byHS = [...list]
+      ..sort((a, b) => b.highScore.compareTo(a.highScore));
+    final bySixes = [...list]
+      ..sort((a, b) => b.sixes.compareTo(a.sixes));
+    final byFours = [...list]
+      ..sort((a, b) => b.fours.compareTo(a.fours));
+
+    return [
+      _PubCategory(
+        label: 'Most Runs',
+        icon: Icons.sports_cricket,
+        accent: kGold,
+        value: byRuns.isNotEmpty && byRuns.first.runs > 0
+            ? '${byRuns.first.runs}'
+            : '0',
+        detail: byRuns.isNotEmpty && byRuns.first.runs > 0
+            ? 'Avg ${byRuns.first.battingAverage.toStringAsFixed(1)} • SR ${byRuns.first.battingSR.toStringAsFixed(0)}'
+            : '',
+        rows: rowsOf(
+          byRuns,
+          (c) => '${c.runs} runs',
+          (c) =>
+              'Avg ${c.battingAverage.toStringAsFixed(1)} • SR ${c.battingSR.toStringAsFixed(0)}',
+          (c) => c.runs > 0,
+        ),
+      ),
+      _PubCategory(
+        label: 'Most Wickets',
+        icon: Icons.sports_baseball,
+        accent: kCyan,
+        value: byWkts.isNotEmpty && byWkts.first.wickets > 0
+            ? '${byWkts.first.wickets}'
+            : '0',
+        detail: byWkts.isNotEmpty && byWkts.first.wickets > 0
+            ? 'Econ ${byWkts.first.economy.toStringAsFixed(2)} • Best ${byWkts.first.bestFigures}'
+            : '',
+        rows: rowsOf(
+          byWkts,
+          (c) => '${c.wickets} wkts',
+          (c) =>
+              'Econ ${c.economy.toStringAsFixed(2)} • Best ${c.bestFigures}',
+          (c) => c.wickets > 0,
+        ),
+      ),
+      _PubCategory(
+        label: 'Highest Score',
+        icon: Icons.emoji_events,
+        accent: kGold,
+        value: byHS.isNotEmpty && byHS.first.highScore > 0
+            ? '${byHS.first.highScore}'
+            : '0',
+        detail: '',
+        rows: rowsOf(
+          byHS,
+          (c) => '${c.highScore}',
+          (c) => '${c.runs} runs • SR ${c.battingSR.toStringAsFixed(0)}',
+          (c) => c.highScore > 0,
+        ),
+      ),
+      _PubCategory(
+        label: 'Most Sixes',
+        icon: Icons.looks_6,
+        accent: kGold,
+        value: bySixes.isNotEmpty && bySixes.first.sixes > 0
+            ? '${bySixes.first.sixes}'
+            : '0',
+        detail: '',
+        rows: rowsOf(
+          bySixes,
+          (c) => '${c.sixes} sixes',
+          (c) => '${c.runs} runs',
+          (c) => c.sixes > 0,
+        ),
+      ),
+      _PubCategory(
+        label: 'Most Fours',
+        icon: Icons.looks_4,
+        accent: kGold,
+        value: byFours.isNotEmpty && byFours.first.fours > 0
+            ? '${byFours.first.fours}'
+            : '0',
+        detail: '',
+        rows: rowsOf(
+          byFours,
+          (c) => '${c.fours} fours',
+          (c) => '${c.runs} runs',
+          (c) => c.fours > 0,
+        ),
+      ),
+    ];
+  }
+
   // ---------- Teams (read-only) ----------
 
   Widget _teamsTab(PublishedTournament pub) {
@@ -504,6 +703,396 @@ class _PublishedTournamentScreenState
           ),
         const SizedBox(height: 12),
       ],
+    );
+  }
+}
+
+// ---------- Snapshot slice lookups (viewer-side, no Store) ----------
+
+String _slicePlayerName(PublishedTournament pub, String id) {
+  for (final t in pub.teams) {
+    final p = t.playerById(id);
+    if (p != null) return p.name;
+  }
+  for (final r in pub.slice.regPlayers) {
+    if (r.id == id) return r.name;
+  }
+  return 'Player';
+}
+
+String _slicePlayerPhoto(PublishedTournament pub, String id) {
+  for (final r in pub.slice.regPlayers) {
+    if (r.id == id && r.photoBase64.isNotEmpty) return r.photoBase64;
+  }
+  for (final t in pub.teams) {
+    final p = t.playerById(id);
+    if (p != null && p.photoBase64.isNotEmpty) return p.photoBase64;
+  }
+  return '';
+}
+
+String _slicePlayerRole(PublishedTournament pub, String id) {
+  for (final t in pub.teams) {
+    final p = t.playerById(id);
+    if (p != null) return p.role;
+  }
+  for (final r in pub.slice.regPlayers) {
+    if (r.id == id) return r.role;
+  }
+  return 'Batter';
+}
+
+String _sliceTeamOf(PublishedTournament pub, String id) {
+  for (final t in pub.teams) {
+    if (t.players.any((p) => p.id == id)) return t.name;
+  }
+  return '';
+}
+
+class _PubRow {
+  final String playerId;
+  final String primary;
+  final String secondary;
+  const _PubRow(this.playerId, this.primary, this.secondary);
+}
+
+class _PubCategory {
+  final String label;
+  final IconData icon;
+  final Color accent;
+  final String value;
+  final String detail;
+  final List<_PubRow> rows;
+  const _PubCategory({
+    required this.label,
+    required this.icon,
+    required this.accent,
+    required this.value,
+    required this.detail,
+    required this.rows,
+  });
+}
+
+/// Read-only top-5 leaderboard for one published category.
+class _PublishedLeaderboardScreen extends StatelessWidget {
+  final PublishedTournament pub;
+  final _PubCategory category;
+  const _PublishedLeaderboardScreen({
+    required this.pub,
+    required this.category,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('${pub.name} - ${category.label}')),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(12),
+        itemCount: category.rows.length,
+        separatorBuilder: (_, _) => const Divider(height: 8),
+        itemBuilder: (c, i) {
+          final r = category.rows[i];
+          final team = _sliceTeamOf(pub, r.playerId);
+          final photo = _slicePlayerPhoto(pub, r.playerId);
+          return ListTile(
+            dense: true,
+            leading: PlayerAvatar(
+              photoBase64: photo.isEmpty ? null : photo,
+              role: _slicePlayerRole(pub, r.playerId),
+              name: _slicePlayerName(pub, r.playerId),
+              radius: 18,
+            ),
+            title: Text('${i + 1}. ${_slicePlayerName(pub, r.playerId)}'),
+            subtitle: Text(
+              '${r.secondary}${team.isNotEmpty ? '  •  $team' : ''}',
+            ),
+            trailing: Text(
+              r.primary,
+              style: const TextStyle(
+                color: kCyan,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// READ-ONLY scorecard for one completed fixture, rendered purely from
+/// the snapshot match's stored innings state. No scoring, editing,
+/// adding or deleting exists here — display only.
+class _PublishedScorecardScreen extends StatelessWidget {
+  final PublishedTournament pub;
+  final Match match;
+  const _PublishedScorecardScreen({required this.pub, required this.match});
+
+  String _name(String id) => _slicePlayerName(pub, id);
+
+  @override
+  Widget build(BuildContext context) {
+    final title =
+        match.matchTitle.isNotEmpty ? match.matchTitle : 'Scorecard';
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: match.innings.isEmpty
+          ? const EmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'No scorecard yet',
+              subtitle: 'This match has no recorded innings.',
+            )
+          : ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                ScoreCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${pub.teamName(match.teamAId)} vs '
+                        '${pub.teamName(match.teamBId)}',
+                        style: const TextStyle(
+                          color: kWhite,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (match.resultText.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          match.resultText,
+                          style: const TextStyle(
+                            color: kGold,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      if (match.manOfMatchId.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Player of the Match: '
+                          '${_name(match.manOfMatchId)}',
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12.5),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                for (var i = 0; i < match.innings.length; i++) ...[
+                  const SizedBox(height: 14),
+                  _inningsCard(match.innings[i], i + 1),
+                ],
+                const SizedBox(height: 12),
+              ],
+            ),
+    );
+  }
+
+  Widget _inningsCard(InningsState inn, int number) {
+    final batted = inn.battingXI
+        .where((pid) => inn.batting[pid]?.batted ?? false)
+        .toList();
+    final dnb = inn.battingXI
+        .where((pid) => !(inn.batting[pid]?.batted ?? false))
+        .map(_name)
+        .toList();
+    final bowlers = inn.bowling.keys.where((pid) {
+      final f = inn.bowling[pid]!;
+      return f.legalBalls > 0 || f.wides > 0 || f.noBalls > 0;
+    }).toList();
+    return ScoreCard(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${pub.teamName(inn.battingTeamId)} — Innings $number',
+                    style: const TextStyle(
+                      color: kWhite,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${inn.totalRuns}/${inn.wickets} '
+                  '(${oversText(inn.legalBalls, inn.ballsPerOver)} ov)',
+                  style: const TextStyle(
+                    color: kCyan,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 18),
+          _tableHeader(
+              const ['Batter', 'R', 'B', '4s', '6s', 'SR'],
+              const [5, 2, 2, 2, 2, 3]),
+          for (final pid in batted) _battingRow(inn, pid),
+          if (dnb.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 2),
+              child: Text(
+                'Did not bat: ${dnb.join(', ')}',
+                style: const TextStyle(
+                    color: Colors.white54, fontSize: 12),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 2),
+            child: Text(
+              'Extras: ${inn.extrasTotal} (wd ${inn.widesRuns}, '
+              'nb ${inn.noBallRuns}, b ${inn.byeRuns}, '
+              'lb ${inn.legByeRuns})',
+              style: const TextStyle(
+                  color: Colors.white70, fontSize: 12),
+            ),
+          ),
+          if (inn.fallOfWickets.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 2),
+              child: Text(
+                'Fall of wickets: ${inn.fallOfWickets.map((f) => '${f.wicketNo}-${f.runs} (${_name(f.playerId)}, ${f.overText} ov)').join(', ')}',
+                style: const TextStyle(
+                    color: Colors.white54, fontSize: 12),
+              ),
+            ),
+          const Divider(height: 18),
+          _tableHeader(
+              const ['Bowler', 'O', 'M', 'R', 'W', 'Econ'],
+              const [5, 2, 2, 2, 2, 3]),
+          for (final pid in bowlers) _bowlingRow(inn, pid),
+        ],
+      ),
+    );
+  }
+
+  Widget _tableHeader(List<String> labels, List<int> flexes) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              flex: flexes[i],
+              child: Text(
+                labels[i],
+                textAlign: i == 0 ? TextAlign.left : TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _battingRow(InningsState inn, String pid) {
+    final f = inn.batting[pid]!;
+    final sr =
+        f.balls == 0 ? '-' : (f.runs * 100 / f.balls).toStringAsFixed(1);
+    final figures = ['${f.runs}', '${f.balls}', '${f.fours}', '${f.sixes}', sr];
+    const flexes = [2, 2, 2, 2, 3];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _name(pid),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  f.out ? resolveHowOut(f.howOut, _name) : 'not out',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: f.out ? Colors.white38 : kCyan,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < figures.length; i++)
+            Expanded(
+              flex: flexes[i],
+              child: Text(
+                figures[i],
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bowlingRow(InningsState inn, String pid) {
+    final f = inn.bowling[pid]!;
+    final econ = f.legalBalls == 0
+        ? '-'
+        : (f.runs * inn.ballsPerOver / f.legalBalls).toStringAsFixed(2);
+    final figures = [
+      oversText(f.legalBalls, inn.ballsPerOver),
+      '${f.maidens}',
+      '${f.runs}',
+      '${f.wickets}',
+      econ,
+    ];
+    const flexes = [2, 2, 2, 2, 3];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Text(
+              _name(pid),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          for (var i = 0; i < figures.length; i++)
+            Expanded(
+              flex: flexes[i],
+              child: Text(
+                figures[i],
+                textAlign: TextAlign.right,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
