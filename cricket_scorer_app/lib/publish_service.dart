@@ -33,6 +33,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_service.dart';
 import 'models.dart';
+import 'photo_sync.dart';
 import 'store.dart';
 
 /// The decoded slice of one tournament — exactly what a published
@@ -145,12 +146,27 @@ class PublishService {
     );
   }
 
+  /// Encodes a slice for the public document. Player photos are
+  /// stripped exactly like the cloud backup push strips them
+  /// (PhotoSync.stripPhotos): photos travel via the owner's private
+  /// photos subcollection, never inside a document — a played
+  /// tournament full of photos would otherwise push this single
+  /// document past Firestore's 1 MiB limit and every publish write
+  /// would fail.
   static String encodeSlice(TournamentSlice slice) => jsonEncode({
         'tournament': slice.tournament.toJson(),
-        'teams': slice.teams.map((t) => t.toJson()).toList(),
+        'teams': slice.teams
+            .map((t) => PhotoSync.stripPhotos(t.toJson()))
+            .toList(),
         'matches': slice.matches.map((m) => m.toJson()).toList(),
-        'regPlayers': slice.regPlayers.map((r) => r.toJson()).toList(),
+        'regPlayers': slice.regPlayers
+            .map((r) => PhotoSync.stripPhotos(r.toJson()))
+            .toList(),
       });
+
+  /// Whether [store] currently holds any published tournament.
+  static bool hasPublished(Store store) =>
+      store.tournaments.any((t) => t.published);
 
   /// Decodes a snapshot string back into model objects; null when the
   /// payload is missing or corrupt (viewers simply skip such docs).
@@ -218,8 +234,29 @@ class PublishService {
     } catch (e) {
       _lastError = e.toString();
       debugPrint('Publish write failed: $e');
-      return 'Could not reach the cloud — check your internet connection.';
+      return _writeErrorMessage(e);
     }
+  }
+
+  /// User-readable reason for a failed publish write, by Firestore
+  /// error code — the manual publish action shows this in a SnackBar,
+  /// so a failure is never silent or unexplained (v1.3.2, bug #R1:
+  /// previously every failure looked the same and background
+  /// re-publish failures left no trace but the recorded [lastError]).
+  static String _writeErrorMessage(Object e) {
+    if (e is FirebaseException) {
+      switch (e.code) {
+        case 'permission-denied':
+          return 'The cloud refused to publish this tournament '
+              '(permission denied).';
+        case 'invalid-argument':
+          return 'This tournament is too large to publish.';
+        case 'unavailable':
+          return 'Could not reach the cloud — check your internet '
+              'connection.';
+      }
+    }
+    return 'Could not reach the cloud — check your internet connection.';
   }
 
   /// Publishes [t] publicly. Returns null on success, otherwise a
@@ -277,7 +314,7 @@ class PublishService {
   void scheduleRepublish(Store store) {
     final auth = AuthService();
     if (!auth.firebaseReady || !auth.isLoggedIn) return;
-    if (!store.tournaments.any((t) => t.published)) return;
+    if (!hasPublished(store)) return;
     _republishTimer?.cancel();
     _republishTimer =
         Timer(const Duration(seconds: 5), () => _republishAll(store));
