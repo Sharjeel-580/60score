@@ -8,8 +8,10 @@ import 'store.dart';
 import 'theme.dart';
 import 'auth_service.dart';
 import 'backup_service.dart';
+import 'sync_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/profile_screen.dart';
 import 'screens/match_setup_screen.dart';
 import 'screens/published_search_screen.dart';
 import 'screens/scorer_home_screen.dart';
@@ -55,7 +57,8 @@ class SplashGate extends StatefulWidget {
 class _SplashGateState extends State<SplashGate> {
   final Store store = Store();
   bool _ready = false;
-  bool _gatePassed = false;
+  bool _wasGate = false;
+  bool _welcomeScheduled = false;
 
   @override
   void initState() {
@@ -65,19 +68,31 @@ class _SplashGateState extends State<SplashGate> {
 
   Future<void> _boot() async {
     final minSplash = Future.delayed(const Duration(milliseconds: 1400));
-    await store.load();
+    // Settle Firebase auth FIRST (bounded): which identity's data
+    // loads depends on who — if anyone — is signed in on this device.
+    await AuthService().waitReady(const Duration(seconds: 2));
+    final auth = AuthService();
+    if (auth.isLoggedIn) {
+      // The signed-in account's OWN data scope (with the owner-only
+      // claim of any pre-v1.3.1 device data on first run), then
+      // refresh it from the cloud in the background.
+      final user = auth.currentUser!;
+      await store.activateAccount(
+        user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        phoneNumber: user.phoneNumber,
+      );
+      SyncService().pull(store); // fire-and-forget, last-write-wins
+    } else {
+      await store.activateIdentity('guest');
+    }
     // Daily automatic backup (keeps last 14) — fire and forget.
     runDailyAutoBackup(store);
-    // Let Firebase auth settle (bounded) so the login-gate decision
-    // below sees the real sign-in state, restored sessions included.
-    await AuthService().waitReady(const Duration(seconds: 2));
     await minSplash;
     if (!mounted) return;
-    setState(() {
-      _ready = true;
-      _gatePassed = !_gateNeeded();
-    });
-    if (_gatePassed) _scheduleWelcome();
+    setState(() => _ready = true);
+    if (!_gateNeeded()) _scheduleWelcome();
   }
 
   /// The login gate appears only when Firebase is live, nobody is
@@ -93,15 +108,17 @@ class _SplashGateState extends State<SplashGate> {
   }
 
   void _onGatePassed() {
-    if (!mounted) return;
-    setState(() => _gatePassed = true);
+    // The gate itself is derived live from auth state (see build);
+    // passing it only needs the first-run welcome scheduled. The
+    // login screen may already be unmounted by the time it calls
+    // this, so build() covers the same transition as a fallback.
     _scheduleWelcome();
   }
 
   void _scheduleWelcome() {
-    if (!store.welcomeDone) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcome());
-    }
+    if (store.welcomeDone || _welcomeScheduled) return;
+    _welcomeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcome());
   }
 
   Future<void> _showWelcome() async {
@@ -158,16 +175,30 @@ class _SplashGateState extends State<SplashGate> {
     if (!_ready) {
       return const _SplashView();
     }
-    if (!_gatePassed) {
-      return LoginScreen(
-        store: store,
-        gateMode: true,
-        onGatePassed: _onGatePassed,
-      );
-    }
+    // The gate is derived LIVE from auth state: log-in / guest choice
+    // opens the app, log-out brings the gate straight back — and the
+    // store's identity switches with it, so an account's data is
+    // never left visible after log-out.
     return AnimatedBuilder(
-      animation: store,
-      builder: (context, _) => HomeShell(store: store),
+      animation: AuthService(),
+      builder: (context, _) {
+        if (_gateNeeded()) {
+          _wasGate = true;
+          return LoginScreen(
+            store: store,
+            gateMode: true,
+            onGatePassed: _onGatePassed,
+          );
+        }
+        if (_wasGate) {
+          _wasGate = false;
+          _scheduleWelcome();
+        }
+        return AnimatedBuilder(
+          animation: store,
+          builder: (context, _) => HomeShell(store: store),
+        );
+      },
     );
   }
 }
@@ -531,6 +562,13 @@ class _HomeShellState extends State<HomeShell> {
                     selected: _navIndex == 3,
                     onTap: () => _closeDrawerAndGoTab(3),
                   ),
+                  _drawerCard(
+                    icon: Icons.account_circle,
+                    label: 'My Profile',
+                    onTap: () => _closeDrawerAndPush(
+                      ProfileScreen(store: store),
+                    ),
+                  ),
                   const Divider(height: 24, color: kTealDark),
                   _drawerCard(
                     icon: Icons.settings,
@@ -551,7 +589,7 @@ class _HomeShellState extends State<HomeShell> {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Version 1.1.2',
+                'Version 1.3.1',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white38, fontSize: 12),
               ),
