@@ -287,9 +287,21 @@ class PublishService {
     final auth = AuthService();
     if (!auth.isLoggedIn) return;
     final uid = auth.currentUser!.uid;
+    // Identity guard (v1.3.1): the store must still hold THIS
+    // account's data — after an account switch the pending timer of
+    // the previous identity must not publish the new one's data
+    // under the wrong owner (and vice versa).
+    if (store.identityId != uid) return;
     for (final t in store.tournaments.where((t) => t.published)) {
       await _writeDoc(store, t, uid);
     }
+  }
+
+  /// Cancels a pending debounced re-publish (identity switches,
+  /// log-out).
+  void cancelPending() {
+    _republishTimer?.cancel();
+    _republishTimer = null;
   }
 
   // ---------- Viewer reads (public — guests included) ----------
