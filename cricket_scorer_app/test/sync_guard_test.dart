@@ -166,4 +166,161 @@ void main() {
       );
     });
   });
+
+  // v1.3.3 regression tests — the 2026-10-21 live data loss:
+  // a NEW device (v1.3.2) logged into the owner's account, showed
+  // EMPTY, and its empty pushes then destroyed the cloud backup;
+  // the original phone imported the empty copy and lost its data
+  // too. Root causes pinned here at the logic level:
+  //  (1) the fresh scope's local clock read "now" (stamped by the
+  //      activation persists), so the pull judged the good backup
+  //      "older" and never imported it;
+  //  (2) the v1.3.2 empty-push suppression only covered the
+  //      settle-time deferred flush — ordinary pushes after settle
+  //      were unvetted;
+  //  (3) the pull happily applied an all-empty remote dataset over
+  //      a non-empty local one.
+  group('SyncService.decidePull (2026-10-21 regression)', () {
+    test('fresh empty scope + non-empty backup imports REGARDLESS of '
+        'timestamps (today: local clock "now" vs backup from 13:49)',
+        () {
+      expect(
+        SyncService.decidePull(
+            localEmpty: true, remoteEmpty: false, remoteNewer: false),
+        PullDecision.importRemote,
+      );
+      expect(
+        SyncService.decidePull(
+            localEmpty: true, remoteEmpty: false, remoteNewer: true),
+        PullDecision.importRemote,
+      );
+    });
+
+    test('empty backup is never imported over local data — local is '
+        'kept and pushed up, even when the empty copy is "newer" '
+        '(today: the original phone importing the clobbered backup)',
+        () {
+      expect(
+        SyncService.decidePull(
+            localEmpty: false, remoteEmpty: true, remoteNewer: true),
+        PullDecision.keepLocalAndPush,
+      );
+      expect(
+        SyncService.decidePull(
+            localEmpty: false, remoteEmpty: true, remoteNewer: false),
+        PullDecision.keepLocalAndPush,
+      );
+    });
+
+    test('both sides non-empty: classic last-write-wins by timestamp',
+        () {
+      expect(
+        SyncService.decidePull(
+            localEmpty: false, remoteEmpty: false, remoteNewer: true),
+        PullDecision.importRemote,
+      );
+      expect(
+        SyncService.decidePull(
+            localEmpty: false, remoteEmpty: false, remoteNewer: false),
+        PullDecision.noImport,
+      );
+    });
+
+    test('both sides empty: nothing to import either way', () {
+      expect(
+        SyncService.decidePull(
+            localEmpty: true, remoteEmpty: true, remoteNewer: true),
+        PullDecision.importRemote, // applies empties over empties: a no-op
+      );
+      expect(
+        SyncService.decidePull(
+            localEmpty: true, remoteEmpty: true, remoteNewer: false),
+        PullDecision.noImport,
+      );
+    });
+  });
+
+  group('SyncPushGuard post-settle pushes (2026-10-21 regression)',
+      () {
+    test('an ordinary empty push AFTER settle stays suppressed for a '
+        'never-imported empty scope (the v1.3.2 hole: only the '
+        'deferred flush was vetted)', () {
+      final g = SyncPushGuard();
+      // The pull settles the way today's did: backup seen holding
+      // data, nothing imported, local dataset empty.
+      expect(
+        g.settle('uid_a',
+            imported: false,
+            docSeen: true,
+            emptyDataset: true,
+            remoteNonEmpty: true),
+        isFalse, // no deferred flush either
+      );
+      // The first regular persist after settle — the push that
+      // destroyed the backup in v1.3.2 — is refused...
+      expect(g.pushPermitted(emptyDataset: true), isFalse);
+      // ...and so is every later one in this activation.
+      expect(g.pushPermitted(emptyDataset: true), isFalse);
+      expect(g.emptyPushSuppressed(true), isTrue);
+    });
+
+    test('once the user creates data, pushes flow; deleting that '
+        'data afterwards may sync (explicit user action)', () {
+      final g = SyncPushGuard();
+      g.settle('uid_a',
+          imported: false,
+          docSeen: true,
+          emptyDataset: true,
+          remoteNonEmpty: true);
+      expect(g.pushPermitted(emptyDataset: true), isFalse);
+      // User creates a tournament on the fresh device.
+      expect(g.pushPermitted(emptyDataset: false), isTrue);
+      // User deletes it again — a deliberate wipe of data they held
+      // in this activation, so the empty state may sync.
+      expect(g.pushPermitted(emptyDataset: true), isTrue);
+    });
+
+    test('deleting everything after a successful import may sync '
+        '(the local dataset mirrors the remote, then the user wipes)',
+        () {
+      final g = SyncPushGuard();
+      g.settle('uid_a',
+          imported: true,
+          docSeen: true,
+          emptyDataset: false,
+          remoteNonEmpty: true);
+      expect(g.pushPermitted(emptyDataset: true), isTrue);
+    });
+
+    test('a scope that already held data may sync its own wipe even '
+        'when the pull imported nothing (remote judged older)', () {
+      final g = SyncPushGuard();
+      g.settle('uid_a',
+          imported: false,
+          docSeen: true,
+          emptyDataset: false, // local scope was non-empty at settle
+          remoteNonEmpty: true);
+      expect(g.pushPermitted(emptyDataset: true), isTrue);
+    });
+
+    test('a permitted empty push lifts suppression for what follows '
+        '(the backup now genuinely is empty)', () {
+      final g = SyncPushGuard();
+      g.settle('uid_a',
+          imported: true,
+          docSeen: true,
+          emptyDataset: false,
+          remoteNonEmpty: true);
+      expect(g.pushPermitted(emptyDataset: true), isTrue);
+      g.notePushed(emptyDataset: true);
+      expect(g.emptyPushSuppressed(true), isFalse);
+    });
+
+    test('pushPermitted stays closed before the first pull settles',
+        () {
+      final g = SyncPushGuard();
+      expect(g.pushPermitted(emptyDataset: false), isFalse);
+      expect(g.pushPermitted(emptyDataset: true), isFalse);
+    });
+  });
 }
