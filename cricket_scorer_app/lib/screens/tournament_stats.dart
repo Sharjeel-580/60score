@@ -376,14 +376,14 @@ class TournamentStatsTab extends StatelessWidget {
     final persons = allPersons(store);
     return Column(
       children: [
+        // No in-body "Statistics" heading (v1.3.2, bug #R3): every
+        // host screen already titles this content (the Statistics
+        // page header / the detail tab), so a second heading here
+        // doubled up. Only the actions menu stays, on a slim row.
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
+          padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
           child: Row(
             children: [
-              const Text(
-                'Statistics',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
               const Spacer(),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
