@@ -8,6 +8,7 @@ import '../scoring.dart';
 import '../stats_share.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../widgets/stat_category_card.dart';
 import 'stats_screen.dart' show CompareScreen, allPersons;
 
 String _teamOfPlayer(Store store, String playerId) {
@@ -38,6 +39,42 @@ class _LeaderRow {
   final String primary;
   final String secondary;
   _LeaderRow(this.playerId, this.primary, this.secondary);
+}
+
+/// Per-category icon + accent for the redesigned compact cards.
+(IconData, Color) _categoryStyle(String label) {
+  switch (label) {
+    case 'Most Runs':
+      return (Icons.sports_cricket, kGold);
+    case 'Most Wickets':
+      return (Icons.sports_baseball, kCyan);
+    case 'Highest Score':
+      return (Icons.emoji_events, kGold);
+    case 'Best Bowling':
+      return (Icons.bolt, kCyan);
+    case 'Most Sixes':
+      return (Icons.looks_6, kGold);
+    case 'Most Fours':
+      return (Icons.looks_4, kGold);
+    case 'Most Catches':
+      return (Icons.front_hand, kCyan);
+    case 'Most Stumpings':
+      return (Icons.back_hand, kCyan);
+    case 'Fastest Fifty':
+      return (Icons.timer, kGold);
+    case 'Fastest Hundred':
+      return (Icons.speed, kGold);
+    case 'Best Partnership':
+      return (Icons.people, kGold);
+    case 'Most Balls Faced':
+      return (Icons.adjust, kGold);
+    case 'Most Sixes (Innings)':
+      return (Icons.rocket_launch, kGold);
+    case 'Most Fours (Innings)':
+      return (Icons.bolt_outlined, kGold);
+    default:
+      return (Icons.bar_chart, kCyan);
+  }
 }
 
 class TournamentStatsTab extends StatelessWidget {
@@ -390,8 +427,10 @@ class TournamentStatsTab extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              // v1.2.2: was 0.92 (tall cards, lots of empty space).
-              childAspectRatio: 1.2,
+              // Compact redesigned cards (icon chip + leader + value);
+              // content is short, so the cells stay tight — no giant
+              // empty boxes like the old layout.
+              childAspectRatio: 1.45,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
             ),
@@ -400,16 +439,30 @@ class TournamentStatsTab extends StatelessWidget {
               final s = stats[i];
               final hasData = s.leaders.isNotEmpty;
               final name = s.playerId.isEmpty
-                  ? (s.detail.isNotEmpty ? '' : 'No data yet')
+                  ? ''
                   : (persons[s.playerId] ?? store.playerName(s.playerId));
               final team = s.playerId.isEmpty
                   ? ''
                   : _teamOfPlayer(store, s.playerId);
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: hasData
-                      ? () => Navigator.push(
+              final (icon, accent) = _categoryStyle(s.label);
+              final leaderPlayer = s.playerId.isEmpty
+                  ? null
+                  : store.findPlayer(s.playerId);
+              return StatCategoryCard(
+                icon: icon,
+                accent: accent,
+                label: s.label,
+                hasData: hasData,
+                value: s.value,
+                playerName: name,
+                teamName: team,
+                detail: s.detail,
+                photoBase64: s.playerId.isEmpty
+                    ? ''
+                    : store.photoForPlayer(s.playerId),
+                role: leaderPlayer?.role ?? 'Batter',
+                onTap: hasData
+                    ? () => Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => _LeaderboardScreen(
@@ -419,73 +472,7 @@ class TournamentStatsTab extends StatelessWidget {
                             ),
                           ),
                         )
-                      : null,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // v1.2.2: no misleading big "0"/"0-0" headline
-                        // when there is no data — just label + empty note.
-                        if (hasData) ...[
-                          Text(
-                            s.value,
-                            style: const TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.bold,
-                              color: kCyan,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 2),
-                        Text(
-                          s.label,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (name.isNotEmpty)
-                          Text(
-                            name,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        if (team.isNotEmpty)
-                          Text(
-                            team,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white54,
-                            ),
-                          ),
-                        if (s.detail.isNotEmpty && s.playerId.isEmpty)
-                          Text(
-                            s.detail,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white54,
-                            ),
-                          ),
-                        if (s.detail.isNotEmpty && s.playerId.isNotEmpty)
-                          Text(
-                            s.detail,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.white38,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
+                    : null,
               );
             },
           ),
