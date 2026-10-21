@@ -11,6 +11,7 @@ import '../sync_service.dart';
 import 'about_screen.dart';
 import 'backup_screen.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'registration_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -170,27 +171,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const Divider(height: 1),
                       _settingsRow(
+                        icon: Icons.account_circle,
+                        title: 'My Profile',
+                        subtitle: 'Your 60Score ID and your own stats',
+                        onTap: () => _open(ProfileScreen(store: store)),
+                      ),
+                      const Divider(height: 1),
+                      _settingsRow(
                         icon: Icons.logout,
                         title: 'Log out',
-                        subtitle: 'Data stays on this device',
+                        subtitle:
+                            'Your data stays saved under your account',
                         onTap: () async {
+                          // Capture the navigator BEFORE the async
+                          // gaps (the builder's context may be gone
+                          // by the time they complete).
+                          final nav = Navigator.of(context);
                           await auth.signOut();
-                          if (mounted) setState(() {});
+                          // Hide this account's data right away: the
+                          // store switches to the empty locked scope
+                          // and the login gate returns, so nobody
+                          // opening the app next can see or edit it.
+                          await store.activateIdentity('locked');
+                          nav.popUntil((r) => r.isFirst);
                         },
                       ),
                     ],
                   );
                 }
-                return _settingsRow(
-                  icon: Icons.login,
-                  title: 'Log in / Sign up',
-                  subtitle:
-                      'Email, Google or phone — sync data across devices',
-                  onTap: () async {
-                    await Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => LoginScreen(store: store)));
-                    if (mounted) setState(() {});
-                  },
+                return Column(
+                  children: [
+                    _settingsRow(
+                      icon: Icons.login,
+                      title: 'Log in / Sign up',
+                      subtitle:
+                          'Email, Google or phone — sync data across devices',
+                      onTap: () async {
+                        await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => LoginScreen(store: store)));
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _settingsRow(
+                      icon: Icons.account_circle,
+                      title: 'My Profile',
+                      subtitle: 'Log in to get your ID and stats',
+                      onTap: () => _open(ProfileScreen(store: store)),
+                    ),
+                  ],
                 );
               },
             ),
