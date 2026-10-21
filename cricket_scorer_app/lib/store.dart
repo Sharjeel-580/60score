@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'account_profile.dart';
 import 'draft.dart';
 import 'models.dart';
 import 'publish_service.dart';
@@ -23,6 +24,10 @@ class Store extends ChangeNotifier implements PlayoffStore {
   List<RegPlayer> regPlayers = [];
   List<Draft> drafts = [];
   List<ManualStatEntry> manualStats = [];
+
+  /// This identity's account profile (feature #3) — set for signed-in
+  /// accounts, always null for guests / the locked scope.
+  AccountProfile? profile;
   bool welcomeDone = false;
   bool loaded = false;
 
@@ -34,6 +39,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
   static const _kReg = 'score60_regplayers_v1';
   static const _kDrafts = 'score60_drafts_v1';
   static const _kManual = 'score60_manualstats_v1';
+  static const _kProfile = 'score60_profile_v1';
   static const _kWelcome = 'score60_welcome_v1';
   static const _kLastModified = 'score60_last_modified_v1';
 
@@ -41,8 +47,8 @@ class Store extends ChangeNotifier implements PlayoffStore {
   // Values actually live under '<base>__<identityId>', where the
   // identity id is 'guest' or a signed-in account's uid ('locked' is a
   // transient, always-empty scope used right after log-out). The
-  // un-suffixed keys are the pre-v1.3.1 legacy location — the first
-  // account to log in claims that data (see [claimLegacyData]);
+  // un-suffixed keys are the pre-v1.3.1 legacy location — only the
+  // OWNER's account may claim that data (see [claimLegacyData]);
   // guests are never shown it. The welcome flag stays global.
   String _identityId = 'guest';
 
@@ -86,6 +92,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
     manualStats = _decodeList(
             prefs.getString(_scoped(_kManual)), ManualStatEntry.fromJson) ??
         manualStats;
+    profile = _decodeProfile(prefs.getString(_scoped(_kProfile))) ?? profile;
     welcomeDone = prefs.getBool(_kWelcome) ?? false;
     loaded = true;
     notifyListeners();
@@ -106,25 +113,74 @@ class Store extends ChangeNotifier implements PlayoffStore {
     regPlayers = [];
     drafts = [];
     manualStats = [];
+    profile = null;
     loaded = false;
     await load();
   }
 
-  /// Activates a signed-in account's identity, first claiming any
-  /// pre-v1.3.1 (unscoped) device data into the account when the
-  /// account has no local data of its own yet.
-  Future<void> activateAccount(String uid) async {
-    await claimLegacyData(uid);
+  /// Activates a signed-in account's identity: first the owner-only
+  /// legacy claim (see [claimLegacyData]), then the account's own
+  /// scope is loaded and its profile ensured (feature #3).
+  Future<void> activateAccount(
+    String uid, {
+    String? email,
+    String? displayName,
+    String? phoneNumber,
+  }) async {
+    await claimLegacyData(uid, email: email);
     await activateIdentity(uid);
+    await ensureProfile(
+      displayName: displayName,
+      contact: email ?? phoneNumber,
+    );
+  }
+
+  /// Ensures the active identity has an account profile: creates it on
+  /// first activation (display name from the auth profile, else the
+  /// email prefix, else 'Player'; a unique code derived from the uid)
+  /// and refreshes name/contact when fresher auth values arrive.
+  /// Guests and the locked scope never get a profile. The profile is
+  /// part of this identity's scoped data, so it rides the backup sync.
+  Future<void> ensureProfile({String? displayName, String? contact}) async {
+    if (_identityId == 'guest' || _identityId == 'locked') return;
+    final existing = profile;
+    if (existing == null || existing.uid != _identityId) {
+      profile = AccountProfile.create(
+        uid: _identityId,
+        displayName: displayName,
+        contact: contact,
+      );
+      await persist();
+      return;
+    }
+    var changed = false;
+    if (displayName != null &&
+        displayName.trim().isNotEmpty &&
+        displayName.trim() != existing.displayName) {
+      existing.displayName = displayName.trim();
+      changed = true;
+    }
+    if (contact != null &&
+        contact.isNotEmpty &&
+        contact != existing.contact) {
+      existing.contact = contact;
+      changed = true;
+    }
+    if (changed) await persist();
   }
 
   /// Moves pre-v1.3.1 device data (stored under the original unscoped
-  /// keys) into [uid]'s scope, then removes the legacy keys. Only runs
-  /// when the legacy data exists AND the account's own scope is still
-  /// empty, so an account that already has data is never overwritten,
-  /// and a second account finds nothing left to claim. Returns true
-  /// when data was claimed.
-  Future<bool> claimLegacyData(String uid) async {
+  /// keys) into the OWNER account's scope, then removes the legacy
+  /// keys. OWNER-ONLY (claim-guard): that data is the app owner's, so
+  /// it is claimed solely when the signing-in account's [email] is
+  /// exactly [kOwnerEmail]. Any other account — and phone logins,
+  /// which carry no email — get false here and the legacy keys are
+  /// left completely untouched, so the owner can still claim the data
+  /// later on the same phone. Also only runs when the owner's own
+  /// scope is still empty, so existing account data is never
+  /// overwritten. Returns true when data was claimed.
+  Future<bool> claimLegacyData(String uid, {String? email}) async {
+    if (email == null || email.trim() != kOwnerEmail) return false;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getString(_kTeams) == null) return false;
     if (prefs.getString('${_kTeams}__$uid') != null) return false;
@@ -154,6 +210,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
     'app': '60Score',
     'schema': _kSchemaVersion,
     'exportedAt': DateTime.now().toIso8601String(),
+    'profile': profile?.toJson(),
     'teams': teams.map((t) => t.toJson()).toList(),
     'tournaments': tournaments.map((t) => t.toJson()).toList(),
     'matches': matches.map((m) => m.toJson()).toList(),
@@ -198,6 +255,17 @@ class Store extends ChangeNotifier implements PlayoffStore {
       regPlayers = [];
       drafts = [];
       manualStats = [];
+      profile = null;
+    }
+    // A backup may carry the account profile; adopt it when present
+    // (older backups have none and leave the current profile alone).
+    final rawProfile = data['profile'];
+    if (rawProfile is Map<String, dynamic>) {
+      try {
+        profile = AccountProfile.fromJson(rawProfile);
+      } catch (_) {
+        // Corrupt profile entry: ignore it, keep the current one.
+      }
     }
     counts['teams'] = mergeList(
       teams,
@@ -243,8 +311,19 @@ class Store extends ChangeNotifier implements PlayoffStore {
     regPlayers = [];
     drafts = [];
     manualStats = [];
+    profile = null;
     welcomeDone = false;
     await persist();
+  }
+
+  AccountProfile? _decodeProfile(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return AccountProfile.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null; // corrupt entry: caller keeps the previous profile
+    }
   }
 
   List<T>? _decodeList<T>(
@@ -286,6 +365,12 @@ class Store extends ChangeNotifier implements PlayoffStore {
       _scoped(_kManual),
       jsonEncode(manualStats.map((e) => e.toJson()).toList()),
     );
+    final prof = profile;
+    if (prof == null) {
+      await p.remove(_scoped(_kProfile));
+    } else {
+      await p.setString(_scoped(_kProfile), jsonEncode(prof.toJson()));
+    }
     await p.setBool(_kWelcome, welcomeDone);
   }
 
