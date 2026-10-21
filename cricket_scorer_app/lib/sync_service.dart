@@ -41,6 +41,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import 'account_profile.dart';
 import 'auth_service.dart';
 import 'models.dart';
 import 'photo_sync.dart';
@@ -124,6 +125,11 @@ class SyncService {
         'drafts': jsonEncode(store.drafts.map((d) => d.toJson()).toList()),
         'manualStats':
             jsonEncode(store.manualStats.map((e) => e.toJson()).toList()),
+        // The account profile rides in this same document (no new
+        // Firestore path — rules already cover backup/*).
+        'profile': store.profile == null
+            ? ''
+            : jsonEncode(store.profile!.toJson()),
         'updatedAt': now,
         'appVersion': '1.2.0',
       }, SetOptions(merge: true));
@@ -181,6 +187,8 @@ class SyncService {
         store.manualStats =
             _decode(data['manualStats'], ManualStatEntry.fromJson) ??
                 store.manualStats;
+        store.profile =
+            _decodeProfile(data['profile']) ?? store.profile;
         // The backup JSON carries no photos (stripped on push); fill
         // them in from the photos subcollection before persisting, so
         // one persist saves the complete state. Backups written by
@@ -200,6 +208,16 @@ class SyncService {
       _lastError = e.toString();
       debugPrint('Sync pull failed: $e');
       return false;
+    }
+  }
+
+  AccountProfile? _decodeProfile(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      return AccountProfile.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
     }
   }
 
