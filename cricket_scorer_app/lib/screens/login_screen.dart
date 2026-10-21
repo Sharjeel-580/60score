@@ -69,9 +69,21 @@ class _LoginScreenState extends State<LoginScreen>
     if (!mounted) return;
     setState(() => _busy = false);
     if (result.status == AuthStatus.ok) {
-      // Pull cloud data after a successful login (last-write-wins).
+      // Activate THIS account's own data scope before pulling: every
+      // account (and the guest workspace) keeps separate local data,
+      // so a login can never surface — or overwrite — somebody else's
+      // tournaments on this device.
       final store = widget.store;
       if (store != null) {
+        final user = _auth.currentUser;
+        if (user != null) {
+          await store.activateAccount(
+            user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            phoneNumber: user.phoneNumber,
+          );
+        }
         await SyncService().pull(store);
       }
       if (!mounted) return;
@@ -87,7 +99,13 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _continueAsGuest() async {
-    // Remembered on-device: a returning guest skips the gate.
+    // Load the GUEST workspace first: it only ever holds the guest's
+    // own on-device data, never a signed-in account's. Then remember
+    // the guest choice on-device (a returning guest skips the gate).
+    final store = widget.store;
+    if (store != null) {
+      await store.activateIdentity('guest');
+    }
     await _auth.setGuestMode();
     if (!mounted) return;
     final gatePassed = widget.onGatePassed;
