@@ -14,6 +14,11 @@
 // - Push: debounced 5s after any Store.persist(), only when logged in.
 // - Pull: after login and on app start (if logged in). Last-write-wins
 //   by timestamp — the newer side (local or cloud) wins, never merged.
+//   Exception (v1.3.3): a completely empty side never wins — an empty
+//   local scope always imports a non-empty backup (its "last modified"
+//   clock is unreliable right after activation), and an empty backup
+//   is never imported over local data (local is pushed up to heal it
+//   instead). See SyncService.decidePull and SyncPushGuard.
 // - All operations are fire-and-forget safe: failures are swallowed and
 //   the app keeps working offline.
 //
@@ -48,7 +53,8 @@ import 'photo_sync.dart';
 import 'publish_service.dart';
 import 'store.dart';
 
-/// Push guard for ONE account activation (v1.3.2, bug #R1).
+/// Push guard for ONE account activation (v1.3.2, bug #R1;
+/// empty-push rules completed in v1.3.3).
 ///
 /// The race this closes: right after login the account's scope is
 /// activated and local edits (or the profile ensure) schedule a
@@ -62,9 +68,17 @@ import 'store.dart';
 ///   pull has settled (completed). Pushes requested earlier are
 ///   deferred and flushed once, when the pull settles — but only if
 ///   the flush itself is safe:
-/// - An all-empty dataset is NEVER flushed over a remote backup in
-///   an activation whose first pull imported nothing (the exact
-///   shape of the #R1 data loss).
+/// - An all-empty dataset is NEVER pushed over a non-empty remote
+///   backup by an activation whose pull imported nothing and whose
+///   local dataset was never non-empty — not just at settle time
+///   (the v1.3.2 flush check) but on ANY push path, for the whole
+///   activation (v1.3.3: the first ordinary persist after settle
+///   used to slip an empty push past the guard and destroy the
+///   backup the pull had just declined to import). An empty push
+///   becomes permissible once the user actually had data in this
+///   activation — imported it, or held/created it locally — because
+///   deleting everything after that is an explicit user action,
+///   not a fresh scope racing its first pull.
 ///
 /// The guard tracks one uid at a time; a different uid (or an
 /// explicit reset on identity switch) starts a fresh guarded window.
@@ -72,7 +86,8 @@ class SyncPushGuard {
   String? _uid;
   bool _pullSettled = false;
   bool _pullImported = false;
-  bool _remoteDocSeen = false;
+  bool _remoteNonEmpty = false;
+  bool _localNonEmptySeen = false;
   bool _deferred = false;
 
   /// Whether [s] carries no user data at all.
@@ -84,7 +99,8 @@ class SyncPushGuard {
     _uid = null;
     _pullSettled = false;
     _pullImported = false;
-    _remoteDocSeen = false;
+    _remoteNonEmpty = false;
+    _localNonEmptySeen = false;
     _deferred = false;
   }
 
@@ -109,28 +125,69 @@ class SyncPushGuard {
     _deferred = true;
   }
 
-  /// Whether an all-empty push must be suppressed right now: the
-  /// dataset is empty, a remote backup exists, and this activation's
-  /// first pull brought nothing in.
+  /// Whether a push of an all-empty dataset must be suppressed
+  /// right now: the remote backup is known to hold data, this
+  /// activation's pull imported none of it, and the local dataset
+  /// was never non-empty in this activation — the exact shape of
+  /// the #R1 data loss (a fresh/never-imported empty scope).
   bool emptyPushSuppressed(bool emptyDataset) =>
-      emptyDataset && !_pullImported && _remoteDocSeen;
+      emptyDataset &&
+      _remoteNonEmpty &&
+      !_pullImported &&
+      !_localNonEmptySeen;
+
+  /// The push-path check used AFTER the gate has settled (the
+  /// settle-time flush has its own decision in [settle]). Records
+  /// the observation that the local dataset is non-empty — once
+  /// seen, a later empty dataset is treated as the result of
+  /// explicit user deletions, whose sync is legitimate.
+  bool pushPermitted({required bool emptyDataset}) {
+    if (!emptyDataset) _localNonEmptySeen = true;
+    if (!_pullSettled) return false;
+    return !emptyPushSuppressed(emptyDataset);
+  }
+
+  /// Records a completed push: afterwards the remote backup mirrors
+  /// what was sent, so an empty push that WAS permitted (explicit
+  /// delete-all) also lifts the suppression for what follows.
+  void notePushed({required bool emptyDataset}) {
+    _remoteNonEmpty = !emptyDataset;
+    if (!emptyDataset) _localNonEmptySeen = true;
+  }
 
   /// Settles the guard with the first pull's outcome for [uid].
   /// Returns true when a deferred push should be flushed now.
+  /// [remoteNonEmpty] is the pull's own reading of the backup;
+  /// when omitted it falls back to [docSeen] (a seen backup is
+  /// assumed to hold data — the conservative choice).
   bool settle(
     String uid, {
     required bool imported,
     required bool docSeen,
     required bool emptyDataset,
+    bool? remoteNonEmpty,
   }) {
     _track(uid);
     _pullSettled = true;
     _pullImported = imported;
-    _remoteDocSeen = docSeen;
+    _remoteNonEmpty = remoteNonEmpty ?? docSeen;
+    if (!emptyDataset) _localNonEmptySeen = true;
     if (!_deferred) return false;
     _deferred = false;
     return !emptyPushSuppressed(emptyDataset);
   }
+}
+
+/// What a pull should do with the remote backup (v1.3.3).
+enum PullDecision {
+  /// Apply the remote dataset to the local store.
+  importRemote,
+
+  /// Keep the local dataset and push it up, healing the backup.
+  keepLocalAndPush,
+
+  /// Apply nothing (local copy is current; photos may still sync).
+  noImport,
 }
 
 class SyncService {
@@ -158,6 +215,33 @@ class SyncService {
     required bool hasPublished,
   }) =>
       applied && hasPublished;
+
+  /// The import decision for one pull (v1.3.3, bug #R1 follow-up).
+  ///
+  /// Timestamps alone cannot decide this: a fresh scope's local
+  /// "last modified" clock is stamped with the CURRENT time by the
+  /// activation-time persists (profile ensure) that run before the
+  /// first pull, so a perfectly good older backup looks "stale"
+  /// next to a completely empty local dataset — and on 2026-10-21
+  /// exactly that made a new device skip its import, after which
+  /// its empty pushes destroyed the backup for every device. So
+  /// emptiness outranks timestamps:
+  ///
+  /// - Local empty + remote non-empty → ALWAYS import: there is
+  ///   nothing local to protect, whatever the clocks say.
+  /// - Local non-empty + remote empty → NEVER import the empty
+  ///   copy: keep local and push it up to heal the backup.
+  /// - Otherwise (both sides hold data, or neither does) the
+  ///   classic last-write-wins timestamp rule decides.
+  static PullDecision decidePull({
+    required bool localEmpty,
+    required bool remoteEmpty,
+    required bool remoteNewer,
+  }) {
+    if (localEmpty && !remoteEmpty) return PullDecision.importRemote;
+    if (!localEmpty && remoteEmpty) return PullDecision.keepLocalAndPush;
+    return remoteNewer ? PullDecision.importRemote : PullDecision.noImport;
+  }
 
   static const _kDoc = 'app_data';
 
@@ -203,6 +287,16 @@ class SyncService {
         _guard.defer(uid);
         return;
       }
+      // Empty-push suppression (v1.3.3): the settle-time check alone
+      // was not enough — the first ordinary persist AFTER settle
+      // still pushed a fresh scope's empty dataset over the real
+      // backup. The guard therefore vets every push, all activation
+      // long: an all-empty push from a never-imported, never-had-data
+      // scope never runs while the backup is known to hold data.
+      if (!_guard.pushPermitted(
+          emptyDataset: SyncPushGuard.datasetIsEmpty(store))) {
+        return;
+      }
       _push(ref, store);
     });
   }
@@ -218,6 +312,10 @@ class SyncService {
 
   Future<void> _push(
       DocumentReference<Map<String, dynamic>> ref, Store store) async {
+    // Last line of defence (v1.3.3): whatever path led here, a
+    // suppressed all-empty push never reaches Firestore.
+    final emptyDataset = SyncPushGuard.datasetIsEmpty(store);
+    if (emptyDataset && _guard.emptyPushSuppressed(true)) return;
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
       await ref.set({
@@ -244,6 +342,7 @@ class SyncService {
         'appVersion': '1.2.0',
       }, SetOptions(merge: true));
       await store.setLastModified(now);
+      _guard.notePushed(emptyDataset: emptyDataset);
       final photos = _photosRef();
       if (photos != null) await PhotoSync.pushPhotos(photos, store);
       _lastSyncAt = DateTime.now();
@@ -254,8 +353,15 @@ class SyncService {
     }
   }
 
-  /// Pull remote state into [store] when the cloud copy is newer.
-  /// Returns true when remote data was applied.
+  /// Pull remote state into [store]. Returns true when remote data
+  /// was applied.
+  ///
+  /// The decision is [decidePull]'s: a completely empty side never
+  /// wins over a non-empty one — an empty local scope imports the
+  /// non-empty backup regardless of timestamps, and an empty backup
+  /// is never imported over local data (the local data is pushed up
+  /// to heal it instead). When both sides hold data, last-write-wins
+  /// by timestamp applies, as before.
   ///
   /// Every completed pull SETTLES the push guard for this activation
   /// (see [SyncPushGuard]): pushes deferred during the guarded
@@ -278,63 +384,125 @@ class SyncService {
         if (!SyncPushGuard.datasetIsEmpty(store)) {
           await _push(ref, store);
         }
-        _settleAfterPull(store, uid, imported: false, docSeen: false);
+        _settleAfterPull(store, uid,
+            imported: false,
+            docSeen: false,
+            remoteNonEmpty: !SyncPushGuard.datasetIsEmpty(store));
         return false;
       }
       final data = snap.data()!;
       final remoteAt = (data['updatedAt'] as num?)?.toInt() ?? 0;
       final localAt = await store.getLastModified();
-      if (remoteAt <= localAt) {
-        // Main state is current, but photos may still be missing (e.g.
-        // a photo upload succeeded after this device's last full pull).
+      // Decode the remote collections BEFORE deciding anything —
+      // the import decision needs to know whether each side is
+      // completely empty, and emptiness outranks the clocks (see
+      // [decidePull]). A field that fails to decode counts as empty
+      // here; per-field fallbacks below still keep the local copy
+      // of a corrupt field whenever an import does happen.
+      final rTeams = _decode(data['teams'], Team.fromJson);
+      final rTournaments =
+          _decode(data['tournaments'], Tournament.fromJson);
+      final rMatches = _decode(data['matches'], Match.fromJson);
+      final rRegPlayers = _decode(data['regPlayers'], RegPlayer.fromJson);
+      final rDrafts = _decode(data['drafts'], Draft.fromJson);
+      final rManualStats =
+          _decode(data['manualStats'], ManualStatEntry.fromJson);
+      final remoteEmpty = (rTournaments?.isEmpty ?? true) &&
+          (rTeams?.isEmpty ?? true) &&
+          (rMatches?.isEmpty ?? true);
+      final decision = decidePull(
+        localEmpty: SyncPushGuard.datasetIsEmpty(store),
+        remoteEmpty: remoteEmpty,
+        remoteNewer: remoteAt > localAt,
+      );
+
+      if (decision == PullDecision.keepLocalAndPush) {
+        // The backup is empty but this device holds the data: never
+        // import the empty copy — push the local data up instead,
+        // so the backup is healed for every other device too.
+        await _push(ref, store);
+        _settleAfterPull(store, uid,
+            imported: false, docSeen: true, remoteNonEmpty: true);
+        return false;
+      }
+      if (decision == PullDecision.noImport) {
+        // Local state is current, but photos may still be missing
+        // (e.g. a photo upload succeeded after this device's last
+        // full pull).
         final photos = _photosRef();
         if (photos != null && await PhotoSync.pullPhotos(photos, store)) {
           await store.persist(skipSync: true);
           _lastSyncAt = DateTime.now();
         }
-        _settleAfterPull(store, uid, imported: false, docSeen: true);
+        _settleAfterPull(store, uid,
+            imported: false,
+            docSeen: true,
+            remoteNonEmpty: !remoteEmpty);
         return false;
       }
 
-      _applyingRemote = true;
-      try {
-        store.teams =
-            _decode(data['teams'], Team.fromJson) ?? store.teams;
-        store.tournaments =
-            _decode(data['tournaments'], Tournament.fromJson) ??
-                store.tournaments;
-        store.matches =
-            _decode(data['matches'], Match.fromJson) ?? store.matches;
-        store.regPlayers =
-            _decode(data['regPlayers'], RegPlayer.fromJson) ??
-                store.regPlayers;
-        store.drafts =
-            _decode(data['drafts'], Draft.fromJson) ?? store.drafts;
-        store.manualStats =
-            _decode(data['manualStats'], ManualStatEntry.fromJson) ??
-                store.manualStats;
-        store.profile =
-            _decodeProfile(data['profile']) ?? store.profile;
-        // The backup JSON carries no photos (stripped on push); fill
-        // them in from the photos subcollection before persisting, so
-        // one persist saves the complete state. Backups written by
-        // older builds may still carry photos inline — those survive,
-        // and any newer cloud photo below simply overwrites them.
-        final photos = _photosRef();
-        if (photos != null) await PhotoSync.pullPhotos(photos, store);
-        await store.setLastModified(remoteAt);
-        await store.persist(skipSync: true);
-      } finally {
-        _applyingRemote = false;
-      }
+      // importRemote — the classic last-write-wins case, or a
+      // completely empty local scope taking the non-empty backup
+      // regardless of what the clocks say (v1.3.3).
+      await _applyRemote(
+        store,
+        teams: rTeams,
+        tournaments: rTournaments,
+        matches: rMatches,
+        regPlayers: rRegPlayers,
+        drafts: rDrafts,
+        manualStats: rManualStats,
+        profile: _decodeProfile(data['profile']),
+        remoteAt: remoteAt,
+      );
       _lastSyncAt = DateTime.now();
       _lastError = null;
-      _settleAfterPull(store, uid, imported: true, docSeen: true);
+      _settleAfterPull(store, uid,
+          imported: true,
+          docSeen: true,
+          remoteNonEmpty: !remoteEmpty);
       return true;
     } catch (e) {
       _lastError = e.toString();
       debugPrint('Sync pull failed: $e');
       return false;
+    }
+  }
+
+  /// Applies already-decoded remote collections to [store] and
+  /// persists the result without triggering a push (the pull's own
+  /// follow-ups run through [_settleAfterPull]).
+  Future<void> _applyRemote(
+    Store store, {
+    required List<Team>? teams,
+    required List<Tournament>? tournaments,
+    required List<Match>? matches,
+    required List<RegPlayer>? regPlayers,
+    required List<Draft>? drafts,
+    required List<ManualStatEntry>? manualStats,
+    required AccountProfile? profile,
+    required int remoteAt,
+  }) async {
+    _applyingRemote = true;
+    try {
+      store.teams = teams ?? store.teams;
+      store.tournaments = tournaments ?? store.tournaments;
+      store.matches = matches ?? store.matches;
+      store.regPlayers = regPlayers ?? store.regPlayers;
+      store.drafts = drafts ?? store.drafts;
+      store.manualStats = manualStats ?? store.manualStats;
+      store.profile = profile ?? store.profile;
+      // The backup JSON carries no photos (stripped on push); fill
+      // them in from the photos subcollection before persisting, so
+      // one persist saves the complete state. Backups written by
+      // older builds may still carry photos inline — those survive,
+      // and any newer cloud photo below simply overwrites them.
+      final photos = _photosRef();
+      if (photos != null) await PhotoSync.pullPhotos(photos, store);
+      await store.setLastModified(remoteAt);
+      await store.persist(skipSync: true);
+    } finally {
+      _applyingRemote = false;
     }
   }
 
@@ -349,12 +517,14 @@ class SyncService {
     String uid, {
     required bool imported,
     required bool docSeen,
+    required bool remoteNonEmpty,
   }) {
     final flush = _guard.settle(
       uid,
       imported: imported,
       docSeen: docSeen,
       emptyDataset: SyncPushGuard.datasetIsEmpty(store),
+      remoteNonEmpty: remoteNonEmpty,
     );
     if (shouldArmRepublishAfterPull(
       applied: imported,
