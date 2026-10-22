@@ -588,34 +588,50 @@ class Match {
     'season': season,
   };
 
-  factory Match.fromJson(Map<String, dynamic> j) => Match(
-    id: j['id'] as String,
-    tournamentId: j['tournamentId'] as String?,
-    teamAId: j['teamAId'] as String,
-    teamBId: j['teamBId'] as String,
-    xiA: ((j['xiA'] as List?) ?? []).map((e) => e as String).toList(),
-    xiB: ((j['xiB'] as List?) ?? []).map((e) => e as String).toList(),
-    oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 20,
-    ballsPerOver: (j['ballsPerOver'] as num?)?.toInt() ?? 6,
-    venue: j['venue'] as String? ?? '',
-    dateIso: j['dateIso'] as String? ?? '',
-    tossWinnerId: j['tossWinnerId'] as String,
-    tossDecision: j['tossDecision'] as String? ?? 'bat',
-    status: j['status'] as String? ?? 'live',
-    stage: j['stage'] as String? ?? 'league',
-    innings: ((j['innings'] as List?) ?? [])
-        .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
-        .toList(),
-    resultText: j['resultText'] as String? ?? '',
-    totalWickets: (j['totalWickets'] as num?)?.toInt() ?? 0,
-    lastManStands: j['lastManStands'] as bool? ?? false,
-    widePenalty: j['widePenalty'] as bool? ?? true,
-    noBallPenalty: j['noBallPenalty'] as bool? ?? true,
-    manOfMatchId: j['manOfMatchId'] as String? ?? '',
-    matchTitle: j['matchTitle'] as String? ?? '',
-    ballType: j['ballType'] as String? ?? 'Tennis Ball',
-    season: j['season'] as String? ?? '',
-  );
+  factory Match.fromJson(Map<String, dynamic> j) {
+    final m = Match(
+      id: j['id'] as String,
+      tournamentId: j['tournamentId'] as String?,
+      teamAId: j['teamAId'] as String,
+      teamBId: j['teamBId'] as String,
+      xiA: ((j['xiA'] as List?) ?? []).map((e) => e as String).toList(),
+      xiB: ((j['xiB'] as List?) ?? []).map((e) => e as String).toList(),
+      oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 20,
+      ballsPerOver: (j['ballsPerOver'] as num?)?.toInt() ?? 6,
+      venue: j['venue'] as String? ?? '',
+      dateIso: j['dateIso'] as String? ?? '',
+      tossWinnerId: j['tossWinnerId'] as String,
+      tossDecision: j['tossDecision'] as String? ?? 'bat',
+      status: j['status'] as String? ?? 'live',
+      stage: j['stage'] as String? ?? 'league',
+      innings: ((j['innings'] as List?) ?? [])
+          .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      resultText: j['resultText'] as String? ?? '',
+      totalWickets: (j['totalWickets'] as num?)?.toInt() ?? 0,
+      lastManStands: j['lastManStands'] as bool? ?? false,
+      widePenalty: j['widePenalty'] as bool? ?? true,
+      noBallPenalty: j['noBallPenalty'] as bool? ?? true,
+      manOfMatchId: j['manOfMatchId'] as String? ?? '',
+      matchTitle: j['matchTitle'] as String? ?? '',
+      ballType: j['ballType'] as String? ?? 'Tennis Ball',
+      season: j['season'] as String? ?? '',
+    );
+    // v1.3.4: standard matches saved by older builds can carry an
+    // impossible 11-wicket innings (the old "11 wickets" setup
+    // option). Clamp stored innings to XI − 1 wickets on load, so
+    // all-out and the result margin use 10 wickets for a full XI
+    // (2 down = "won by 8 wickets"). Last-man-stands matches are
+    // exempt: there the last batter really can be dismissed, so
+    // maxWickets == XI length is that format's design.
+    if (!m.lastManStands) {
+      for (final inn in m.innings) {
+        final cap = inn.battingXI.length - 1;
+        if (cap >= 1 && inn.maxWickets > cap) inn.maxWickets = cap;
+      }
+    }
+    return m;
+  }
 }
 
 String oversText(int legalBalls, int ballsPerOver) {
