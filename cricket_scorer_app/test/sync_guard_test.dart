@@ -323,4 +323,63 @@ void main() {
       expect(g.pushPermitted(emptyDataset: true), isFalse);
     });
   });
+
+  group('live receive + prompt push (v1.3.4)', () {
+    test('push debounce is ~1s, retry cadence is short', () {
+      expect(SyncService.pushDebounce, const Duration(seconds: 1));
+      expect(SyncService.retryInterval, const Duration(seconds: 20));
+    });
+
+    test('a newer snapshot from another device is applied', () {
+      expect(
+        SyncService.shouldApplyLiveSnapshot(
+          remoteAt: 200,
+          lastPushedAt: 100,
+          lastAppliedRemoteAt: 100,
+        ),
+        isTrue,
+      );
+    });
+
+    test("the echo of this device's own push is ignored", () {
+      expect(
+        SyncService.shouldApplyLiveSnapshot(
+          remoteAt: 100,
+          lastPushedAt: 100,
+          lastAppliedRemoteAt: 0,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a snapshot already applied (or older) is ignored', () {
+      expect(
+        SyncService.shouldApplyLiveSnapshot(
+          remoteAt: 150,
+          lastPushedAt: 0,
+          lastAppliedRemoteAt: 150,
+        ),
+        isFalse,
+      );
+      expect(
+        SyncService.shouldApplyLiveSnapshot(
+          remoteAt: 120,
+          lastPushedAt: 0,
+          lastAppliedRemoteAt: 150,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a missing remote timestamp is ignored', () {
+      expect(
+        SyncService.shouldApplyLiveSnapshot(
+          remoteAt: 0,
+          lastPushedAt: 0,
+          lastAppliedRemoteAt: 0,
+        ),
+        isFalse,
+      );
+    });
+  });
 }
