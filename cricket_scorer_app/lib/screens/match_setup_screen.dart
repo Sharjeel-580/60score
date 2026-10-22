@@ -1368,11 +1368,10 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
                         child:
                             Text('8 wickets', style: TextStyle(fontSize: 14)),
                       ),
-                      DropdownMenuItem(
-                        value: 11,
-                        child: Text('11 wickets',
-                            style: TextStyle(fontSize: 14)),
-                      ),
+                      // No "11 wickets" option (v1.3.4): with 11
+                      // players a side has only 10 wickets — the
+                      // 11th can never fall. Auto (XI − 1) already
+                      // gives 10 for a full XI.
                     ],
                     onChanged: (v) => setState(() => totalWickets = v ?? 0),
                   ),
