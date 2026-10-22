@@ -6,9 +6,9 @@ import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../widgets/player_avatar.dart';
+import 'completed_matches_screen.dart';
 import 'registration_screen.dart';
 import 'scorer_home_screen.dart';
-import 'scorecard_screen.dart';
 import 'settings_screen.dart';
 import 'teams_screen.dart';
 import 'tournaments_screen.dart';
@@ -117,9 +117,13 @@ class _HomeScreenState extends State<HomeScreen> {
               _quickGrid(context),
               const SizedBox(height: 20),
               // 4. Recent matches
+              // Recent Matches opens the completed-matches list
+              // (v1.3.5) — never the general Matches screen.
               _sectionTitle('Recent Matches', Icons.history,
-                  trailing:
-                      ViewAllLink(onTap: () => widget.onSelectTab(1))),
+                  trailing: ViewAllLink(
+                      onTap: () => _push(
+                          context,
+                          CompletedMatchesScreen(store: store)))),
               const SizedBox(height: 10),
               _recentMatches(context),
             ],
@@ -467,8 +471,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final b = store.teamName(m.teamBId);
     return ScoreCard(
       padding: const EdgeInsets.all(12),
+      // Tapping Recent Matches opens the list of ALL completed
+      // matches (v1.3.5); the user opens the one they want there.
       onTap: () =>
-          _push(context, ScorecardScreen(store: store, match: m)),
+          _push(context, CompletedMatchesScreen(store: store)),
       child: Row(
         children: [
           CaptainAvatar(store: store, teamId: m.teamAId, radius: 18),
