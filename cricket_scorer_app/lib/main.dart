@@ -54,7 +54,7 @@ class SplashGate extends StatefulWidget {
   State<SplashGate> createState() => _SplashGateState();
 }
 
-class _SplashGateState extends State<SplashGate> {
+class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
   final Store store = Store();
   bool _ready = false;
   bool _wasGate = false;
@@ -63,7 +63,24 @@ class _SplashGateState extends State<SplashGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _boot();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning to the app re-syncs on its own (v1.3.4): unsynced
+    // offline changes push first, otherwise a pull brings in what
+    // other devices scored meanwhile.
+    if (state == AppLifecycleState.resumed) {
+      SyncService().onAppResumed(store);
+    }
   }
 
   Future<void> _boot() async {
@@ -84,6 +101,9 @@ class _SplashGateState extends State<SplashGate> {
         phoneNumber: user.phoneNumber,
       );
       SyncService().pull(store); // fire-and-forget, last-write-wins
+      // Live receive (v1.3.4): other devices' writes apply on their
+      // own while the app runs.
+      SyncService().startLiveSync(store);
     } else {
       await store.activateIdentity('guest');
     }
@@ -589,7 +609,7 @@ class _HomeShellState extends State<HomeShell> {
             const Padding(
               padding: EdgeInsets.all(16),
               child: Text(
-                'Version 1.3.1',
+                'Version 1.3.4',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white38, fontSize: 12),
               ),
