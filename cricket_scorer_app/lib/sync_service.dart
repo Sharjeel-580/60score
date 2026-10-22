@@ -320,15 +320,81 @@ class SyncService {
   static int _matchBallEvents(Match m) =>
       m.innings.fold(0, (acc, inn) => acc + inn.events.length);
 
+  /// The wicket ceiling a chase margin is measured against for
+  /// [inn]: the innings' stored maxWickets, else the match's
+  /// totalWickets, else XI − 1, else 10 (v1.3.6).
+  static int _inningsMaxWickets(Match m, InningsState inn) {
+    if (inn.maxWickets > 0) return inn.maxWickets;
+    if (m.totalWickets > 0) return m.totalWickets;
+    final xi = inn.battingXI.length - 1;
+    return xi >= 1 ? xi : 10;
+  }
+
+  static final _tieRe = RegExp(r'\btie(?:d|s)?\b');
+  static final _wicketsRe = RegExp(r'won by (\d+) wicket');
+  static final _runsRe = RegExp(r'won by (\d+) run');
+
+  /// Compact signature of a result text: `tie`, `w<n>` (won by n
+  /// wickets) or `r<n>` (won by n runs); null when the text carries
+  /// no parseable margin and no tie wording (v1.3.6).
+  static String? _resultSignature(String raw) {
+    final text = raw.trim().toLowerCase();
+    if (text.isEmpty) return null;
+    if (_tieRe.hasMatch(text)) return 'tie';
+    final wk = _wicketsRe.firstMatch(text);
+    if (wk != null) return 'w${wk.group(1)}';
+    final rn = _runsRe.firstMatch(text);
+    if (rn != null) return 'r${rn.group(1)}';
+    return null;
+  }
+
+  /// Whether [m]'s stored result text agrees with the result its
+  /// own innings figures imply (the same math as computeResult in
+  /// scoring.dart): true/false when the check can judge, null when
+  /// it cannot — fewer than two innings, or an unparseable result
+  /// text (v1.3.6).
+  static bool? _resultConsistency(Match m) {
+    if (m.innings.length < 2) return null;
+    final sig = _resultSignature(m.resultText);
+    if (sig == null) return null;
+    final i1 = m.innings[0];
+    final i2 = m.innings[1];
+    final String expected;
+    if (i2.totalRuns > i1.totalRuns) {
+      expected = 'w${_inningsMaxWickets(m, i2) - i2.wickets}';
+    } else if (i1.totalRuns > i2.totalRuns) {
+      expected = 'r${i1.totalRuns - i2.totalRuns}';
+    } else {
+      expected = 'tie';
+    }
+    return sig == expected;
+  }
+
   /// Positive when [a] is the more advanced copy of a match:
   /// status rank first, then completeness — total legal balls,
-  /// ball-events count, and a non-empty result text, in that order.
+  /// then (v1.3.6, completed copies only) result consistency,
+  /// then ball-events count and a non-empty result text, in that
+  /// order.
   static int compareMatchAdvancement(Match a, Match b) {
     final rank =
         matchStatusRank(a.status).compareTo(matchStatusRank(b.status));
     if (rank != 0) return rank;
     final balls = _matchLegalBalls(a).compareTo(_matchLegalBalls(b));
     if (balls != 0) return balls;
+    // v1.3.6: a completed copy whose result text contradicts its
+    // own figures must not beat the self-consistent copy just
+    // because it holds more ball events — a real record read
+    // "won by 9 wickets" for a chase that ended 2 down (true
+    // margin 8), and letting the corrupt-but-richer copy win
+    // would resurrect its wrong player credits. When exactly one
+    // side is consistent it wins here; both-consistent,
+    // both-inconsistent and unparseable cases fall through to
+    // the ball-events step below, unchanged.
+    if (a.status == 'completed' && b.status == 'completed') {
+      final ca = _resultConsistency(a);
+      final cb = _resultConsistency(b);
+      if (ca != null && cb != null && ca != cb) return ca ? 1 : -1;
+    }
     final events = _matchBallEvents(a).compareTo(_matchBallEvents(b));
     if (events != 0) return events;
     final ra = a.resultText.isNotEmpty ? 1 : 0;
