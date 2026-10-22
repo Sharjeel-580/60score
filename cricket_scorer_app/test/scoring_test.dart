@@ -292,4 +292,272 @@ void main() {
       expect(text, 'Match tied');
     });
   });
+
+  group('wickets = 10 (v1.3.4)', () {
+    test('chase won with 2 wickets down reads "won by 8 wickets" '
+        'for a full XI (10 - 2, never 9)', () {
+      final m = makeMatch(xi: 11, overs: 2);
+      final i1 = openInnings(m);
+      for (final r in [6, 6, 6, 6, 6, 0]) {
+        runs(i1, r); // 30 in the only over i1 needs here
+      }
+      // Complete i1's second over with dots.
+      setBowler(i1, 'b2');
+      for (var i = 0; i < 6; i++) {
+        runs(i1, 0);
+      }
+      expect(i1.totalRuns, 30);
+      final i2 = openInnings(m, n: 2);
+      expect(i2.target, 31);
+      ball(i2, BallInput(isWicket: true, wicketType: 'bowled'));
+      setNextBatter(i2, 'b3');
+      ball(i2, BallInput(isWicket: true, wicketType: 'bowled'));
+      setNextBatter(i2, 'b4');
+      for (final r in [6, 6, 6, 6]) {
+        runs(i2, r); // 24, over ends
+      }
+      setBowler(i2, 'a2');
+      runs(i2, 6); // 30
+      runs(i2, 1); // 31 — target reached, 2 wickets lost
+      expect(i2.wickets, 2);
+      expect(i2.isComplete, isTrue);
+      final text = computeResult(
+          m, (id) => id == 'ta' ? 'Team A' : 'Team B');
+      expect(text, contains('Team B won by 8 wickets'));
+      expect(text, isNot(contains('9 wickets')));
+    });
+
+    test('an explicit "11 wickets" setting is clamped to XI - 1 '
+        'when the innings starts', () {
+      final m = makeMatch(xi: 11, totalWickets: 11);
+      final inn = startInnings(m, 1);
+      expect(inn.maxWickets, 10);
+      expect(inn.effectiveMaxWickets, 10);
+    });
+
+    test('a stored 11-wicket innings is clamped on load; a '
+        'last-man-stands innings is not', () {
+      final m = makeMatch(xi: 11);
+      final inn = startInnings(m, 1);
+      inn.maxWickets = 11; // as written by an older build
+      final loaded = Match.fromJson(m.toJson());
+      expect(loaded.innings[0].maxWickets, 10);
+      expect(loaded.innings[0].effectiveMaxWickets, 10);
+
+      final lms = makeMatch(xi: 4, lms: true);
+      final lmsInn = startInnings(lms, 1);
+      expect(lmsInn.maxWickets, 4); // XI length by LMS design
+      final lmsLoaded = Match.fromJson(lms.toJson());
+      expect(lmsLoaded.innings[0].maxWickets, 4);
+    });
+
+    test('innings is all out at 10 wickets with a full XI', () {
+      final m = makeMatch(xi: 11, overs: 5);
+      final inn = openInnings(m);
+      var guard = 0;
+      while (!inn.isComplete && guard++ < 40) {
+        ball(inn, BallInput(isWicket: true, wicketType: 'bowled'));
+        if (inn.isComplete) break;
+        if (inn.awaitingBatter) {
+          final out = inn.batting.entries
+              .where((e) => e.value.out)
+              .map((e) => e.key)
+              .toSet();
+          final next = inn.battingXI.firstWhere((id) =>
+              !out.contains(id) &&
+              id != inn.strikerId &&
+              id != inn.nonStrikerId);
+          setNextBatter(inn, next);
+        }
+        if (inn.awaitingBowler) {
+          final bowler = inn.bowlingXI
+              .firstWhere((id) => id != inn.lastBowlerId);
+          setBowler(inn, bowler);
+        }
+      }
+      expect(inn.wickets, 10);
+      expect(inn.isComplete, isTrue);
+    });
+  });
+
+  group('crease corrections (v1.3.4)', () {
+    test('single tap: setStrikeTo gives the strike to the '
+        'non-striker only', () {
+      final m = makeMatch();
+      final inn = openInnings(m);
+      expect(inn.strikerId, 'a1');
+      expect(setStrikeTo(inn, 'a2'), isTrue);
+      expect(inn.strikerId, 'a2');
+      expect(inn.nonStrikerId, 'a1');
+      expect(setStrikeTo(inn, 'a2'), isFalse); // already on strike
+      expect(setStrikeTo(inn, 'a3'), isFalse); // not at the crease
+      expect(setStrikeTo(inn, ''), isFalse);
+    });
+
+    test('double tap: the wrong opener is replaced before a ball '
+        'is bowled', () {
+      final m = makeMatch();
+      final inn = openInnings(m);
+      final candidates = replaceBatsmanCandidates(inn, 'a1');
+      expect(candidates, contains('a3'));
+      expect(candidates, isNot(contains('a2'))); // at the crease
+      expect(replaceBatsman(inn, 'a1', 'a3'), isTrue);
+      expect(inn.strikerId, 'a3');
+      expect(inn.batting['a3']!.batted, isTrue);
+      expect(inn.batting['a1'], isNull);
+    });
+
+    test('double tap: a figure recorded under the wrong name '
+        'transfers to the replacement, events included', () {
+      final m = makeMatch();
+      final inn = openInnings(m);
+      runs(inn, 4);
+      runs(inn, 2); // a1: 6 runs, 2 balls, one four; still on strike
+      expect(replaceBatsman(inn, 'a1', 'a3'), isTrue);
+      final fig = inn.batting['a3']!;
+      expect(fig.runs, 6);
+      expect(fig.balls, 2);
+      expect(fig.fours, 1);
+      expect(inn.batting['a1'], isNull);
+      expect(inn.events.every((e) => e.strikerId == 'a3'), isTrue);
+    });
+
+    test('double tap: a player who already batted cannot be the '
+        'replacement, and a dismissed player cannot be replaced',
+        () {
+      final m = makeMatch();
+      final inn = openInnings(m);
+      ball(inn, BallInput(isWicket: true, wicketType: 'bowled'));
+      setNextBatter(inn, 'a3'); // a3 has now batted
+      expect(replaceBatsmanCandidates(inn, 'a2'),
+          isNot(contains('a3')));
+      expect(replaceBatsman(inn, 'a2', 'a3'), isFalse);
+      // a1 is out and no longer at the crease: nothing to replace.
+      expect(replaceBatsmanCandidates(inn, 'a1'), isEmpty);
+      expect(replaceBatsman(inn, 'a1', 'a4'), isFalse);
+    });
+  });
+
+  group('post-match edit (v1.3.4)', () {
+    Match completedMatch() {
+      final m = Match(
+        id: 'edit1',
+        tournamentId: 'cup',
+        teamAId: 'ta',
+        teamBId: 'tb',
+        xiA: const ['a1', 'a2', 'a3', 'a4'],
+        xiB: const ['b1', 'b2', 'b3', 'b4'],
+        oversLimit: 1,
+        ballsPerOver: 6,
+        tossWinnerId: 'ta',
+        tossDecision: 'bat',
+      );
+      final i1 = openInnings(m);
+      for (final r in [4, 1, 1, 2, 1, 1]) {
+        runs(i1, r); // 10 (a1: 8 off 4, a2: 2 off 2)
+      }
+      final i2 = openInnings(m, n: 2);
+      for (final r in [6, 4, 1]) {
+        runs(i2, r); // 11 — chase won by 3 wickets
+      }
+      computeResult(m, (id) => id);
+      return m;
+    }
+
+    test('an added six propagates: innings total, result text, '
+        'points table and career stats all follow the stored '
+        'figures', () {
+      final m = completedMatch();
+      expect(m.status, 'completed');
+      expect(m.resultText, contains('won by 3 wickets'));
+      var table = computePointsTable('cup', ['ta', 'tb'], [m]);
+      expect(table.first.teamId, 'tb'); // chasers lead before the edit
+
+      // The correction: a1 actually hit one more six in innings 1.
+      final i1 = m.innings[0];
+      final fig = i1.batting['a1']!;
+      fig.sixes += 1;
+      fig.runs += 6;
+      recomputeInningsTotals(i1);
+      expect(i1.totalRuns, 16);
+      m.innings[1].target = i1.totalRuns + 1;
+      // The edit screen's save sequence: computeResult returns the
+      // fresh text, and the screen stores it (computeResult itself
+      // only persists when the innings still reads complete — with
+      // the target raised, the old chase no longer does).
+      final text = computeResult(m, (id) => id);
+      if (text.isNotEmpty) m.resultText = text;
+      expect(text, contains('won by 5 runs'));
+      expect(m.resultText, contains('won by 5 runs'));
+
+      table = computePointsTable('cup', ['ta', 'tb'], [m]);
+      expect(table.first.teamId, 'ta'); // table follows the edit
+      expect(table.first.points, 2);
+      final stats = computeCareerStats([m]);
+      expect(stats['a1']!.sixes, 1);
+      expect(stats['a1']!.runs, 14);
+    });
+
+    test('recomputeInningsTotals derives wickets and legal balls '
+        'from the figures', () {
+      final m = completedMatch();
+      final i2 = m.innings[1];
+      // Mark a second chaser out (as if a wicket was missed).
+      final fig = i2.batting['b2']!;
+      fig.out = true;
+      fig.howOut = 'run out (a1)';
+      recomputeInningsTotals(i2);
+      expect(i2.wickets, 1);
+      expect(i2.legalBalls, i2.bowling.values
+          .fold<int>(0, (sum, f) => sum + f.legalBalls));
+    });
+
+    test('remapBattingFigure moves a figure to a player who did '
+        'not bat, events included', () {
+      final m = completedMatch();
+      final i1 = m.innings[0];
+      expect(remapBattingFigure(i1, 'a2', 'a4'), isTrue);
+      expect(i1.batting['a2'], isNull);
+      expect(i1.batting['a4']!.runs, 2);
+      expect(i1.batting['a4']!.batted, isTrue);
+      expect(
+        i1.events.where((e) => e.strikerId == 'a4').length,
+        2, // a2 faced exactly two balls
+      );
+      expect(i1.events.any((e) => e.strikerId == 'a2'), isFalse);
+    });
+
+    test('remapBattingFigure swaps two batted players figures and '
+        'events without collision', () {
+      final m = completedMatch();
+      final i1 = m.innings[0];
+      expect(remapBattingFigure(i1, 'a1', 'a2'), isTrue);
+      expect(i1.batting['a1']!.runs, 2); // a2's old figure
+      expect(i1.batting['a2']!.runs, 8); // a1's old figure
+      expect(i1.events.where((e) => e.strikerId == 'a1').length, 2);
+      expect(i1.events.where((e) => e.strikerId == 'a2').length, 4);
+      // Totals are untouched by a pure name correction.
+      recomputeInningsTotals(i1);
+      expect(i1.totalRuns, 10);
+    });
+
+    test('remapBowlingFigure moves the bowling figure and the '
+        'event attribution', () {
+      final m = completedMatch();
+      final i1 = m.innings[0];
+      expect(remapBowlingFigure(i1, 'b1', 'b2'), isTrue);
+      expect(i1.bowling['b1'], isNull);
+      expect(i1.bowling['b2']!.legalBalls, 6);
+      expect(i1.events.every((e) => e.bowlerId == 'b2'), isTrue);
+    });
+
+    test('remap rejects unknown targets and missing figures', () {
+      final m = completedMatch();
+      final i1 = m.innings[0];
+      expect(remapBattingFigure(i1, 'a1', 'zz'), isFalse);
+      expect(remapBattingFigure(i1, 'a3', 'a4'), isFalse); // a3 DNB
+      expect(remapBattingFigure(i1, 'a1', 'a1'), isFalse);
+      expect(remapBowlingFigure(i1, 'b1', 'zz'), isFalse);
+    });
+  });
 }
