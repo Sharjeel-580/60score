@@ -428,7 +428,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
           PopupMenuButton<String>(
             onSelected: (v) async {
               final nav = Navigator.of(context);
-              if (v == 'scorecard') {
+              if (v == 'xi') {
+                await _editPlayingXi();
+              } else if (v == 'scorecard') {
                 nav.push(
                   MaterialPageRoute(
                     builder: (_) => ScorecardScreen(store: store, match: match),
@@ -451,6 +453,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
               }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'xi', child: Text('Edit Playing XI')),
               PopupMenuItem(value: 'scorecard', child: Text('View scorecard')),
               PopupMenuItem(value: 'noresult', child: Text('Mark no result')),
               PopupMenuItem(value: 'delete', child: Text('Delete match')),
@@ -601,6 +604,113 @@ class _ScoringScreenState extends State<ScoringScreen> {
     final f = inn.bowling[inn.currentBowlerId];
     if (f == null) return '';
     return '${oversText(f.legalBalls, inn.ballsPerOver)}-${f.maidens}-${f.runs}-${f.wickets}';
+  }
+
+  /// Mid-match Playing XI correction (v1.3.5): a player can join
+  /// or leave either side's XI while the match is live. The two
+  /// batters at the crease, the current bowler, and anyone who has
+  /// already batted or bowled in this match cannot be removed —
+  /// the dialog says why instead of letting the record break.
+  Future<void> _editPlayingXi() async {
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Playing XI'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: StatefulBuilder(
+            builder: (c, setD) => SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _liveXiTeam(setD, inn.battingTeamId),
+                  const SizedBox(height: 12),
+                  _liveXiTeam(setD, inn.bowlingTeamId),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Widget _liveXiTeam(
+    StateSetter setD,
+    String teamId,
+  ) {
+    final team = teamOf(teamId);
+    final xi = match.xiFor(teamId);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${team?.name ?? ''} (${xi.length})',
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+          ),
+        ),
+        for (final pid in xi)
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  nameOf(pid),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline, size: 20),
+                tooltip: 'Remove from Playing XI',
+                onPressed: () async {
+                  final block = liveXiRemovalBlock(match, inn, pid);
+                  if (block != null) {
+                    _snack(block);
+                    return;
+                  }
+                  removeFromMatchXI(match, teamId, pid);
+                  await _afterChange();
+                  setD(() {});
+                },
+              ),
+            ],
+          ),
+        TextButton.icon(
+          onPressed: () async {
+            if (team == null) return;
+            final candidates = team.players
+                .map((p) => p.id)
+                .where((id) => !xi.contains(id))
+                .toList();
+            if (candidates.isEmpty) {
+              _snack('Every squad player is already in the Playing XI.');
+              return;
+            }
+            final idx = await _pickPlayer(
+              'Add to Playing XI — ${team.name}',
+              candidates,
+            );
+            if (idx != null) {
+              addToMatchXI(match, teamId, candidates[idx]);
+              await _afterChange();
+              setD(() {});
+            }
+          },
+          icon: const Icon(Icons.person_add, size: 18),
+          label: const Text('Add player'),
+        ),
+      ],
+    );
   }
 
   Widget _thisOverRow(InningsState inn) {
