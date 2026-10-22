@@ -69,6 +69,38 @@ class ScorecardScreen extends StatelessWidget {
                   }
                 },
               ),
+            // Delete this completed match on its own (v1.3.5).
+            if (match.status == 'completed')
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete match',
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Delete match?'),
+                      content: const Text(
+                        'Delete this match and its scorecard? '
+                        'This cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(c, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true && context.mounted) {
+                    await store.deleteMatch(match.id);
+                    if (context.mounted) Navigator.of(context).pop();
+                  }
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.copy),
               tooltip: 'Copy scorecard as text',
