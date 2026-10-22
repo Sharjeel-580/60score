@@ -316,7 +316,16 @@ InningsState startInnings(Match m, int n) {
     inn.widePenalty = m.widePenalty;
     inn.noBallPenalty = m.noBallPenalty;
     if (m.totalWickets > 0) {
-      inn.maxWickets = m.totalWickets;
+      // A side can never lose more than XI − 1 wickets in standard
+      // play (10 with a full XI — the last pair is at the crease and
+      // one batter must remain not out). The old setup offered an
+      // impossible "11 wickets" option; clamp any explicit setting
+      // to the legal maximum so the innings ends all-out at 10 and
+      // a chase won with 2 wickets down reads "won by 8 wickets"
+      // (10 − 2), never 9 (v1.3.4).
+      final cap = inn.battingXI.length - 1;
+      inn.maxWickets =
+          (cap >= 1 && m.totalWickets > cap) ? cap : m.totalWickets;
     } else if (m.lastManStands) {
       // Simplified last-man-stands: innings can lose every batter
       // (final wicket ends it); the last pair bats on together.
@@ -359,6 +368,203 @@ String computeResult(Match m, String Function(String teamId) teamName) {
     m.resultText = text;
   }
   return text;
+}
+
+// ---------------- Crease corrections (v1.3.4) ----------------
+
+/// Move the strike to [playerId] (scoring screen: single tap on a
+/// batsman's name). Only the non-striker can take the strike this
+/// way — tapping the striker himself, or anyone not at the crease,
+/// changes nothing. Returns true when the strike actually changed.
+bool setStrikeTo(InningsState s, String playerId) {
+  if (playerId.isEmpty) return false;
+  if (playerId == s.strikerId) return false;
+  if (playerId != s.nonStrikerId) return false;
+  if (s.strikerId.isEmpty) return false;
+  final tmp = s.strikerId;
+  s.strikerId = s.nonStrikerId;
+  s.nonStrikerId = tmp;
+  return true;
+}
+
+/// Players who may replace the batsman [outId] at the crease
+/// (scoring screen: double tap on a batsman's name — the user's
+/// case: the wrong opener was selected). Only XI members who have
+/// not batted yet and are not already at the crease qualify: the
+/// incoming player takes over the outgoing player's place at the
+/// crease and, if play already started under the wrong name, his
+/// recorded figure too (a scorebook name correction).
+List<String> replaceBatsmanCandidates(InningsState s, String outId) {
+  if (outId != s.strikerId && outId != s.nonStrikerId) return const [];
+  final outFig = s.batting[outId];
+  if (outFig != null && outFig.out) return const [];
+  return s.battingXI.where((id) {
+    if (id == s.strikerId || id == s.nonStrikerId) return false;
+    final f = s.batting[id];
+    if (f != null && (f.batted || f.out)) return false;
+    return true;
+  }).toList();
+}
+
+/// Replace the batsman [outId] at the crease with [inId] (see
+/// [replaceBatsmanCandidates]). Any balls already recorded under
+/// the wrong name are re-credited to [inId]: the events, the
+/// batting figure and the fall-of-wickets list all follow, so the
+/// scorecard and the statistics stay consistent. Returns false
+/// when the replacement is not a legal candidate.
+bool replaceBatsman(InningsState s, String outId, String inId) {
+  if (inId == outId) return false;
+  if (!replaceBatsmanCandidates(s, outId).contains(inId)) return false;
+  if (s.strikerId == outId) {
+    s.strikerId = inId;
+  } else {
+    s.nonStrikerId = inId;
+  }
+  final fig = s.batting.remove(outId) ?? BatFig();
+  fig.batted = true;
+  s.batting[inId] = fig;
+  for (final ev in s.events) {
+    if (ev.strikerId == outId) ev.strikerId = inId;
+    if (ev.nonStrikerId == outId) ev.nonStrikerId = inId;
+    if (ev.outPlayerId == outId) ev.outPlayerId = inId;
+  }
+  for (final w in s.fallOfWickets) {
+    if (w.playerId == outId) w.playerId = inId;
+  }
+  return true;
+}
+
+// ---------------- Post-match scorecard editing (v1.3.4) ----------------
+
+/// Recompute an innings' headline numbers from its stored figures
+/// after a post-match edit: total = batting runs + extras, wickets
+/// = batters marked out, legal balls = the bowlers' legal balls
+/// (wide/no-ball delivery counters follow the bowler figures too).
+/// Everything downstream — result text, points table, NRR, career
+/// statistics — is computed from these stored numbers at read time,
+/// so one corrected figure propagates everywhere on its own.
+void recomputeInningsTotals(InningsState inn) {
+  var batRuns = 0;
+  var wkts = 0;
+  for (final f in inn.batting.values) {
+    if (!f.batted) continue;
+    batRuns += f.runs;
+    if (f.out) wkts++;
+  }
+  inn.totalRuns = batRuns + inn.extrasTotal;
+  inn.wickets = wkts;
+  var legal = 0;
+  var wides = 0;
+  var noBalls = 0;
+  for (final f in inn.bowling.values) {
+    legal += f.legalBalls;
+    wides += f.wides;
+    noBalls += f.noBalls;
+  }
+  inn.legalBalls = legal;
+  inn.wideCount = wides;
+  inn.noBallCount = noBalls;
+}
+
+/// Rewrite player ids in an innings' ball events (and the related
+/// state) through [map] in a single pass, so a swap (A→B, B→A)
+/// cannot collide. [battingSide] selects which id fields belong
+/// to the side being corrected.
+void _remapEventIds(
+  InningsState inn,
+  Map<String, String> map, {
+  required bool battingSide,
+}) {
+  String r(String id) => map[id] ?? id;
+  for (final ev in inn.events) {
+    if (battingSide) {
+      ev.strikerId = r(ev.strikerId);
+      ev.nonStrikerId = r(ev.nonStrikerId);
+      ev.outPlayerId = r(ev.outPlayerId);
+    } else {
+      ev.bowlerId = r(ev.bowlerId);
+      ev.fielderId = r(ev.fielderId);
+    }
+  }
+  if (battingSide) {
+    for (final w in inn.fallOfWickets) {
+      w.playerId = r(w.playerId);
+    }
+    inn.strikerId = r(inn.strikerId);
+    inn.nonStrikerId = r(inn.nonStrikerId);
+  } else {
+    inn.currentBowlerId = r(inn.currentBowlerId);
+    inn.lastBowlerId = r(inn.lastBowlerId);
+    // Dismissal texts credit the bowler/fielder by id token.
+    for (final f in inn.batting.values) {
+      if (f.howOut.isNotEmpty) f.howOut = _remapHowOut(f.howOut, map);
+    }
+  }
+}
+
+/// Rewrite the id tokens inside a dismissal text (`'c <id> b <id>'`,
+/// `'run out (<id>)'`) through [map].
+String _remapHowOut(String howOut, Map<String, String> map) {
+  final parts = howOut.split(' ');
+  for (var i = 0; i < parts.length; i++) {
+    final p = parts[i];
+    if (p.startsWith('(') && p.endsWith(')')) {
+      final inner = p.substring(1, p.length - 1);
+      final mapped = map[inner];
+      if (mapped != null) parts[i] = '($mapped)';
+    } else if (map.containsKey(p)) {
+      parts[i] = map[p]!;
+    }
+  }
+  return parts.join(' ');
+}
+
+/// Post-match name correction (batting): move [fromId]'s batting
+/// figure in this innings to [toId] — or swap the two figures when
+/// both players batted — re-crediting the ball events with it, so
+/// the scorecard, career stats and milestones all follow the name.
+/// [toId] must belong to the innings' batting XI. Returns false
+/// when there is no batted figure to move.
+bool remapBattingFigure(InningsState inn, String fromId, String toId) {
+  if (fromId == toId) return false;
+  if (!inn.battingXI.contains(toId)) return false;
+  final fromFig = inn.batting[fromId];
+  if (fromFig == null || !fromFig.batted) return false;
+  final toFig = inn.batting[toId];
+  if (toFig != null && toFig.batted) {
+    inn.batting[toId] = fromFig;
+    inn.batting[fromId] = toFig;
+    _remapEventIds(inn, {fromId: toId, toId: fromId},
+        battingSide: true);
+  } else {
+    inn.batting.remove(fromId);
+    inn.batting[toId] = fromFig;
+    _remapEventIds(inn, {fromId: toId}, battingSide: true);
+  }
+  return true;
+}
+
+/// Post-match name correction (bowling): move or swap [fromId]'s
+/// bowling figure in this innings, re-crediting the ball events
+/// and the dismissal texts that name the bowler/fielder. [toId]
+/// must belong to the innings' bowling XI.
+bool remapBowlingFigure(InningsState inn, String fromId, String toId) {
+  if (fromId == toId) return false;
+  if (!inn.bowlingXI.contains(toId)) return false;
+  final fromFig = inn.bowling[fromId];
+  if (fromFig == null) return false;
+  final toFig = inn.bowling[toId];
+  if (toFig != null) {
+    inn.bowling[toId] = fromFig;
+    inn.bowling[fromId] = toFig;
+    _remapEventIds(inn, {fromId: toId, toId: fromId},
+        battingSide: false);
+  } else {
+    inn.bowling.remove(fromId);
+    inn.bowling[toId] = fromFig;
+    _remapEventIds(inn, {fromId: toId}, battingSide: false);
+  }
+  return true;
 }
 
 // ---------------- Points table ----------------
