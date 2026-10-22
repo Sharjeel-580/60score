@@ -16,8 +16,13 @@
 //   and retries automatically — when the Firestore listener reports
 //   the server is reachable again, on a periodic timer, and when
 //   the app returns to the foreground.
-// - Pull: after login and on app start (if logged in). Last-write-wins
-//   by timestamp — the newer side (local or cloud) wins, never merged.
+// - Pull: after login and on app start (if logged in). Non-match
+//   collections are last-write-wins by timestamp (see decidePull).
+//   MATCHES are merged per record instead (v1.3.5): the whole-dataset
+//   timestamp rule provably lost data both ways (2026-10-22/23 — a
+//   device rejected newer remote matches, then pushed its stale
+//   copy over them), so a match can never again be un-completed or
+//   erased by a staler copy: see mergeMatches.
 // - Live receive (v1.3.4): while a user is logged in, a Firestore
 //   snapshot listener on the backup document applies newer data
 //   written by other devices through the very same decision path
@@ -286,6 +291,85 @@ class SyncService {
     return remoteNewer ? PullDecision.importRemote : PullDecision.noImport;
   }
 
+  // ---------------- Per-match merge (v1.3.5) ----------------
+
+  /// How "advanced" a match status is for the merge: a completed
+  /// match outranks everything, terminal administrative states
+  /// (noResult / cancelled) outrank a live copy, and a live copy
+  /// outranks a fixture that has not started.
+  static int matchStatusRank(String status) {
+    switch (status) {
+      case 'completed':
+        return 5;
+      case 'noResult':
+      case 'cancelled':
+        return 4;
+      case 'live':
+        return 3;
+      case 'upcoming':
+      case 'scheduled':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  static int _matchLegalBalls(Match m) =>
+      m.innings.fold(0, (acc, inn) => acc + inn.legalBalls);
+
+  static int _matchBallEvents(Match m) =>
+      m.innings.fold(0, (acc, inn) => acc + inn.events.length);
+
+  /// Positive when [a] is the more advanced copy of a match:
+  /// status rank first, then completeness — total legal balls,
+  /// ball-events count, and a non-empty result text, in that order.
+  static int compareMatchAdvancement(Match a, Match b) {
+    final rank =
+        matchStatusRank(a.status).compareTo(matchStatusRank(b.status));
+    if (rank != 0) return rank;
+    final balls = _matchLegalBalls(a).compareTo(_matchLegalBalls(b));
+    if (balls != 0) return balls;
+    final events = _matchBallEvents(a).compareTo(_matchBallEvents(b));
+    if (events != 0) return events;
+    final ra = a.resultText.isNotEmpty ? 1 : 0;
+    final rb = b.resultText.isNotEmpty ? 1 : 0;
+    return ra.compareTo(rb);
+  }
+
+  /// The per-match merge at the heart of v1.3.5 sync: the union of
+  /// both sides' match ids, keeping for each id the more advanced
+  /// record (see [compareMatchAdvancement]). A match present on
+  /// only one side is always kept; a completed record can never be
+  /// replaced by a non-completed one. Local order is preserved,
+  /// remote-only records are appended — so the merge is stable and
+  /// both devices converge on the same list.
+  static List<Match> mergeMatches(List<Match> local, List<Match> remote) {
+    final byId = <String, Match>{};
+    final order = <String>[];
+    for (final m in local) {
+      if (!byId.containsKey(m.id)) order.add(m.id);
+      byId[m.id] = m;
+    }
+    for (final m in remote) {
+      final cur = byId[m.id];
+      if (cur == null) {
+        order.add(m.id);
+        byId[m.id] = m;
+      } else if (compareMatchAdvancement(m, cur) > 0) {
+        byId[m.id] = m;
+      }
+    }
+    return [for (final id in order) byId[id]!];
+  }
+
+  /// Content equality for match lists (order-sensitive), via the
+  /// same JSON the backup stores.
+  static bool sameMatchContent(List<Match> a, List<Match> b) {
+    if (a.length != b.length) return false;
+    return jsonEncode(a.map((m) => m.toJson()).toList()) ==
+        jsonEncode(b.map((m) => m.toJson()).toList());
+  }
+
   static const _kDoc = 'app_data';
 
   DocumentReference<Map<String, dynamic>>? _docRef() {
@@ -540,6 +624,22 @@ class SyncService {
       _lastAppliedRemoteAt = remoteAt;
     }
 
+    // Per-match merge (v1.3.5): whichever way [decision] goes for
+    // the dataset as a whole, MATCHES are never last-write-wins —
+    // the merged list (union of ids, most advanced record per id)
+    // is what this device keeps, and when it carries records the
+    // cloud lacks (or richer copies of them), the merged dataset is
+    // pushed back up so both sides converge on it. A remote field
+    // that failed to decode (null) cannot be merged; the local
+    // matches then stand as they are.
+    final mergedMatches = rMatches == null
+        ? store.matches
+        : mergeMatches(store.matches, rMatches);
+    final mergedDiffersFromLocal =
+        !sameMatchContent(mergedMatches, store.matches);
+    final mergedDiffersFromRemote = rMatches != null &&
+        !sameMatchContent(mergedMatches, rMatches);
+
     if (decision == PullDecision.keepLocalAndPush) {
       // The backup is empty but this device holds the data: never
       // import the empty copy — push the local data up instead,
@@ -552,31 +652,57 @@ class SyncService {
       return false;
     }
     if (decision == PullDecision.noImport) {
-      // Local state is current, but photos may still be missing
-      // (e.g. a photo upload succeeded after this device's last
-      // full pull).
+      // The dataset clocks say local is current — but the merge can
+      // still bring in match records this device lacks (or richer
+      // copies) from the remote, and this device can hold records
+      // the cloud lacks. Apply the merge locally, then push the
+      // converged dataset up when the cloud's copy differs from it.
+      var applied = false;
+      if (mergedDiffersFromLocal) {
+        store.matches = mergedMatches;
+        applied = true;
+      }
+      // Photos may still be missing (e.g. a photo upload succeeded
+      // after this device's last full pull).
       final photos = _photosRef();
-      if (photos != null && await PhotoSync.pullPhotos(photos, store)) {
+      var photosChanged = false;
+      if (photos != null) {
+        photosChanged = await PhotoSync.pullPhotos(photos, store);
+      }
+      if (applied || photosChanged) {
         await store.persist(skipSync: true);
         _lastSyncAt = DateTime.now();
       }
+      if (mergedDiffersFromRemote) {
+        await _push(ref, store);
+      }
       if (settleGuard) {
         _settleAfterPull(store, uid,
-            imported: false,
+            imported: applied,
             docSeen: true,
             remoteNonEmpty: !remoteEmpty);
+      } else if (applied &&
+          shouldArmRepublishAfterPull(
+            applied: true,
+            hasPublished: PublishService.hasPublished(store),
+          )) {
+        PublishService().scheduleRepublish(store);
       }
-      return false;
+      return applied;
     }
 
-    // importRemote — the classic last-write-wins case, or a
-    // completely empty local scope taking the non-empty backup
-    // regardless of what the clocks say (v1.3.3).
+    // importRemote — the classic last-write-wins case for the
+    // non-match collections, or a completely empty local scope
+    // taking the non-empty backup regardless of what the clocks
+    // say (v1.3.3). Matches still go through the per-match merge:
+    // a richer local copy of a match survives the import, and the
+    // converged dataset is pushed back up so the cloud holds it
+    // too instead of re-sending its older copies next time.
     await _applyRemote(
       store,
       teams: rTeams,
       tournaments: rTournaments,
-      matches: rMatches,
+      matches: mergedMatches,
       regPlayers: rRegPlayers,
       drafts: rDrafts,
       manualStats: rManualStats,
@@ -585,6 +711,9 @@ class SyncService {
     );
     _lastSyncAt = DateTime.now();
     _lastError = null;
+    if (mergedDiffersFromRemote) {
+      await _push(ref, store);
+    }
     if (settleGuard) {
       _settleAfterPull(store, uid,
           imported: true, docSeen: true, remoteNonEmpty: !remoteEmpty);
