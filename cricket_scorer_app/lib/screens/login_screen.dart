@@ -85,6 +85,9 @@ class _LoginScreenState extends State<LoginScreen>
           );
         }
         await SyncService().pull(store);
+        // Live receive (v1.3.4): follow this account's backup for
+        // writes from other devices.
+        SyncService().startLiveSync(store);
       }
       if (!mounted) return;
       final gatePassed = widget.onGatePassed;
