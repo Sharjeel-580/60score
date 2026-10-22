@@ -11,11 +11,17 @@
 // score, the team total and his stats everywhere on its own.
 //
 // The editor works on a deep copy of the match; nothing touches
-// the stored record until Save. What it deliberately cannot do:
-// rewrite the ball-by-ball sequence (worm / manhattan / fastest
-// milestones are plotted from the recorded deliveries, and a
-// corrected figure does not say which delivery it belongs to), so
-// those charts keep the originally recorded balls.
+// the stored record until Save. The Playing XI itself is editable
+// too (v1.3.5): a player can be added to a team's XI for the match
+// (he appears as did-not-bat) or removed from it (his batting and
+// bowling figures in the match go with him). Edited figures are
+// the source of truth: on save, the totals, the result, the points
+// table and every statistic — including the delivery-derived ones
+// (fastest milestones, partnerships, catches), which fall back to
+// the figures when deliveries are missing — recompute from the
+// corrected record. The recorded ball-by-ball sequence itself is
+// the one thing an edit does not rewrite (worm / manhattan charts
+// plot the deliveries as they were bowled).
 import 'package:flutter/material.dart';
 
 import '../models.dart';
@@ -245,6 +251,68 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
     }
   }
 
+  /// Playing XI editing (v1.3.5): add a squad player to the match
+  /// XI of [teamId]. He joins as did-not-bat; his figures can then
+  /// be corrected like anyone else's once he has a batted row — and
+  /// every innings card is rebuilt so both show the new XI.
+  Future<void> _addToXi(String teamId) async {
+    final team = store.teamById(teamId);
+    if (team == null) return;
+    final current = _edit.xiFor(teamId);
+    final candidates = team.players
+        .map((p) => p.id)
+        .where((id) => !current.contains(id))
+        .toList();
+    if (candidates.isEmpty) {
+      _snack('Every squad player is already in the Playing XI.');
+      return;
+    }
+    final picked = await _pickPlayer(
+      'Add to Playing XI — ${team.name}',
+      candidates,
+      '',
+    );
+    if (picked == null) return;
+    addToMatchXI(_edit, teamId, picked);
+    for (var i = 0; i < _edit.innings.length; i++) {
+      _rebuildInnings(i);
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Remove a player from the match XI of [teamId] — his batting
+  /// and bowling figures in this match are removed with him, and
+  /// totals/result/stats recompute on save.
+  Future<void> _removeFromXi(String teamId, String playerId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Remove from Playing XI?'),
+        content: Text(
+          'Remove ${nameOf(playerId)} from the Playing XI? His '
+          'batting and bowling figures in this match will be '
+          'removed too.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    removeFromMatchXI(_edit, teamId, playerId);
+    for (var i = 0; i < _edit.innings.length; i++) {
+      _rebuildInnings(i);
+    }
+    if (mounted) setState(() {});
+  }
+
   int? _intOf(TextEditingController c) {
     final v = int.tryParse(c.text.trim());
     return (v == null || v < 0) ? null : v;
@@ -374,6 +442,8 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
       _edit.innings[1].target = _edit.innings[0].totalRuns + 1;
     }
     widget.match.innings = _edit.innings;
+    widget.match.xiA = List.of(_edit.xiA);
+    widget.match.xiB = List.of(_edit.xiB);
     final text = computeResult(widget.match, store.teamName);
     if (text.isNotEmpty) widget.match.resultText = text;
     await store.persist();
@@ -533,8 +603,62 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
                 _numField('Leg byes', ie.extras.legByes),
               ],
             ),
+            const Divider(height: 20),
+            const Text(
+              'Playing XI',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: kCopper,
+              ),
+            ),
+            _xiSection(inn.battingTeamId),
+            _xiSection(inn.bowlingTeamId),
           ],
         ),
+      ),
+    );
+  }
+
+  /// One team's XI inside an innings card: every player with a
+  /// remove button, plus an add button fed from the team squad.
+  Widget _xiSection(String teamId) {
+    final xi = _edit.xiFor(teamId);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${store.teamName(teamId)} (${xi.length})',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          for (final pid in xi)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    nameOf(pid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                  tooltip: 'Remove from Playing XI',
+                  onPressed: () => _removeFromXi(teamId, pid),
+                ),
+              ],
+            ),
+          TextButton.icon(
+            onPressed: () => _addToXi(teamId),
+            icon: const Icon(Icons.person_add, size: 18),
+            label: const Text('Add player'),
+          ),
+        ],
       ),
     );
   }
