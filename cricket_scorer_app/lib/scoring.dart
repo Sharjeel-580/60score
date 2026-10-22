@@ -434,6 +434,97 @@ bool replaceBatsman(InningsState s, String outId, String inId) {
   return true;
 }
 
+// ---------------- Playing XI editing (v1.3.5) ----------------
+
+/// Add [playerId] of [teamId] to the match's playing XI (post-match
+/// editor and live scoring both use this). The match XI and every
+/// innings' side list gain the player; on the batting side an empty
+/// did-not-bat figure row is created so the scorecard's "did not
+/// bat" list and the editor show him right away. The default XI is
+/// 11 players, but an XI edit never changes the 10-wicket rule —
+/// maxWickets is not touched here.
+void addToMatchXI(Match m, String teamId, String playerId) {
+  if (playerId.isEmpty) return;
+  // Lists are replaced rather than mutated in place, so a XI list
+  // that happens to be unmodifiable can never throw here.
+  if (teamId == m.teamAId) {
+    if (!m.xiA.contains(playerId)) m.xiA = [...m.xiA, playerId];
+  } else {
+    if (!m.xiB.contains(playerId)) m.xiB = [...m.xiB, playerId];
+  }
+  for (final inn in m.innings) {
+    if (inn.battingTeamId == teamId) {
+      if (!inn.battingXI.contains(playerId)) {
+        inn.battingXI = [...inn.battingXI, playerId];
+      }
+      inn.batting.putIfAbsent(playerId, () => BatFig());
+    }
+    if (inn.bowlingTeamId == teamId) {
+      if (!inn.bowlingXI.contains(playerId)) {
+        inn.bowlingXI = [...inn.bowlingXI, playerId];
+      }
+    }
+  }
+}
+
+/// Remove [playerId] of [teamId] from the match's playing XI,
+/// together with his batting and bowling figures in this match
+/// (post-match editor semantics: the corrected record is the truth,
+/// and every derived view recomputes from it). Ball events keep
+/// their recorded ids — they are history — but the figure rows, the
+/// XI lists and any live crease/bowler references to the player
+/// are cleared.
+void removeFromMatchXI(Match m, String teamId, String playerId) {
+  List<String> without(List<String> xi) =>
+      xi.where((id) => id != playerId).toList();
+  if (teamId == m.teamAId) {
+    m.xiA = without(m.xiA);
+  } else {
+    m.xiB = without(m.xiB);
+  }
+  for (final inn in m.innings) {
+    if (inn.battingTeamId == teamId) {
+      inn.battingXI = without(inn.battingXI);
+      inn.batting.remove(playerId);
+      if (inn.strikerId == playerId) inn.strikerId = '';
+      if (inn.nonStrikerId == playerId) inn.nonStrikerId = '';
+    }
+    if (inn.bowlingTeamId == teamId) {
+      inn.bowlingXI = without(inn.bowlingXI);
+      inn.bowling.remove(playerId);
+      if (inn.currentBowlerId == playerId) inn.currentBowlerId = '';
+      if (inn.lastBowlerId == playerId) inn.lastBowlerId = '';
+    }
+  }
+}
+
+/// Why [playerId] may not be removed from the XI of a LIVE match
+/// (null = removal allowed): the two batters at the crease and the
+/// current bowler are locked, and a player who has already batted
+/// or bowled in this match has figures that are part of the record.
+String? liveXiRemovalBlock(Match m, InningsState inn, String playerId) {
+  if (playerId == inn.strikerId) {
+    return 'The striker cannot be removed from the Playing XI.';
+  }
+  if (playerId == inn.nonStrikerId) {
+    return 'The non-striker cannot be removed from the Playing XI.';
+  }
+  if (playerId == inn.currentBowlerId) {
+    return 'The current bowler cannot be removed from the Playing XI.';
+  }
+  for (final i in m.innings) {
+    final bf = i.batting[playerId];
+    if (bf != null && bf.batted) {
+      return 'This player has already batted in this match.';
+    }
+    final bw = i.bowling[playerId];
+    if (bw != null && bw.legalBalls > 0) {
+      return 'This player has already bowled in this match.';
+    }
+  }
+  return null;
+}
+
 // ---------------- Post-match scorecard editing (v1.3.4) ----------------
 
 /// Recompute an innings' headline numbers from its stored figures
@@ -748,10 +839,71 @@ Map<String, CareerStats> computeCareerStats(
         if (ev.wicketType == 'stumped') c.stumpings++;
         if (ev.wicketType == 'runOut') c.runOuts++;
       }
+      // Dismissals the ball events do not cover (v1.3.5): figure-only
+      // records (e.g. a scorecard rebuilt from its figures) carry the
+      // dismissal in the batting figure's howOut text instead of in
+      // deliveries. Credit the fielder from the stored token form so
+      // Most Catches / Most Stumpings are never empty while catches
+      // exist in the record. Dismissals already credited above (the
+      // out player appears as a wicket event's outPlayerId) are
+      // skipped, so a dismissal is never counted twice.
+      final coveredOut = <String>{
+        for (final ev in inn.events)
+          if (ev.isWicket && ev.outPlayerId.isNotEmpty) ev.outPlayerId,
+      };
+      inn.batting.forEach((pid, fig) {
+        if (!fig.out || coveredOut.contains(pid)) return;
+        final credit = fielderCreditFromHowOut(fig.howOut);
+        if (credit == null) return;
+        final c = get(credit.$2);
+        switch (credit.$1) {
+          case 'caught':
+            c.catches++;
+          case 'stumped':
+            c.stumpings++;
+          case 'runOut':
+            c.runOuts++;
+        }
+      });
     }
   }
   return map;
 }
+
+/// Fielder credit parsed from a stored dismissal text (v1.3.5):
+/// returns (kind, fielderId) for the token forms written by
+/// [howOutText] — `'c <id> b <id>'`, `'st <id> b <id>'` and
+/// `'run out (<id>)'` — or null when the text carries no creditable
+/// fielder. Only tokens that look like stored player ids count:
+/// a dismissal retyped with plain names ("c Ahmed b Bilal") has no
+/// id to credit, and guessing would create phantom players.
+(String, String)? fielderCreditFromHowOut(String howOut) {
+  final t = howOut.trim();
+  if (t.isEmpty) return null;
+  if (t.startsWith('run out (')) {
+    final end = t.indexOf(')', 9);
+    if (end > 9) {
+      final id = t.substring(9, end);
+      if (_looksLikePlayerId(id)) return ('runOut', id);
+    }
+    return null;
+  }
+  final parts = t.split(' ');
+  if (parts.length >= 4 && parts[2] == 'b') {
+    if (parts[0] == 'c' && _looksLikePlayerId(parts[1])) {
+      return ('caught', parts[1]);
+    }
+    if (parts[0] == 'st' && _looksLikePlayerId(parts[1])) {
+      return ('stumped', parts[1]);
+    }
+  }
+  return null;
+}
+
+/// Stored player ids are machine-generated (`prefix_<digits>_...`):
+/// long and digit-bearing. A bare name token never qualifies.
+bool _looksLikePlayerId(String token) =>
+    token.length >= 8 && token.contains(RegExp(r'[0-9]'));
 
 /// Fold manually-entered past scores into career totals.
 void applyManualStats(
@@ -969,22 +1121,95 @@ class Partnership {
 }
 
 List<Partnership> partnerships(InningsState inn) {
-  final list = <Partnership>[];
-  Partnership? cur;
-  for (final ev in inn.events) {
-    cur ??= Partnership(ev.strikerId, ev.nonStrikerId);
-    cur.runs += ev.totalRuns;
-    if (ev.extraType != 'wide') cur.balls++;
-    if (ev.isWicket) {
+  if (inn.events.isNotEmpty) {
+    final list = <Partnership>[];
+    Partnership? cur;
+    for (final ev in inn.events) {
+      cur ??= Partnership(ev.strikerId, ev.nonStrikerId);
+      cur.runs += ev.totalRuns;
+      if (ev.extraType != 'wide') cur.balls++;
+      if (ev.isWicket) {
+        list.add(cur);
+        cur = null;
+      }
+    }
+    if (cur != null && (cur.runs > 0 || cur.balls > 0)) {
+      cur.unbroken = true;
       list.add(cur);
-      cur = null;
+    }
+    return list;
+  }
+  // Figure-only records (v1.3.5): no deliveries were stored, so the
+  // stands are rebuilt from the fall-of-wicket scores and the
+  // batting order in the figures — a match-winning stand must show
+  // in Best Partnerships even when its balls were never recorded.
+  return _partnershipsFromFallOfWickets(inn);
+}
+
+/// Partnership derivation for innings without ball events: each
+/// fall of wickets closes a stand (runs = team score at the fall
+/// minus the score at the previous fall; balls = legal balls bowled
+/// by then, read from the fall's over text), the surviving batter
+/// continues with the next player in batting order, and the final
+/// unbroken stand runs to the innings total.
+List<Partnership> _partnershipsFromFallOfWickets(InningsState inn) {
+  final order = <String>[
+    for (final e in inn.batting.entries)
+      if (e.value.batted) e.key,
+  ];
+  if (order.length < 2) return const [];
+  int legalAt(String overText) {
+    final parts = overText.split('.');
+    final o = int.tryParse(parts.first) ?? 0;
+    final b = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+    return o * inn.ballsPerOver + b;
+  }
+
+  final falls = [...inn.fallOfWickets]
+    ..sort((a, b) => a.wicketNo.compareTo(b.wicketNo));
+  final out = <Partnership>[];
+  var pair = Partnership(order[0], order[1]);
+  var nextIdx = 2;
+  var prevRuns = 0;
+  var prevBalls = 0;
+  final dismissed = <String>{};
+  for (final f in falls) {
+    final balls = legalAt(f.overText);
+    final r = f.runs - prevRuns;
+    final b = balls - prevBalls;
+    pair.runs = r < 0 ? 0 : r;
+    pair.balls = b < 0 ? 0 : b;
+    out.add(pair);
+    dismissed.add(f.playerId);
+    prevRuns = f.runs;
+    prevBalls = balls;
+    final survivor =
+        pair.batter1Id == f.playerId ? pair.batter2Id : pair.batter1Id;
+    String? next;
+    while (nextIdx < order.length) {
+      final cand = order[nextIdx++];
+      if (cand != survivor && !dismissed.contains(cand)) {
+        next = cand;
+        break;
+      }
+    }
+    if (next == null) {
+      pair = Partnership('', '');
+      break;
+    }
+    pair = Partnership(survivor, next);
+  }
+  if (pair.batter1Id.isNotEmpty) {
+    final runs = inn.totalRuns - prevRuns;
+    final balls = inn.legalBalls - prevBalls;
+    if (runs > 0 || balls > 0) {
+      pair.runs = runs < 0 ? 0 : runs;
+      pair.balls = balls < 0 ? 0 : balls;
+      pair.unbroken = true;
+      out.add(pair);
     }
   }
-  if (cur != null && (cur.runs > 0 || cur.balls > 0)) {
-    cur.unbroken = true;
-    list.add(cur);
-  }
-  return list;
+  return out;
 }
 
 /// Fastest fifties / hundreds (balls taken to reach the milestone) in a
@@ -1031,6 +1256,21 @@ FastestResult fastestMilestones(List<Match> matches, {String? tournamentId}) {
           hundreds.add(Milestone(s, balls, runs));
         }
       }
+      // Figure fallback (v1.3.5): an innings whose deliveries were
+      // never stored (or were lost) still proves its milestones
+      // through the batting figures — a 50/100 must appear in
+      // Fastest Fifty / Hundred with the figure's balls faced
+      // instead of the card sitting empty. The delivery-derived
+      // entry, when one exists, stays the more precise one.
+      inn.batting.forEach((pid, fig) {
+        if (!fig.batted) return;
+        if (fig.runs >= 50 && !fiftyDone.contains(pid)) {
+          fifties.add(Milestone(pid, fig.balls, fig.runs));
+        }
+        if (fig.runs >= 100 && !hundredDone.contains(pid)) {
+          hundreds.add(Milestone(pid, fig.balls, fig.runs));
+        }
+      });
     }
   }
   fifties.sort((a, b) => a.balls.compareTo(b.balls));
@@ -1097,7 +1337,13 @@ List<PartnershipBest> bestPartnerships(
       }
     }
   }
-  out.sort((a, b) => b.runs.compareTo(a.runs));
+  // Longest partnership on top (v1.3.5): most runs first; for equal
+  // runs the stand that lasted more balls ranks higher.
+  out.sort((a, b) {
+    final r = b.runs.compareTo(a.runs);
+    if (r != 0) return r;
+    return b.balls.compareTo(a.balls);
+  });
   return out;
 }
 
