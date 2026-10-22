@@ -36,7 +36,10 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
   String? _tournamentId;
   String? _teamId;
   int? _overs;
-  String _sort = 'newest'; // 'newest' | 'oldest'
+  // Default order is the straight fixture sequence (v1.3.5):
+  // chronological ascending — the nearest match first and the
+  // Grand Final last. The filter sheet can flip it to newest-first.
+  String _sort = 'oldest'; // 'newest' | 'oldest'
 
   @override
   void initState() {
@@ -111,6 +114,36 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
       MaterialPageRoute(
           builder: (_) => FixtureDetailScreen(store: store, matchId: m.id)),
     );
+  }
+
+  /// Delete ONE completed match (v1.3.5), with confirmation —
+  /// the points table and statistics recompute from the remaining
+  /// records on their own.
+  Future<void> _confirmDeleteMatch(Match m) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete match?'),
+        content: Text(
+          'Delete ${store.teamName(m.teamAId)} vs '
+          '${store.teamName(m.teamBId)} and its scorecard? '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await store.deleteMatch(m.id);
+    }
   }
 
   void _showNewMatchMenu(BuildContext buttonCtx) {
@@ -533,7 +566,7 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
             child: const Icon(Icons.tune, color: kSilver, size: 20),
           ),
         ),
-        if (_hasActiveFilters || _sort != 'newest')
+        if (_hasActiveFilters || _sort != 'oldest')
           Positioned(
             right: -2,
             top: -2,
@@ -804,7 +837,7 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                   ],
                 ),
               ),
-              // Right: status pill + arrow.
+              // Right: status pill + arrow (+ delete for completed).
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -829,6 +862,13 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                       size: 26,
                     ),
                   ),
+                  if (m.status == 'completed')
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      color: kSilver,
+                      tooltip: 'Delete match',
+                      onPressed: () => _confirmDeleteMatch(m),
+                    ),
                 ],
               ),
             ],
