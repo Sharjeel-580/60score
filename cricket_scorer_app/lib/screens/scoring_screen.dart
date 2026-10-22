@@ -501,6 +501,17 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ),
+                  if (match.status == 'live' &&
+                      !inn.isComplete &&
+                      inn.strikerId.isNotEmpty &&
+                      inn.nonStrikerId.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Tap a name for strike • Double-tap to change player',
+                        style: TextStyle(color: Colors.white38, fontSize: 11),
+                      ),
+                    ),
                   const SizedBox(height: 6),
                   _thisOverRow(inn),
                 ],
@@ -542,8 +553,8 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   Widget _creaseRow(String pid, bool striker, InningsState inn) {
     final f = inn.batting[pid];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text(
         '${nameOf(pid)}${striker ? ' *' : ''}   ${f?.runs ?? 0} (${f?.balls ?? 0})',
         style: TextStyle(
@@ -551,6 +562,39 @@ class _ScoringScreenState extends State<ScoringScreen> {
         ),
       ),
     );
+    // Crease corrections (v1.3.4): single tap on a batsman's name
+    // gives him the strike; double tap replaces him at the crease
+    // (e.g. the wrong opener was selected). Only while this innings
+    // is being scored — a finished innings is corrected from the
+    // scorecard's Edit screen instead.
+    if (match.status != 'live' || inn.isComplete) return row;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        if (setStrikeTo(inn, pid)) await _afterChange();
+      },
+      onDoubleTap: () => _replaceBatsman(pid),
+      child: row,
+    );
+  }
+
+  /// Double-tap on a batsman at the crease: pick the player who
+  /// should actually be there (wrong opener selected). The
+  /// replacement takes over the crease place and any figure
+  /// recorded under the wrong name.
+  Future<void> _replaceBatsman(String outId) async {
+    final candidates = replaceBatsmanCandidates(inn, outId);
+    if (candidates.isEmpty) {
+      _snack('No other batter available to replace ${nameOf(outId)}');
+      return;
+    }
+    final idx = await _pickPlayer(
+      'Replace ${nameOf(outId)} with',
+      candidates,
+    );
+    if (idx != null && replaceBatsman(inn, outId, candidates[idx])) {
+      await _afterChange();
+    }
   }
 
   String _bowlerLine(InningsState inn) {
