@@ -27,6 +27,11 @@ Future<Tournament?> showTournamentEditDialog(
   final nameCtrl = TextEditingController(text: existing?.name ?? '');
   final venueCtrl = TextEditingController(text: existing?.venue ?? '');
   var logoBase64 = existing?.logoBase64 ?? '';
+  // v1.3.7: the tournament's overs — new matches/fixtures in this
+  // tournament default to it in the setup screen.
+  var oversLimit = existing?.oversLimit ?? 8;
+  final oversOptions = <int>{5, 8, 10, 20, 30, 40, 50, oversLimit}.toList()
+    ..sort();
 
   Future<void> pickLogo(StateSetter setD) async {
     final picker = ImagePicker();
@@ -63,6 +68,22 @@ Future<Tournament?> showTournamentEditDialog(
                 decoration: const InputDecoration(
                   labelText: 'Venue (optional)',
                 ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                initialValue: oversLimit,
+                decoration: const InputDecoration(
+                  labelText: 'Overs per innings',
+                ),
+                items: oversOptions
+                    .map(
+                      (o) => DropdownMenuItem(
+                        value: o,
+                        child: Text('$o overs'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setD(() => oversLimit = v ?? 8),
               ),
               const SizedBox(height: 12),
               // Optional tournament logo (shown on the match summary).
@@ -150,6 +171,7 @@ Future<Tournament?> showTournamentEditDialog(
       teamIds: [],
       venue: venueCtrl.text.trim(),
       logoBase64: logoBase64,
+      oversLimit: oversLimit,
     );
     await store.upsertTournament(t);
     return t;
@@ -157,6 +179,7 @@ Future<Tournament?> showTournamentEditDialog(
   existing.name = nameCtrl.text.trim();
   existing.venue = venueCtrl.text.trim();
   existing.logoBase64 = logoBase64;
+  existing.oversLimit = oversLimit;
   await store.persist();
   return existing;
 }
