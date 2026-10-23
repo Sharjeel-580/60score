@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../pdf_export.dart';
+import '../poster_summary.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../summary_share.dart';
@@ -980,6 +981,20 @@ class _SummaryTab extends StatelessWidget {
             ),
           ],
         ),
+        // v1.3.8: poster-style summary image (approved design) as an
+        // additional share option, offered only when the match record
+        // carries figures. Existing buttons/layouts above are unchanged.
+        if (matchHasPosterFigures(match)) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => shareMatchPosterImage(context, store, match),
+              icon: const Icon(Icons.image_outlined),
+              label: const Text('Share Poster Summary'),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
       ],
     );
