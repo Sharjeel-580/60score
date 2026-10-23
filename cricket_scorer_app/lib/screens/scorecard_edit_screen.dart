@@ -273,7 +273,10 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
       '',
     );
     if (picked == null) return;
-    addToMatchXI(_edit, teamId, picked);
+    if (!addToMatchXI(_edit, teamId, picked)) {
+      _snack('Playing XI is full (11 players). Remove a player first.');
+      return;
+    }
     for (var i = 0; i < _edit.innings.length; i++) {
       _rebuildInnings(i);
     }
