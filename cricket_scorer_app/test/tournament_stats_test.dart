@@ -93,17 +93,19 @@ void main() {
       expect(f.fifties.first.balls, 9);
     });
 
-    test('hundred tracked after fifty for the same batter', () {
+    test('a batter who goes on to a hundred appears in Fastest '
+        'Hundred only, never in Fastest Fifty (v1.3.7)', () {
       final events = <BallEvent>[
         for (var i = 0; i < 8; i++) ev('a1', 6), // 48/8
-        ev('a1', 2), // 50/9 -> fifty in 9
+        ev('a1', 2), // 50/9 -> fifty crossed in 9
         for (var i = 0; i < 8; i++) ev('a1', 6), // 98/17
         ev('a1', 2), // 100/18 -> hundred in 18
       ];
       final m = fakeMatch('m1', 't1', events);
       final f = fastestMilestones([m], tournamentId: 't1');
-      expect(f.fifties.length, 1);
-      expect(f.fifties.first.balls, 9);
+      // Final score is 100, so the innings belongs to the hundred
+      // list alone — reaching fifty on the way does not count.
+      expect(f.fifties, isEmpty);
       expect(f.hundreds.length, 1);
       expect(f.hundreds.first.playerId, 'a1');
       expect(f.hundreds.first.balls, 18);
