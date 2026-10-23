@@ -103,6 +103,13 @@ class Tournament {
   /// Publishing is always a manual owner action — never automatic.
   bool published;
 
+  /// Overs per innings for this tournament's matches (v1.3.7).
+  /// The match setup defaults a tournament fixture to this value, so
+  /// a league's format (Super Sixty = 8) is set once, on the
+  /// tournament, instead of per fixture. Records written before
+  /// v1.3.7 have no such field and read as the Super Sixty default.
+  int oversLimit;
+
   Tournament({
     required this.id,
     required this.name,
@@ -113,6 +120,7 @@ class Tournament {
     List<String>? qualifiedTeamIds,
     this.qualificationFinalized = false,
     this.published = false,
+    this.oversLimit = 8,
   }) : teamIds = teamIds ?? [],
        pointsAdjustments = pointsAdjustments ?? {},
        qualifiedTeamIds = qualifiedTeamIds ?? [];
@@ -127,6 +135,7 @@ class Tournament {
     'qualifiedTeamIds': qualifiedTeamIds,
     'qualificationFinalized': qualificationFinalized,
     'published': published,
+    'oversLimit': oversLimit,
   };
 
   factory Tournament.fromJson(Map<String, dynamic> j) {
@@ -147,6 +156,7 @@ class Tournament {
               .toList(),
       qualificationFinalized: j['qualificationFinalized'] as bool? ?? false,
       published: j['published'] as bool? ?? false,
+      oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 8,
     );
   }
 }
@@ -626,7 +636,11 @@ class Match {
     // maxWickets == XI length is that format's design.
     if (!m.lastManStands) {
       for (final inn in m.innings) {
-        final cap = inn.battingXI.length - 1;
+        // v1.3.7: the cap is also never above 10 — an over-long
+        // stored XI (12 names) must not resurrect 11 wickets via
+        // XI − 1; a side can lose at most 10 wickets.
+        var cap = inn.battingXI.length - 1;
+        if (cap > 10) cap = 10;
         if (cap >= 1 && inn.maxWickets > cap) inn.maxWickets = cap;
       }
     }
