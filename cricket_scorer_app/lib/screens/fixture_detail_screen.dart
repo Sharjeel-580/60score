@@ -6,6 +6,7 @@ import '../store.dart';
 import '../theme.dart';
 import '../fixture_poster.dart';
 import '../widgets/player_avatar.dart';
+import 'fixture_edit_screen.dart';
 import 'match_setup_screen.dart';
 import 'scorecard_screen.dart';
 import 'scorer_home_screen.dart';
@@ -116,6 +117,52 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
     m.status = 'upcoming';
     await store.upsertMatch(m);
     _snack('Fixture reopened as upcoming');
+    if (mounted) Navigator.pop(context, true);
+  }
+
+  /// Full fixture edit (v1.3.7): date, time, venue, teams, overs,
+  /// title, round — see FixtureEditScreen for the guard rails
+  /// (upcoming fixtures only, so no scoring data can be harmed).
+  Future<void> _editFixture(Match m) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FixtureEditScreen(store: store, matchId: m.id),
+      ),
+    );
+    if (changed == true && mounted) setState(() {});
+  }
+
+  /// Delete this fixture outright (v1.3.7), with the standard
+  /// confirm. Offered for every non-live status that lands on this
+  /// screen — until now a fixture could only be cancelled, never
+  /// removed. Live matches are never routed here, and completed
+  /// matches keep their own delete actions (scorecard / lists).
+  Future<void> _deleteFixture(Match m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete fixture?'),
+        content: Text(
+          'Delete ${store.teamName(m.teamAId)} vs '
+          '${store.teamName(m.teamBId)}? This removes the fixture '
+          'permanently.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: FilledButton.styleFrom(backgroundColor: kRed),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await store.deleteMatch(m.id);
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -1061,9 +1108,7 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
                   label: 'Edit fixture',
                   kind: ScoreButtonKind.ghost,
                   icon: Icons.edit_outlined,
-                  onPressed: () => _snack(
-                    'Fixture editing is not available yet — cancel and recreate if needed.',
-                  ),
+                  onPressed: () => _editFixture(m),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1076,6 +1121,13 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          ScoreButton(
+            label: 'Delete fixture',
+            kind: ScoreButtonKind.ghost,
+            icon: Icons.delete_outline,
+            onPressed: () => _deleteFixture(m),
           ),
         ];
       case 'cancelled':
@@ -1092,8 +1144,19 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
             icon: Icons.restore,
             onPressed: () => _reopenFixture(m),
           ),
+          const SizedBox(height: 10),
+          ScoreButton(
+            label: 'Delete fixture',
+            kind: ScoreButtonKind.ghost,
+            icon: Icons.delete_outline,
+            onPressed: () => _deleteFixture(m),
+          ),
         ];
       default:
+        // noResult lands here. Live and completed matches have
+        // their own screens (and completed has its own delete
+        // actions there) — they are never offered a delete here,
+        // so scoring data can never be removed from this screen.
         return [
           ScoreButton(
             label: 'Share Poster',
@@ -1101,6 +1164,15 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
             icon: Icons.share_outlined,
             onPressed: () => shareFixturePoster(context, store, m),
           ),
+          if (m.status == 'noResult') ...[
+            const SizedBox(height: 10),
+            ScoreButton(
+              label: 'Delete fixture',
+              kind: ScoreButtonKind.ghost,
+              icon: Icons.delete_outline,
+              onPressed: () => _deleteFixture(m),
+            ),
+          ],
         ];
     }
   }
