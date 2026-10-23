@@ -448,6 +448,29 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 if (tid != null) await applyPlayoffUpdate(store, tid);
                 nav.pop();
               } else if (v == 'delete') {
+                // v1.3.7: the standard confirm — this was the one
+                // delete in the app with none, on a LIVE match.
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (d) => AlertDialog(
+                    title: const Text('Delete match?'),
+                    content: const Text(
+                      'Delete this match and its scorecard? '
+                      'This cannot be undone.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(d, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(d, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm != true) return;
                 await store.deleteMatch(match.id);
                 nav.pop();
               }
@@ -701,7 +724,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
               candidates,
             );
             if (idx != null) {
-              addToMatchXI(match, teamId, candidates[idx]);
+              if (!addToMatchXI(match, teamId, candidates[idx])) {
+                _snack('Playing XI is full (11 players). '
+                    'Remove a player first.');
+                return;
+              }
               await _afterChange();
               setD(() {});
             }
