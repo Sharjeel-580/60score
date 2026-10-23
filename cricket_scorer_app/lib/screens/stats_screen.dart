@@ -325,7 +325,7 @@ class _StatsScreenState extends State<StatsScreen> {
                   tooltip: 'More statistics options',
                   onSelected: (v) async {
                     if (v == 'add_past') {
-                      await _addPastScore(context);
+                      await _addOrEditPastScore(context);
                       if (mounted) setState(() {});
                     } else if (v == 'manual') {
                       _showManualEntries(context);
@@ -1330,50 +1330,76 @@ class _StatsScreenState extends State<StatsScreen> {
 
   /// Restored from the previous version: manually add a past performance
   /// for stats history (feeds careerOf via applyManualStats).
-  Future<void> _addPastScore(BuildContext context) async {
+  /// Add a manual past-score entry — or, with [existing], edit one
+  /// (v1.3.7: manual entries could be added and deleted but never
+  /// edited). In edit mode the player is fixed (an entry belongs to
+  /// its player; delete + re-add to move it) and every figure field
+  /// is prefilled from the entry.
+  Future<void> _addOrEditPastScore(
+    BuildContext context, {
+    ManualStatEntry? existing,
+  }) async {
     final persons = allPersons(store);
-    String? playerId = persons.isNotEmpty ? persons.keys.first : null;
+    String? playerId =
+        existing?.playerId ??
+        (persons.isNotEmpty ? persons.keys.first : null);
     final nameCtrl = TextEditingController();
-    final labelCtrl = TextEditingController();
-    final runs = TextEditingController(text: '0');
-    final balls = TextEditingController(text: '0');
-    final fours = TextEditingController(text: '0');
-    final sixes = TextEditingController(text: '0');
-    final wkts = TextEditingController(text: '0');
-    final conceded = TextEditingController(text: '0');
-    final ballsBowled = TextEditingController(text: '0');
-    var notOut = false;
+    final labelCtrl = TextEditingController(text: existing?.matchLabel ?? '');
+    final runs = TextEditingController(text: '${existing?.runs ?? 0}');
+    final balls = TextEditingController(text: '${existing?.balls ?? 0}');
+    final fours = TextEditingController(text: '${existing?.fours ?? 0}');
+    final sixes = TextEditingController(text: '${existing?.sixes ?? 0}');
+    final wkts = TextEditingController(text: '${existing?.wickets ?? 0}');
+    final conceded =
+        TextEditingController(text: '${existing?.runsConceded ?? 0}');
+    final ballsBowled =
+        TextEditingController(text: '${existing?.ballsBowled ?? 0}');
+    var notOut = existing?.notOut ?? false;
     int n(TextEditingController c) => int.tryParse(c.text) ?? 0;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, setD) => AlertDialog(
-          title: const Text('Add past score (manual)'),
+          title: Text(
+            existing == null
+                ? 'Add past score (manual)'
+                : 'Edit past score (manual)',
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (persons.isNotEmpty)
-                  DropdownButtonFormField<String>(
-                    initialValue: playerId,
-                    decoration:
-                        const InputDecoration(labelText: 'Player'),
-                    items: persons.entries
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e.key,
-                            child: Text(e.value),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setD(() => playerId = v),
+                if (existing != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Player: ${existing.playerName}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  )
+                else ...[
+                  if (persons.isNotEmpty)
+                    DropdownButtonFormField<String>(
+                      initialValue: playerId,
+                      decoration:
+                          const InputDecoration(labelText: 'Player'),
+                      items: persons.entries
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setD(() => playerId = v),
+                    ),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Or type a new player name',
+                    ),
                   ),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Or type a new player name',
-                  ),
-                ),
+                ],
                 TextField(
                   controller: labelCtrl,
                   decoration: const InputDecoration(
@@ -1470,13 +1496,28 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(c, true),
-              child: const Text('Add'),
+              child: Text(existing == null ? 'Add' : 'Save'),
             ),
           ],
         ),
       ),
     );
     if (ok == true) {
+      if (existing != null) {
+        existing.matchLabel = labelCtrl.text.trim().isEmpty
+            ? 'Past match'
+            : labelCtrl.text.trim();
+        existing.runs = n(runs);
+        existing.balls = n(balls);
+        existing.fours = n(fours);
+        existing.sixes = n(sixes);
+        existing.notOut = notOut;
+        existing.wickets = n(wkts);
+        existing.runsConceded = n(conceded);
+        existing.ballsBowled = n(ballsBowled);
+        await store.upsertManualStat(existing);
+        return;
+      }
       var id = playerId;
       var name = id != null ? (persons[id] ?? '') : '';
       if (nameCtrl.text.trim().isNotEmpty) {
@@ -1531,9 +1572,28 @@ class _StatsScreenState extends State<StatsScreen> {
                       subtitle: Text(
                         '${e.runs} (${e.balls}) • ${e.wickets} wkts • ${e.runsConceded} conceded • manual entry',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Edit entry',
+                            onPressed: () async {
+                              Navigator.pop(c);
+                              await _addOrEditPastScore(
+                                context,
+                                existing: e,
+                              );
+                              if (context.mounted) {
+                                _showManualEntries(context);
+                                setState(() {});
+                              }
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Delete entry',
+                            onPressed: () async {
                           final confirm = await showDialog<bool>(
                             context: context,
                             builder: (d) => AlertDialog(
@@ -1563,7 +1623,9 @@ class _StatsScreenState extends State<StatsScreen> {
                               setState(() {});
                             }
                           }
-                        },
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
