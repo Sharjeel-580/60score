@@ -81,10 +81,16 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
     }
     if (tournamentId != null) {
       final t = store.tournamentById(tournamentId);
-      if (t != null && t.teamIds.length >= 2) {
-        teamAId = t.teamIds[0];
-        teamBId = t.teamIds[1];
-        _preselect();
+      if (t != null) {
+        // v1.3.7: a tournament match defaults to the tournament's
+        // overs — the league format is set once, on the tournament
+        // (Super Sixty = 8), not per match.
+        overs = t.oversLimit;
+        if (t.teamIds.length >= 2) {
+          teamAId = t.teamIds[0];
+          teamBId = t.teamIds[1];
+          _preselect();
+        }
       }
     }
     // Redesign default: toss is 'Auto (Toss later)' until the user picks a
@@ -103,6 +109,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
         teamBId = em.teamBId;
       }
       overs = em.oversLimit;
+      // v1.3.7: a tournament fixture starts at the TOURNAMENT's
+      // overs, not whatever the fixture record itself carries —
+      // the stored seed fixtures were written with 10 overs while
+      // the league plays 8; the tournament setting is the truth.
+      final emTournament = em.tournamentId == null
+          ? null
+          : store.tournamentById(em.tournamentId!);
+      if (emTournament != null) overs = emTournament.oversLimit;
       ballsPerOver = em.ballsPerOver;
       venueCtrl.text = em.venue;
       titleCtrl.text = em.matchTitle;
@@ -112,11 +126,14 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       _preselect();
       if (em.xiA.isNotEmpty) {
         xiA.clear();
-        xiA.addAll(em.xiA);
+        // v1.3.7: an adopted XI is capped at 11 like every other XI
+        // path — an over-long stored XI would otherwise push the
+        // auto wickets derivation (XI − 1) to an impossible 11.
+        xiA.addAll(em.xiA.take(11));
       }
       if (em.xiB.isNotEmpty) {
         xiB.clear();
-        xiB.addAll(em.xiB);
+        xiB.addAll(em.xiB.take(11));
       }
       tossWinnerId = null;
     }
@@ -482,6 +499,8 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
     if (t == null || !mounted) return;
     setState(() {
       tournamentId = t.id;
+      overs = t.oversLimit; // v1.3.7: tournament overs default.
+      _customOvers = !_presetOvers.contains(overs);
       // Same preselect the tournament dropdown applies on change.
       if (t.teamIds.length >= 2) {
         teamAId = t.teamIds[0];
@@ -516,6 +535,11 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
             // Same preselect the old initState applied when a tournament was
             // attached: default the two sides to the tournament's teams.
             final t = store.tournamentById(v);
+            // v1.3.7: picking a tournament also applies its overs.
+            if (t != null) {
+              overs = t.oversLimit;
+              _customOvers = !_presetOvers.contains(overs);
+            }
             if (t != null && t.teamIds.length >= 2) {
               teamAId = t.teamIds[0];
               teamBId = t.teamIds[1];
