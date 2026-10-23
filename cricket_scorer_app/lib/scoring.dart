@@ -322,14 +322,22 @@ InningsState startInnings(Match m, int n) {
       // impossible "11 wickets" option; clamp any explicit setting
       // to the legal maximum so the innings ends all-out at 10 and
       // a chase won with 2 wickets down reads "won by 8 wickets"
-      // (10 − 2), never 9 (v1.3.4).
-      final cap = inn.battingXI.length - 1;
+      // (10 − 2), never 9 (v1.3.4). v1.3.7: the cap itself is also
+      // never above 10, so an over-long stored XI cannot push it
+      // back to 11.
+      var cap = inn.battingXI.length - 1;
+      if (cap > 10) cap = 10;
       inn.maxWickets =
           (cap >= 1 && m.totalWickets > cap) ? cap : m.totalWickets;
     } else if (m.lastManStands) {
       // Simplified last-man-stands: innings can lose every batter
       // (final wicket ends it); the last pair bats on together.
       inn.maxWickets = m.xiFor(battingId).length;
+    } else if (inn.battingXI.length > 11) {
+      // v1.3.7: Auto (no explicit setting) derives wickets from the
+      // XI — XI − 1 — but an over-long stored XI must not resurrect
+      // the 11-wicket bug: pin the auto value at 10.
+      inn.maxWickets = 10;
     }
     if (m.innings.length == 1 && m.innings.isNotEmpty) {
       inn.target = m.innings[0].totalRuns + 1;
@@ -443,14 +451,22 @@ bool replaceBatsman(InningsState s, String outId, String inId) {
 /// bat" list and the editor show him right away. The default XI is
 /// 11 players, but an XI edit never changes the 10-wicket rule —
 /// maxWickets is not touched here.
-void addToMatchXI(Match m, String teamId, String playerId) {
-  if (playerId.isEmpty) return;
+/// Adds [playerId] to the match XI of [teamId] (and to any innings
+/// already created for that side). Returns false — changing nothing —
+/// when the player is already in the XI or the XI is full: a Playing
+/// XI holds at most 11 players (v1.3.7; an over-long XI would push
+/// the auto wickets derivation, XI − 1, back to the impossible 11).
+bool addToMatchXI(Match m, String teamId, String playerId) {
+  if (playerId.isEmpty) return false;
+  final current = m.xiFor(teamId);
+  if (current.contains(playerId)) return false;
+  if (current.length >= 11) return false;
   // Lists are replaced rather than mutated in place, so a XI list
   // that happens to be unmodifiable can never throw here.
   if (teamId == m.teamAId) {
-    if (!m.xiA.contains(playerId)) m.xiA = [...m.xiA, playerId];
+    m.xiA = [...m.xiA, playerId];
   } else {
-    if (!m.xiB.contains(playerId)) m.xiB = [...m.xiB, playerId];
+    m.xiB = [...m.xiB, playerId];
   }
   for (final inn in m.innings) {
     if (inn.battingTeamId == teamId) {
@@ -465,6 +481,7 @@ void addToMatchXI(Match m, String teamId, String playerId) {
       }
     }
   }
+  return true;
 }
 
 /// Remove [playerId] of [teamId] from the match's playing XI,
@@ -523,6 +540,53 @@ String? liveXiRemovalBlock(Match m, InningsState inn, String playerId) {
     }
   }
   return null;
+}
+
+/// Apply fixture-detail edits to an UPCOMING match (v1.3.7 fixture
+/// edit): date/time (as one local ISO string), venue, teams, overs,
+/// balls per over, title, stage (round), ball type and season.
+///
+/// Guard rails: this is for fixtures that have not started — the
+/// caller only offers it while the match is 'upcoming', so there is
+/// no scoring data to corrupt. Changing a team clears that side's
+/// saved Playing XI (those players belong to the old team) and a
+/// toss recorded against a team that is no longer in the match is
+/// cleared too, so the fixture simply goes back through the normal
+/// "Do Scoring" setup checks afterwards.
+void applyFixtureEdit(
+  Match m, {
+  required String teamAId,
+  required String teamBId,
+  required String dateIso,
+  required String venue,
+  required int oversLimit,
+  required int ballsPerOver,
+  required String matchTitle,
+  required String stage,
+  required String ballType,
+  required String season,
+}) {
+  if (teamAId != m.teamAId) {
+    m.teamAId = teamAId;
+    m.xiA = [];
+  }
+  if (teamBId != m.teamBId) {
+    m.teamBId = teamBId;
+    m.xiB = [];
+  }
+  if (m.tossWinnerId.isNotEmpty &&
+      m.tossWinnerId != m.teamAId &&
+      m.tossWinnerId != m.teamBId) {
+    m.tossWinnerId = '';
+  }
+  m.dateIso = dateIso;
+  m.venue = venue;
+  m.oversLimit = oversLimit;
+  m.ballsPerOver = ballsPerOver;
+  m.matchTitle = matchTitle;
+  m.stage = stage;
+  m.ballType = ballType;
+  m.season = season;
 }
 
 // ---------------- Post-match scorecard editing (v1.3.4) ----------------
@@ -1234,10 +1298,12 @@ FastestResult fastestMilestones(List<Match> matches, {String? tournamentId}) {
     if (tournamentId != null && m.tournamentId != tournamentId) continue;
     if (m.status != 'completed') continue;
     for (final inn in m.innings) {
+      // Delivery-derived milestones: the ball on which each batter
+      // crossed 50 / 100 (balls faced, wides excluded).
       final ballsMap = <String, int>{};
       final runsMap = <String, int>{};
-      final fiftyDone = <String>{};
-      final hundredDone = <String>{};
+      final fiftyBalls = <String, int>{};
+      final hundredBalls = <String, int>{};
       for (final ev in inn.events) {
         final s = ev.strikerId;
         if (ev.extraType == 'wide') continue;
@@ -1249,25 +1315,45 @@ FastestResult fastestMilestones(List<Match> matches, {String? tournamentId}) {
         runsMap[s] = (runsMap[s] ?? 0) + r;
         final runs = runsMap[s]!;
         final balls = ballsMap[s]!;
-        if (runs >= 50 && fiftyDone.add(s)) {
-          fifties.add(Milestone(s, balls, runs));
-        }
-        if (runs >= 100 && hundredDone.add(s)) {
-          hundreds.add(Milestone(s, balls, runs));
-        }
+        if (runs >= 50) fiftyBalls.putIfAbsent(s, () => balls);
+        if (runs >= 100) hundredBalls.putIfAbsent(s, () => balls);
       }
+      // The innings' FINAL score for a batter: the batting figure is
+      // the source of truth (the v1.3.5 cascade rule), the delivery
+      // tally is the fallback when no figure was stored.
+      int finalRuns(String pid) {
+        final fig = inn.batting[pid];
+        if (fig != null && fig.batted) return fig.runs;
+        return runsMap[pid] ?? 0;
+      }
+
+      // Fastest Fifty lists ONLY innings that END on 50–99 (v1.3.7):
+      // a batter who goes on to 100+ belongs to Fastest Hundred
+      // alone — reaching fifty on the way to a hundred is not a
+      // "fastest fifty" entry.
+      fiftyBalls.forEach((pid, balls) {
+        final fr = finalRuns(pid);
+        if (fr >= 50 && fr < 100) fifties.add(Milestone(pid, balls, fr));
+      });
+      hundredBalls.forEach((pid, balls) {
+        final fr = finalRuns(pid);
+        if (fr >= 100) hundreds.add(Milestone(pid, balls, fr));
+      });
       // Figure fallback (v1.3.5): an innings whose deliveries were
       // never stored (or were lost) still proves its milestones
       // through the batting figures — a 50/100 must appear in
       // Fastest Fifty / Hundred with the figure's balls faced
       // instead of the card sitting empty. The delivery-derived
-      // entry, when one exists, stays the more precise one.
+      // entry, when one exists, stays the more precise one. The
+      // same 50–99 / 100+ split applies here (v1.3.7).
       inn.batting.forEach((pid, fig) {
         if (!fig.batted) return;
-        if (fig.runs >= 50 && !fiftyDone.contains(pid)) {
+        if (fig.runs >= 50 &&
+            fig.runs < 100 &&
+            !fiftyBalls.containsKey(pid)) {
           fifties.add(Milestone(pid, fig.balls, fig.runs));
         }
-        if (fig.runs >= 100 && !hundredDone.contains(pid)) {
+        if (fig.runs >= 100 && !hundredBalls.containsKey(pid)) {
           hundreds.add(Milestone(pid, fig.balls, fig.runs));
         }
       });
