@@ -50,7 +50,8 @@ BatFig fig(int runs, int balls, {bool out = false, String howOut = ''}) {
 void main() {
   group('fastestMilestones figure fallback', () {
     test('a 102 off 38 with no deliveries fills Fastest Hundred '
-        '(and Fifty) instead of leaving the cards empty', () {
+        'only — a 100+ innings never appears in Fastest Fifty '
+        '(v1.3.7)', () {
       final inn = figInnings();
       inn.batting['a1'] = fig(102, 38);
       inn.batting['a2'] = fig(15, 10, out: true);
@@ -59,8 +60,46 @@ void main() {
       expect(r.hundreds.single.playerId, 'a1');
       expect(r.hundreds.single.balls, 38);
       expect(r.hundreds.single.runs, 102);
-      expect(r.fifties, hasLength(1));
-      expect(r.fifties.single.playerId, 'a1');
+      expect(r.fifties, isEmpty);
+    });
+
+    test('delivery-derived: a hundred excludes the batter from '
+        'Fastest Fifty, and the hundred keeps its crossing ball', () {
+      final inn = figInnings();
+      // 25 fours = 100 off 25 (fifty crossed at ball 13, hundred at
+      // ball 25), then a four and a single: 105 off 27 final.
+      for (var n = 0; n < 25; n++) {
+        inn.events.add(BallEvent(
+          strikerId: 'a1',
+          nonStrikerId: 'a2',
+          bowlerId: 'b1',
+          batRuns: 4,
+          totalRuns: 4,
+          legalBall: true,
+        ));
+      }
+      inn.events.add(BallEvent(
+        strikerId: 'a1',
+        nonStrikerId: 'a2',
+        bowlerId: 'b1',
+        batRuns: 4,
+        totalRuns: 4,
+        legalBall: true,
+      ));
+      inn.events.add(BallEvent(
+        strikerId: 'a1',
+        nonStrikerId: 'a2',
+        bowlerId: 'b1',
+        batRuns: 1,
+        totalRuns: 1,
+        legalBall: true,
+      ));
+      inn.batting['a1'] = fig(105, 27);
+      final r = fastestMilestones([baseMatch(innings: [inn])]);
+      expect(r.fifties, isEmpty);
+      expect(r.hundreds, hasLength(1));
+      expect(r.hundreds.single.balls, 25);
+      expect(r.hundreds.single.runs, 105);
     });
 
     test('fallback sorts by balls ascending alongside others', () {
