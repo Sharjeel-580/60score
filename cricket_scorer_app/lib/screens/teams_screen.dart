@@ -285,6 +285,30 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () async {
+                      // v1.3.7: standard confirm before removing a
+                      // squad player (this was an instant delete —
+                      // every other delete in the app confirms first).
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (d) => AlertDialog(
+                          title: const Text('Remove player?'),
+                          content: Text(
+                            'Remove ${p.name} from ${team.name}? '
+                            'Their past match figures are not changed.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(d, false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(d, true),
+                              child: const Text('Remove'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm != true) return;
                       setState(() => team.players.removeAt(i));
                       await store.persist();
                     },
