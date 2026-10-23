@@ -116,9 +116,12 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
     );
   }
 
-  /// Delete ONE completed match (v1.3.5), with confirmation —
+  /// Delete ONE match (v1.3.5: completed matches; v1.3.7: also
+  /// upcoming / cancelled / noResult fixtures), with confirmation —
   /// the points table and statistics recompute from the remaining
-  /// records on their own.
+  /// records on their own. LIVE matches are excluded: deleting a
+  /// match while its scoring screen is open would corrupt the
+  /// live session.
   Future<void> _confirmDeleteMatch(Match m) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -126,7 +129,8 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
         title: const Text('Delete match?'),
         content: Text(
           'Delete ${store.teamName(m.teamAId)} vs '
-          '${store.teamName(m.teamBId)} and its scorecard? '
+          '${store.teamName(m.teamBId)}'
+          '${m.status == 'completed' ? ' and its scorecard' : ''}? '
           'This cannot be undone.',
         ),
         actions: [
@@ -837,7 +841,7 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                   ],
                 ),
               ),
-              // Right: status pill + arrow (+ delete for completed).
+              // Right: status pill + arrow (+ delete for non-live).
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -862,7 +866,7 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                       size: 26,
                     ),
                   ),
-                  if (m.status == 'completed')
+                  if (m.status != 'live')
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 20),
                       color: kSilver,
