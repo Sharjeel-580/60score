@@ -520,6 +520,19 @@ class Store extends ChangeNotifier implements PlayoffStore {
     await persist();
   }
 
+  /// v1.3.7: insert or replace a manual entry (the edit path).
+  /// Replacement happens in place so the entries list order is
+  /// stable; an unknown id inserts at the top, like an add.
+  Future<void> upsertManualStat(ManualStatEntry e) async {
+    final i = manualStats.indexWhere((x) => x.id == e.id);
+    if (i >= 0) {
+      manualStats[i] = e;
+    } else {
+      manualStats.insert(0, e);
+    }
+    await persist();
+  }
+
   Future<void> deleteManualStat(String id) async {
     manualStats.removeWhere((e) => e.id == id);
     await persist();
