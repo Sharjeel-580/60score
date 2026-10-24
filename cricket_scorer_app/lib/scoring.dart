@@ -88,7 +88,12 @@ void setNextBatter(InningsState s, String playerId) {
   } else if (s.nonStrikerId == '') {
     s.nonStrikerId = playerId;
   }
-  s.batting.putIfAbsent(playerId, () => BatFig()).batted = true;
+  final fig = s.batting.putIfAbsent(playerId, () => BatFig());
+  fig.batted = true;
+  // A batsman who retired hurt and now resumes: the retired-hurt
+  // marker is cleared so a later dismissal (or the innings ending)
+  // reads correctly; his figure keeps accumulating in the same row.
+  if (!fig.out && fig.howOut == 'retired hurt') fig.howOut = '';
   s.awaitingBatter = false;
 }
 
@@ -178,6 +183,11 @@ bool applyBall(InningsState s, BallInput input) {
   s.currentOverTeamRuns += total;
   s.totalRuns += total;
 
+  // Mankad: the bowler himself effects the run-out, so he is the
+  // fielder of record regardless of what the dialog passed.
+  final effectiveFielderId = (input.isWicket && input.wicketType == 'mankad')
+      ? bowlerId
+      : input.fielderId;
   final ev = BallEvent(
     strikerId: strikerAtBall,
     nonStrikerId: nonStrikerAtBall,
@@ -190,7 +200,7 @@ bool applyBall(InningsState s, BallInput input) {
     outPlayerId: input.isWicket
         ? (input.outPlayerId == '' ? strikerAtBall : input.outPlayerId)
         : '',
-    fielderId: input.fielderId,
+    fielderId: effectiveFielderId,
     zone: input.zone,
     shotX: input.shotX,
     shotY: input.shotY,
@@ -209,12 +219,17 @@ bool applyBall(InningsState s, BallInput input) {
   // Wicket handling (after any crossing on a run-out).
   if (input.isWicket) {
     s.wickets++;
-    if (input.wicketType != 'runOut') bowl.wickets++;
+    // Bowler credit ONLY for bowled / caught / lbw / stumped /
+    // hitWicket. Run out, mankad, retired out, obstructing the
+    // field, hit the ball twice and timed out are team wickets
+    // with no bowler credit (full dismissal set).
+    if (bowlerGetsWicketCredit(input.wicketType)) bowl.wickets++;
     final outId = ev.outPlayerId;
     final outFig = s.batting.putIfAbsent(outId, () => BatFig());
     outFig.batted = true;
     outFig.out = true;
-    outFig.howOut = howOutText(input.wicketType, bowlerId, input.fielderId);
+    outFig.howOut =
+        howOutText(input.wicketType, bowlerId, effectiveFielderId);
     s.fallOfWickets.add(
       FallOfWicket(
         s.wickets,
@@ -259,6 +274,97 @@ bool undoLastBall(InningsState s) {
   return true;
 }
 
+// ---------------- Full dismissal set: non-ball actions ----------------
+
+/// Retire a batsman HURT (not a dismissal): he leaves the crease,
+/// his figure stays NOT out with the marker howOut = 'retired hurt',
+/// no wicket falls and no ball is recorded. He may resume later —
+/// [setNextBatter] clears the marker when he comes back in, and his
+/// runs keep accumulating in the same figure. If the innings ends
+/// while he is retired hurt he simply counts as not out.
+/// Only a batsman currently at the crease can retire hurt.
+/// Pushes an undo snapshot, so Undo reverses the retirement.
+bool retireBatsmanHurt(InningsState s, String playerId) {
+  if (s.isComplete) return false;
+  if (playerId.isEmpty) return false;
+  if (playerId != s.strikerId && playerId != s.nonStrikerId) return false;
+  final fig = s.batting[playerId];
+  if (fig == null || fig.out) return false;
+  s.undoStack.add(_snapshot(s));
+  fig.batted = true;
+  fig.out = false;
+  fig.howOut = 'retired hurt';
+  if (s.strikerId == playerId) s.strikerId = '';
+  if (s.nonStrikerId == playerId) s.nonStrikerId = '';
+  s.awaitingBatter = true;
+  return true;
+}
+
+/// Dismiss a batsman WITHOUT a ball being bowled (between balls):
+/// - 'timedOut': [playerId] has not come in yet (an XI member who
+///   has not batted). He is marked batted, out, 0 balls.
+/// - 'retiredOut': [playerId] is at the crease and retires out;
+///   unlike retired hurt he cannot return in this innings.
+/// In both cases the team loses a wicket, no bowler is credited,
+/// legalBalls is unchanged, and a FallOfWicket entry IS added at
+/// the current score / over so the scorecard's FoW list stays
+/// consistent with the wicket count (the partnerships derivation
+/// tolerates it: event-based partnerships are unaffected because
+/// no ball event is added, and the FoW-based fallback treats it
+/// like any other fall). Pushes an undo snapshot.
+bool dismissBatsmanWithoutBall(
+  InningsState s,
+  String playerId,
+  String wicketType,
+) {
+  if (wicketType != 'timedOut' && wicketType != 'retiredOut') return false;
+  if (s.isComplete) return false;
+  if (playerId.isEmpty) return false;
+  if (!s.battingXI.contains(playerId)) return false;
+  final existing = s.batting[playerId];
+  if (existing != null && existing.out) return false;
+  final atCrease = playerId == s.strikerId || playerId == s.nonStrikerId;
+  if (wicketType == 'timedOut') {
+    // Timed out applies to a batsman who has not come in yet.
+    if (atCrease) return false;
+    if (existing != null && existing.batted) return false;
+  } else {
+    // Retired out applies to a batsman at the crease.
+    if (!atCrease) return false;
+  }
+  s.undoStack.add(_snapshot(s));
+  s.wickets++;
+  final fig = s.batting.putIfAbsent(playerId, () => BatFig());
+  fig.batted = true;
+  fig.out = true;
+  fig.howOut = howOutText(wicketType, '', '');
+  s.fallOfWickets.add(
+    FallOfWicket(
+      s.wickets,
+      s.totalRuns,
+      oversText(s.legalBalls, s.ballsPerOver),
+      playerId,
+    ),
+  );
+  if (atCrease) {
+    if (s.strikerId == playerId) s.strikerId = '';
+    if (s.nonStrikerId == playerId) s.nonStrikerId = '';
+  }
+  if (s.wickets >= s.effectiveMaxWickets || s.isComplete) {
+    s.awaitingBatter = false;
+  } else if (atCrease) {
+    s.awaitingBatter = true;
+  }
+  return true;
+}
+
+/// Wicket types for which the bowler is credited with the wicket.
+/// Every other dismissal (runOut, mankad, retiredOut, obstructing,
+/// hitTwice, timedOut) counts against the team but not the bowler.
+bool bowlerGetsWicketCredit(String wicketType) =>
+    const {'bowled', 'caught', 'lbw', 'stumped', 'hitWicket'}
+        .contains(wicketType);
+
 /// Dismissal text using raw ids; the UI replaces ids with names.
 /// Format tokens: type|bowlerId|fielderId
 String howOutText(String type, String bowlerId, String fielderId) {
@@ -275,21 +381,64 @@ String howOutText(String type, String bowlerId, String fielderId) {
       return 'st $fielderId b $bowlerId';
     case 'hitWicket':
       return 'hit wicket b $bowlerId';
+    case 'mankad':
+      // Distinct from a plain run out on the scorecard:
+      // 'Mankad (<bowlerId>)'. The bowler effects the dismissal,
+      // so the fielder token is the bowler (fielderId falls back
+      // to bowlerId when the dialog did not supply one).
+      final fid = fielderId.isNotEmpty ? fielderId : bowlerId;
+      return fid.isEmpty ? 'Mankad' : 'Mankad ($fid)';
+    case 'retiredOut':
+      return 'retired out';
+    case 'obstructing':
+      return 'obstructing the field';
+    case 'hitTwice':
+      return 'hit the ball twice';
+    case 'timedOut':
+      return 'timed out';
     default:
       return type;
   }
+}
+
+/// The dismissal / status text for a batting figure on a scorecard:
+/// the resolved dismissal when out, 'retired hurt' for a not-out
+/// figure carrying that marker, otherwise 'not out'.
+String batFigStatusText(
+  BatFig f,
+  String Function(String id) nameOf,
+) {
+  if (f.out) return resolveHowOut(f.howOut, nameOf);
+  if (f.howOut == 'retired hurt') return 'retired hurt';
+  return 'not out';
 }
 
 /// Human-readable dismissal by resolving ids via [nameOf].
 String resolveHowOut(String howOut, String Function(String id) nameOf) {
   if (howOut == '') return '';
   var out = howOut;
-  // Replace whole-word id tokens.
+  // Replace whole-word id tokens. Plain dismissal words (including
+  // the full-dismissal-set texts: 'obstructing the field', 'hit the
+  // ball twice', 'retired out / hurt', 'timed out', 'Mankad') are
+  // never player ids and must pass through untouched — a nameOf
+  // fallback could otherwise rewrite a long word (e.g. a store
+  // lookup turns an unknown long token into 'Player').
+  const plainWords = {
+    'bowled',
+    'wicket',
+    'retired',
+    'obstructing',
+    'field',
+    'twice',
+    'timed',
+    'mankad',
+    'hurt',
+  };
   final parts = out.split(' ');
   for (var i = 0; i < parts.length; i++) {
     final p = parts[i];
     final clean = p.replaceAll('(', '').replaceAll(')', '');
-    if (clean.length > 6 && !['bowled', 'wicket'].contains(clean)) {
+    if (clean.length > 6 && !plainWords.contains(clean.toLowerCase())) {
       final n = nameOf(clean);
       if (n != clean) {
         parts[i] = p.replaceAll(clean, n);
@@ -347,6 +496,125 @@ InningsState startInnings(Match m, int n) {
   return m.innings[n - 1];
 }
 
+// ---------------- Super Over (Feature 5) ----------------
+
+/// True when the main match is tied: two innings, both complete
+/// (or the match already marked completed), with equal totals.
+/// Super-over innings are NOT consulted here — a match whose main
+/// innings are tied stays "tied" at this level even after a super
+/// over decides it (the decision lives in [superOverWinnerId]).
+bool matchIsTied(Match m) {
+  if (m.innings.length < 2) return false;
+  final i1 = m.innings[0];
+  final i2 = m.innings[1];
+  if (i1.totalRuns != i2.totalRuns) return false;
+  return (i1.isComplete && i2.isComplete) || m.status == 'completed';
+}
+
+/// Start (or fetch in-progress) super-over innings [n] (1-based)
+/// of a tied match. Super-over innings live in
+/// [Match.superOverInnings], outside [Match.innings], so NRR,
+/// career stats and the main scorecard — all of which iterate
+/// `m.innings` only — are untouched by them.
+///
+/// Format: 1 over ([Match.ballsPerOver] balls), innings ends at
+/// 2 wickets ([InningsState.maxWickets] = 2); wide / no-ball
+/// penalties are copied from the match settings. The batting XI is
+/// the side's full match XI ([Match.xiFor]), and because the
+/// innings state is fresh, players dismissed in the main match CAN
+/// bat again here. Known simplification: a batsman dismissed in
+/// super-over round 1 is NOT barred from round 2 (real rules bar
+/// him); rounds share the full XI like round 1 does.
+///
+/// Batting order: rounds alternate. Round 1 is batted first by the
+/// team that batted SECOND in the main match (standard practice);
+/// each later round is batted first by the side that batted second
+/// in the previous round — i.e. the first-batting side swaps every
+/// round. The second innings of a round chases the first innings'
+/// total + 1.
+InningsState startSuperOverInnings(Match m, int n) {
+  while (m.superOverInnings.length < n) {
+    final idx = m.superOverInnings.length; // 0-based index being created
+    final isFirstOfRound = idx % 2 == 0;
+    final String battingId;
+    if (isFirstOfRound) {
+      // Round number (1-based): odd rounds start with the main
+      // match's second-batting side, even rounds with its
+      // first-batting side (alternation, see doc above).
+      final round = idx ~/ 2 + 1;
+      battingId = round % 2 == 1 ? m.battingSecondId : m.battingFirstId;
+    } else {
+      // Second innings of the round: the other side chases.
+      battingId = m.superOverInnings[idx - 1].battingTeamId == m.teamAId
+          ? m.teamBId
+          : m.teamAId;
+    }
+    final bowlingId = battingId == m.teamAId ? m.teamBId : m.teamAId;
+    final inn = InningsState(
+      battingTeamId: battingId,
+      bowlingTeamId: bowlingId,
+      battingXI: m.xiFor(battingId),
+      bowlingXI: m.xiFor(bowlingId),
+      oversLimit: 1,
+      ballsPerOver: m.ballsPerOver,
+    );
+    inn.widePenalty = m.widePenalty;
+    inn.noBallPenalty = m.noBallPenalty;
+    inn.maxWickets = 2;
+    if (!isFirstOfRound) {
+      inn.target = m.superOverInnings[idx - 1].totalRuns + 1;
+    }
+    m.superOverInnings.add(inn);
+  }
+  return m.superOverInnings[n - 1];
+}
+
+/// The team that won the super over, or null when no completed
+/// round has decided it yet. Rounds are evaluated pairwise
+/// (innings 0v1, 2v3, ...): a round decides when its 2nd innings
+/// [InningsState.isComplete] — the higher total wins, and a chase
+/// that passed its target mid-over is already complete via the
+/// target rule. A round whose 2nd innings completes with EQUAL
+/// totals is tied and decides nothing. Returns the winner of the
+/// LATEST completed round (earlier rounds were tied by
+/// construction — play only continues past a tied round).
+String? superOverWinnerId(Match m) {
+  String? winner;
+  for (var r = 0; r + 1 < m.superOverInnings.length; r += 2) {
+    final first = m.superOverInnings[r];
+    final second = m.superOverInnings[r + 1];
+    if (!second.isComplete) continue;
+    if (second.totalRuns > first.totalRuns) {
+      winner = second.battingTeamId;
+    } else if (first.totalRuns > second.totalRuns) {
+      winner = first.battingTeamId;
+    } else {
+      winner = null; // this round tied
+    }
+  }
+  return winner;
+}
+
+/// True when at least one full super-over round has been played,
+/// every completed round was tied and there is no winner yet —
+/// i.e. the tiebreak needs another round. There is no manual
+/// override: tied rounds are simply replayed until one decides.
+bool superOverNeedsAnotherRound(Match m) {
+  if (m.superOverInnings.length < 2) return false;
+  if (superOverWinnerId(m) != null) return false;
+  var anyCompletedRound = false;
+  for (var r = 0; r + 1 < m.superOverInnings.length; r += 2) {
+    final first = m.superOverInnings[r];
+    final second = m.superOverInnings[r + 1];
+    if (!second.isComplete) continue;
+    // A completed round with unequal totals would have produced a
+    // winner above, so any completed round here was tied.
+    if (first.totalRuns != second.totalRuns) return false;
+    anyCompletedRound = true;
+  }
+  return anyCompletedRound;
+}
+
 /// Compute the result text once a match finishes. Also updates m.status
 /// and m.resultText when the 2nd innings is complete.
 String computeResult(Match m, String Function(String teamId) teamName) {
@@ -369,7 +637,15 @@ String computeResult(Match m, String Function(String teamId) teamName) {
     text =
         '${teamName(i1.battingTeamId)} won by $margin run${margin == 1 ? '' : 's'}';
   } else {
-    text = 'Match tied';
+    // Equal totals: a decided super over overrides the plain tie.
+    final soWinner = superOverWinnerId(m);
+    if (soWinner != null) {
+      text = '${teamName(soWinner)} won the Super Over';
+    } else if (m.superOverInnings.isNotEmpty) {
+      text = 'Match tied (Super Over tied)';
+    } else {
+      text = 'Match tied';
+    }
   }
   if (i2.isComplete) {
     m.status = 'completed';
@@ -789,10 +1065,22 @@ List<PointsRow> computePointsTable(
     account(i1);
     account(i2);
     if (i1.totalRuns == i2.totalRuns) {
-      a.tied++;
-      b.tied++;
-      a.points += 1;
-      b.points += 1;
+      // A decided super over turns the tie into a win/loss for
+      // points purposes (2 pts, no tied point). NRR accounting
+      // above is unchanged: account() only ever reads innings[0..1],
+      // so super-over runs never enter NRR.
+      final soWinner = superOverWinnerId(m);
+      if (soWinner != null) {
+        final loserId = soWinner == m.teamAId ? m.teamBId : m.teamAId;
+        rows[soWinner]!.won++;
+        rows[soWinner]!.points += 2;
+        rows[loserId]!.lost++;
+      } else {
+        a.tied++;
+        b.tied++;
+        a.points += 1;
+        b.points += 1;
+      }
     } else {
       final winnerId = i1.totalRuns > i2.totalRuns
           ? i1.battingTeamId
@@ -902,6 +1190,10 @@ Map<String, CareerStats> computeCareerStats(
         if (ev.wicketType == 'caught') c.catches++;
         if (ev.wicketType == 'stumped') c.stumpings++;
         if (ev.wicketType == 'runOut') c.runOuts++;
+        // Mankad is a run-out effected by the bowler: the event's
+        // fielderId is the bowler (set in applyBall), credited as
+        // a run-out — never as a bowler wicket.
+        if (ev.wicketType == 'mankad') c.runOuts++;
       }
       // Dismissals the ball events do not cover (v1.3.5): figure-only
       // records (e.g. a scorecard rebuilt from its figures) carry the
@@ -944,6 +1236,31 @@ Map<String, CareerStats> computeCareerStats(
 (String, String)? fielderCreditFromHowOut(String howOut) {
   final t = howOut.trim();
   if (t.isEmpty) return null;
+  // Full dismissal set, plain texts with no creditable fielder:
+  // 'retired out', 'timed out', 'obstructing the field' (kept
+  // simple: no fielder credit even though a run-out can be involved
+  // in reality), 'hit the ball twice' and 'retired hurt' (not a
+  // dismissal at all) never credit anyone.
+  final lower = t.toLowerCase();
+  if (lower == 'retired out' ||
+      lower == 'timed out' ||
+      lower == 'obstructing the field' ||
+      lower == 'hit the ball twice' ||
+      lower == 'retired hurt' ||
+      lower == 'retired') {
+    return null;
+  }
+  // Mankad: stored as 'Mankad (<bowlerId>)' — a run-out credit for
+  // the bowler named in the token, when it looks like a player id.
+  if (lower.startsWith('mankad (')) {
+    final end = t.indexOf(')', 8);
+    if (end > 8) {
+      final id = t.substring(8, end);
+      if (_looksLikePlayerId(id)) return ('runOut', id);
+    }
+    return null;
+  }
+  if (lower == 'mankad') return null;
   if (t.startsWith('run out (')) {
     final end = t.indexOf(')', 9);
     if (end > 9) {
@@ -1042,8 +1359,19 @@ Map<String, TeamStats> computeTeamStats(List<Match> matches) {
     first.battedFirst++;
     second.chased++;
     if (i1.totalRuns == i2.totalRuns) {
-      a.tied++;
-      b.tied++;
+      // Super-over override, mirroring computePointsTable: a
+      // decided super over is a win/loss here too, never a tie.
+      final soWinner = superOverWinnerId(m);
+      if (soWinner != null) {
+        final loserId = soWinner == m.teamAId ? m.teamBId : m.teamAId;
+        get(soWinner).won++;
+        get(loserId).lost++;
+        if (soWinner == i1.battingTeamId) first.wonBattingFirst++;
+        if (soWinner == i2.battingTeamId) second.wonChasing++;
+      } else {
+        a.tied++;
+        b.tied++;
+      }
     } else {
       final winnerId = i1.totalRuns > i2.totalRuns
           ? i1.battingTeamId
@@ -1076,7 +1404,17 @@ HeadToHead headToHead(List<Match> matches, String teamA, String teamB) {
     final i1 = m.innings[0];
     final i2 = m.innings[1];
     if (i1.totalRuns == i2.totalRuns) {
-      h.tied++;
+      // Super-over override, mirroring computePointsTable.
+      final soWinner = superOverWinnerId(m);
+      if (soWinner != null) {
+        if (soWinner == teamA) {
+          h.aWins++;
+        } else {
+          h.bWins++;
+        }
+      } else {
+        h.tied++;
+      }
     } else {
       final winnerId = i1.totalRuns > i2.totalRuns
           ? i1.battingTeamId
@@ -1460,7 +1798,7 @@ String scorecardText(
     );
     for (final pid in batters) {
       final f = inn.batting[pid]!;
-      final how = f.out ? resolveHowOut(f.howOut, nameOf) : 'not out';
+      final how = batFigStatusText(f, nameOf);
       buf.writeln(
         '  ${nameOf(pid)}  $how  ${f.runs} (${f.balls}b, ${f.fours}x4, ${f.sixes}x6)',
       );

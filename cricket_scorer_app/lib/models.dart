@@ -172,7 +172,9 @@ class BallEvent {
   batRuns; // runs credited to bat (or run for bye/leg-bye/wide extras below)
   int extraRuns; // additional runs beyond the wide penalty (wide only)
   bool isWicket;
-  String wicketType; // '' or bowled/caught/lbw/runOut/stumped/hitWicket
+  String wicketType; // '' or bowled/caught/lbw/runOut/stumped/hitWicket/
+  // mankad/retiredOut/obstructing/hitTwice/timedOut (full dismissal
+  // set; 'retired hurt' is NOT a wicket type — it is a BatFig marker)
   String outPlayerId; // '' if none
   String fielderId; // '' if none (catch / run-out / stumping credit)
   int? zone; // legacy wagon-wheel zone 1..8 (read-only, replaced by shotX/shotY)
@@ -522,6 +524,15 @@ class Match {
   /// tells the playoff engine which matches it owns.
   String stage;
   List<InningsState> innings;
+
+  /// Super-over innings for a tied match (Feature 5 — Super Over).
+  /// These live OUTSIDE [innings] on purpose: points-table NRR
+  /// accounting, career stats and the main scorecard all iterate
+  /// [innings] only, so super-over runs/wickets never pollute the
+  /// main-match record. Each super-over innings is 1 over with a
+  /// 2-wicket limit (see `startSuperOverInnings` in scoring.dart);
+  /// innings are paired into rounds (0v1, 2v3, ...).
+  List<InningsState> superOverInnings;
   String resultText;
   int totalWickets; // 0 = default XI-1
   bool lastManStands;
@@ -548,6 +559,7 @@ class Match {
     this.status = 'live',
     this.stage = 'league',
     List<InningsState>? innings,
+    List<InningsState>? superOverInnings,
     this.resultText = '',
     this.totalWickets = 0,
     this.lastManStands = false,
@@ -557,7 +569,8 @@ class Match {
     this.matchTitle = '',
     this.ballType = 'Tennis Ball',
     this.season = '',
-  }) : innings = innings ?? [];
+  }) : innings = innings ?? [],
+       superOverInnings = superOverInnings ?? [];
 
   String get battingFirstId {
     // team that bats first based on toss
@@ -587,6 +600,7 @@ class Match {
     'status': status,
     'stage': stage,
     'innings': innings.map((i) => i.toJson()).toList(),
+    'superOverInnings': superOverInnings.map((i) => i.toJson()).toList(),
     'resultText': resultText,
     'totalWickets': totalWickets,
     'lastManStands': lastManStands,
@@ -615,6 +629,11 @@ class Match {
       status: j['status'] as String? ?? 'live',
       stage: j['stage'] as String? ?? 'league',
       innings: ((j['innings'] as List?) ?? [])
+          .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      // Records written before the Super Over feature have no such
+      // key and read as an empty list.
+      superOverInnings: ((j['superOverInnings'] as List?) ?? [])
           .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
           .toList(),
       resultText: j['resultText'] as String? ?? '',

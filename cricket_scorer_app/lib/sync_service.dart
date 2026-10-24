@@ -30,6 +30,18 @@
 //   up on the others on its own — no manual step. This device's
 //   own writes are recognised by their updatedAt stamp and skipped
 //   (echo suppression).
+// - Per-entity engine (Sync Fix "D", Phase C1): pulls and pushes
+//   now run through the entity coordinator (see
+//   entity_sync_coordinator.dart) behind this same public API —
+//   dual-read of the per-entity collections and the legacy blob,
+//   the hardened V2 merge, tombstones, and DELTA pushes of only
+//   the changed records instead of the whole-dataset rewrite. The
+//   legacy blob is read but never written by the new engine; it
+//   stays as the fallback copy, and ANY failure of the entity path
+//   (notably: the live Firestore rules predate the entity
+//   collections — publishing their rules is the separately
+//   approved Phase D) falls back to the legacy blob behaviour
+//   below, unchanged, so sync is never worse than before C1.
 //   Exception (v1.3.3): a completely empty side never wins — an empty
 //   local scope always imports a non-empty backup (its "last modified"
 //   clock is unreliable right after activation), and an empty backup
@@ -61,9 +73,13 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_profile.dart';
 import 'auth_service.dart';
+import 'entity_firestore.dart';
+import 'entity_sync.dart';
+import 'entity_sync_coordinator.dart';
 import 'models.dart';
 import 'photo_sync.dart';
 import 'publish_service.dart';
@@ -247,6 +263,19 @@ class SyncService {
   /// Live-receive listener (v1.3.4) and the uid it belongs to.
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _liveSub;
   String? _liveUid;
+
+  /// Live-receive listeners for the per-entity collections
+  /// (Phase C1) and the uid they belong to. Any change in any
+  /// collection schedules one debounced entity sync round.
+  final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
+      _entitySubs = [];
+  String? _entityUid;
+  Timer? _entityDebounce;
+
+  /// Serializes entity sync rounds: a pull, a push and a live
+  /// event can all ask for a round at once, and a round reads and
+  /// writes the store — two racing would interleave their diffs.
+  Future<void> _roundChain = Future<void>.value();
 
   /// First-pull push guard for the current activation (bug #R1).
   final SyncPushGuard _guard = SyncPushGuard();
@@ -502,7 +531,7 @@ class SyncService {
       _pushDirty = false;
       return;
     }
-    _push(ref, store);
+    _pushCurrent(store);
   }
 
   /// Cancels a pending debounced push (identity switches, log-out).
@@ -567,6 +596,16 @@ class SyncService {
         'profile': store.profile == null
             ? ''
             : jsonEncode(store.profile!.toJson()),
+        // Deletion tombstones ride along as one additive field
+        // (Sync Fix "D", Phase C0 — the blob bridge of
+        // SYNC_FIX_D_PLAN.md §4): older builds ignore the unknown
+        // field on read, and merge:true pushes from older builds
+        // leave it in place, while builds with this code union it
+        // into their tombstone set and filter dead records out of
+        // every merge — so a delete now sticks instead of being
+        // resurrected by the union merge.
+        'tombstones':
+            jsonEncode(store.tombstones.map((t) => t.toJson()).toList()),
         'updatedAt': now,
         'appVersion': '1.2.0',
       }, SetOptions(merge: true));
@@ -598,6 +637,143 @@ class SyncService {
     }
   }
 
+  // ---------------- Per-entity engine (Phase C1) ----------------
+
+  /// Runs [op] after every previously queued entity round has
+  /// finished. Errors propagate to the caller; the chain itself
+  /// never stays failed. A call made from WITHIN a round (the
+  /// settle flush pushing through [_pushCurrent]) runs directly —
+  /// queueing it behind the round that is waiting for it would
+  /// deadlock.
+  bool _inRound = false;
+
+  Future<T> _serialized<T>(Future<T> Function() op) {
+    if (_inRound) return op();
+    final result = _roundChain.then((_) async {
+      _inRound = true;
+      try {
+        return await op();
+      } finally {
+        _inRound = false;
+      }
+    });
+    _roundChain = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
+  /// Builds the entity-engine coordinator for the CURRENT
+  /// identity, or null when sync is unavailable (logged out /
+  /// Firebase not ready / the store holds another identity's
+  /// scope). The migration flag is per-account and lives in
+  /// SharedPreferences next to the data it describes.
+  EntitySyncCoordinator? _buildCoordinator(Store store) {
+    final auth = AuthService();
+    if (!auth.firebaseReady || !auth.isLoggedIn) return null;
+    final uid = auth.currentUser!.uid;
+    if (store.identityId != uid) return null;
+    final fs = FirebaseFirestore.instance;
+    final flagKey = 'score60_entity_migrated_v1__$uid';
+    return EntitySyncCoordinator(
+      local: StoreEntityDocStore(store),
+      cloud: FirestoreEntityDocStore(firestore: fs, uid: uid),
+      blobSource: FirestoreBlobSource(fs, uid),
+      migrationDone: () async {
+        final prefs = await SharedPreferences.getInstance();
+        return prefs.getBool(flagKey) ?? false;
+      },
+      markMigrationDone: () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(flagKey, true);
+      },
+    );
+  }
+
+  /// One entity sync round with all of this service's follow-ups,
+  /// mirroring what the legacy pull/push paths do around their
+  /// transfer: the migration runs first (its failure to verify
+  /// does not block the round — dual-read still unions the
+  /// untouched blob); when the round changed the local side,
+  /// photos are refilled from the photos subcollection and the
+  /// store is persisted without re-arming a push; the push guard
+  /// is settled for an activation's real pulls; and an applied
+  /// round arms the re-publish, exactly as a legacy import does.
+  Future<bool> _runEntitySync(
+    Store store,
+    EntitySyncCoordinator coordinator, {
+    required bool settleGuard,
+    bool pushPhotosAfter = false,
+  }) async {
+    final uid = AuthService().currentUser!.uid;
+    if (store.identityId != uid) return false;
+    final migration = await coordinator.runMigrationIfNeeded();
+    if (!migration.ok) {
+      debugPrint('Sync migration not verified: ${migration.detail}');
+    }
+    final result = await coordinator.syncRound();
+    final applied = result.localChanged;
+    if (applied) {
+      _applyingRemote = true;
+      try {
+        final photos = _photosRef();
+        if (photos != null) await PhotoSync.pullPhotos(photos, store);
+        await store.persist(skipSync: true);
+      } finally {
+        _applyingRemote = false;
+      }
+      _lastSyncAt = DateTime.now();
+      _lastError = null;
+    }
+    if (pushPhotosAfter) {
+      final photos = _photosRef();
+      if (photos != null) await PhotoSync.pushPhotos(photos, store);
+      await store.setLastModified(DateTime.now().millisecondsSinceEpoch);
+      _guard.notePushed(emptyDataset: SyncPushGuard.datasetIsEmpty(store));
+      _lastSyncAt = DateTime.now();
+      _lastError = null;
+    }
+    if (settleGuard) {
+      _settleAfterPull(store, uid,
+          imported: applied,
+          docSeen: result.remoteSeen,
+          remoteNonEmpty: result.remoteNonEmpty);
+    } else if (applied &&
+        shouldArmRepublishAfterPull(
+          applied: true,
+          hasPublished: PublishService.hasPublished(store),
+        )) {
+      PublishService().scheduleRepublish(store);
+    }
+    return applied;
+  }
+
+  /// One push of the current state through the CURRENT engine:
+  /// an entity round (delta writes of the changed records only)
+  /// when the engine is available; the legacy blob write when it
+  /// is not, and whenever the entity path fails — a push must
+  /// never be lost to the migration. The push-debt bookkeeping
+  /// mirrors the legacy [_push]: the debt clears only when no
+  /// newer change arrived while the round ran.
+  Future<void> _pushCurrent(Store store) async {
+    final coordinator = _buildCoordinator(store);
+    if (coordinator != null) {
+      final gen = _pushGen;
+      try {
+        await _serialized(() => _runEntitySync(store, coordinator,
+            settleGuard: false, pushPhotosAfter: true));
+        if (_pushGen == gen) {
+          _pushDirty = false;
+          _stopRetryTimer();
+        }
+        return;
+      } catch (e) {
+        _lastError = e.toString();
+        debugPrint('Sync entity push failed, blob fallback: $e');
+      }
+    }
+    final ref = _docRef();
+    if (ref != null) await _push(ref, store);
+  }
+
   /// Pull remote state into [store]. Returns true when remote data
   /// was applied.
   ///
@@ -619,6 +795,21 @@ class SyncService {
     final ref = _docRef();
     if (ref == null) return false;
     final uid = AuthService().currentUser!.uid;
+    // Phase C1: the entity engine runs the pull (dual-read,
+    // hardened merge, delta write-backs). ANY failure of the
+    // entity path — including the live Firestore rules not yet
+    // covering the entity collections — falls back to the legacy
+    // blob pull below, unchanged.
+    final coordinator = _buildCoordinator(store);
+    if (coordinator != null) {
+      try {
+        return await _serialized(
+            () => _runEntitySync(store, coordinator, settleGuard: true));
+      } catch (e) {
+        _lastError = e.toString();
+        debugPrint('Sync entity pull failed, blob fallback: $e');
+      }
+    }
     try {
       final snap = await ref.get();
       if (!snap.exists) {
@@ -673,11 +864,30 @@ class SyncService {
     // of a corrupt field whenever an import does happen.
     final rTeams = _decode(data['teams'], Team.fromJson);
     final rTournaments = _decode(data['tournaments'], Tournament.fromJson);
-    final rMatches = _decode(data['matches'], Match.fromJson);
+    final rMatchesRaw = _decode(data['matches'], Match.fromJson);
     final rRegPlayers = _decode(data['regPlayers'], RegPlayer.fromJson);
     final rDrafts = _decode(data['drafts'], Draft.fromJson);
     final rManualStats =
         _decode(data['manualStats'], ManualStatEntry.fromJson);
+    // Tombstone bridge (Sync Fix "D", Phase C0): union any
+    // tombstones the remote carries into the local set, then hold
+    // BOTH sides' match lists to them for the rest of this handler
+    // — a tombstoned match is dead no matter which copy shows up
+    // (the delete-resurrection fix). Absent/corrupt field → no
+    // remote tombstones; the local set is never reduced by a pull.
+    final tombstonesChanged =
+        store.absorbTombstones(_decodeTombstones(data['tombstones']));
+    final deadMatchIds = store.tombstonedMatchIds;
+    final rMatches = (rMatchesRaw == null || deadMatchIds.isEmpty)
+        ? rMatchesRaw
+        : rMatchesRaw
+            .where((m) => !deadMatchIds.contains(m.id))
+            .toList();
+    final localMatches = deadMatchIds.isEmpty
+        ? store.matches
+        : store.matches
+            .where((m) => !deadMatchIds.contains(m.id))
+            .toList();
     final remoteEmpty = (rTournaments?.isEmpty ?? true) &&
         (rTeams?.isEmpty ?? true) &&
         (rMatches?.isEmpty ?? true);
@@ -699,17 +909,28 @@ class SyncService {
     // that failed to decode (null) cannot be merged; the local
     // matches then stand as they are.
     final mergedMatches = rMatches == null
-        ? store.matches
-        : mergeMatches(store.matches, rMatches);
+        ? localMatches
+        : mergeMatches(localMatches, rMatches);
     final mergedDiffersFromLocal =
         !sameMatchContent(mergedMatches, store.matches);
-    final mergedDiffersFromRemote = rMatches != null &&
-        !sameMatchContent(mergedMatches, rMatches);
+    // Compared against the RAW remote list on purpose: when the
+    // cloud blob still carries a tombstoned record, the merged
+    // (cleaned) list differs from it and the push-back below
+    // scrubs the blob too.
+    final mergedDiffersFromRemote = rMatchesRaw != null &&
+        !sameMatchContent(mergedMatches, rMatchesRaw);
 
     if (decision == PullDecision.keepLocalAndPush) {
       // The backup is empty but this device holds the data: never
       // import the empty copy — push the local data up instead,
-      // so the backup is healed for every other device too.
+      // so the backup is healed for every other device too. Any
+      // locally-held copy of a tombstoned match is scrubbed first
+      // so the healing push cannot carry the zombie back up.
+      if (tombstonesChanged ||
+          !sameMatchContent(localMatches, store.matches)) {
+        store.matches = localMatches;
+        await store.persist(skipSync: true);
+      }
       await _push(ref, store);
       if (settleGuard) {
         _settleAfterPull(store, uid,
@@ -735,7 +956,7 @@ class SyncService {
       if (photos != null) {
         photosChanged = await PhotoSync.pullPhotos(photos, store);
       }
-      if (applied || photosChanged) {
+      if (applied || photosChanged || tombstonesChanged) {
         await store.persist(skipSync: true);
         _lastSyncAt = DateTime.now();
       }
@@ -822,7 +1043,10 @@ class SyncService {
       return;
     }
     final uid = AuthService().currentUser!.uid;
-    if (_liveSub != null && _liveUid == uid) return;
+    if (_liveSub != null && _liveUid == uid) {
+      _startEntityListeners(store, uid);
+      return;
+    }
     stopLiveSync();
     _liveUid = uid;
     _liveSub = ref.snapshots(includeMetadataChanges: true).listen(
@@ -832,6 +1056,74 @@ class SyncService {
         debugPrint('Sync live listener failed: $e');
       },
     );
+    _startEntityListeners(store, uid);
+  }
+
+  /// Live-receive for the per-entity collections (Phase C1): any
+  /// change — another device's scored match landing as an entity
+  /// document, a tombstone arriving — schedules a debounced
+  /// entity sync round, so arrivals show up on their own just as
+  /// blob writes did. The blob listener above stays as the
+  /// fallback for writes made by builds that predate the entity
+  /// engine, whose blob changes the rounds absorb via dual-read.
+  ///
+  /// Until the Phase-D rules are published these collections may
+  /// be unreadable; those listener errors are recorded exactly
+  /// like the blob listener's, and sync keeps working via the
+  /// blob path meanwhile.
+  void _startEntityListeners(Store store, String uid) {
+    if (_entitySubs.isNotEmpty && _entityUid == uid) return;
+    _stopEntityListeners();
+    _entityUid = uid;
+    final user = FirebaseFirestore.instance.collection('users').doc(uid);
+    final collections = <CollectionReference<Map<String, dynamic>>>[
+      for (final kind in EntityKind.all)
+        kind == EntityKind.profile
+            ? user.collection('meta')
+            : user.collection(kind),
+      user.collection(EntityKind.tombstones),
+    ];
+    for (final col in collections) {
+      _entitySubs.add(col.snapshots().listen(
+        (_) => _onEntityActivity(store, uid),
+        onError: (Object e) {
+          _lastError = e.toString();
+          debugPrint('Sync entity listener failed: $e');
+        },
+      ));
+    }
+  }
+
+  void _stopEntityListeners() {
+    for (final sub in _entitySubs) {
+      sub.cancel();
+    }
+    _entitySubs.clear();
+    _entityUid = null;
+    _entityDebounce?.cancel();
+    _entityDebounce = null;
+  }
+
+  void _onEntityActivity(Store store, String uid) {
+    // A stale listener (or a store that has since switched scope)
+    // must never touch another identity's data — the same checks
+    // the blob listener runs.
+    if (_entityUid != uid) return;
+    if (AuthService().currentUser?.uid != uid) return;
+    if (store.identityId != uid) return;
+    if (_applyingRemote) return;
+    _entityDebounce?.cancel();
+    _entityDebounce = Timer(const Duration(milliseconds: 400), () async {
+      final coordinator = _buildCoordinator(store);
+      if (coordinator == null) return;
+      try {
+        await _serialized(() => _runEntitySync(store, coordinator,
+            settleGuard: !_guard.pullSettled));
+      } catch (e) {
+        _lastError = e.toString();
+        debugPrint('Sync entity live round failed: $e');
+      }
+    });
   }
 
   /// Stop the live listener (identity switches, log-out).
@@ -839,6 +1131,7 @@ class SyncService {
     _liveSub?.cancel();
     _liveSub = null;
     _liveUid = null;
+    _stopEntityListeners();
   }
 
   Future<void> _onLiveSnapshot(
@@ -957,8 +1250,24 @@ class SyncService {
       PublishService().scheduleRepublish(store);
     }
     if (flush && store.identityId == uid) {
-      final ref = _docRef();
-      if (ref != null) _push(ref, store);
+      _pushCurrent(store);
+    }
+  }
+
+  /// Decodes the blob's additive tombstone field. Returns an
+  /// empty list when the field is absent (older backups) or
+  /// corrupt — a bad tombstone field must never wipe the local
+  /// set; [Store.absorbTombstones] only ever adds to it.
+  List<Tombstone> _decodeTombstones(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list
+          .map((e) => Tombstone.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.kind.isNotEmpty && t.id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
     }
   }
 

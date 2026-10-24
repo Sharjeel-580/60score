@@ -11,10 +11,62 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'account_profile.dart';
 import 'draft.dart';
+import 'entity_sync.dart';
 import 'models.dart';
 import 'publish_service.dart';
 import 'sync_service.dart';
 import 'tournament_engine.dart';
+
+/// One soft-deleted record kept in Trash (Feature 1 — Trash +
+/// Restore). [payload] is the entity's full `toJson()` map captured
+/// BEFORE removal, so a restore can rebuild the record exactly as
+/// it was (innings, players, settings — everything).
+///
+/// Only matches, teams and tournaments are trashed (the kinds in
+/// scope for this feature). Records deleted BEFORE this feature
+/// existed have no snapshot and cannot be restored — they simply
+/// never appear in Trash.
+class TrashEntry {
+  /// Entity kind — one of the [EntityKind] values
+  /// (`matches` / `teams` / `tournaments`).
+  final String kind;
+  final String id;
+
+  /// Display label captured at delete time: a team's / tournament's
+  /// name, or for a match its title when set, else "Team A vs Team B".
+  final String name;
+
+  /// Wall-clock ms when the record was deleted.
+  final int deletedAt;
+
+  /// The entity's full `toJson()` map.
+  final Map<String, dynamic> payload;
+
+  const TrashEntry({
+    required this.kind,
+    required this.id,
+    required this.name,
+    required this.deletedAt,
+    required this.payload,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'kind': kind,
+        'id': id,
+        'name': name,
+        'deletedAt': deletedAt,
+        'payload': payload,
+      };
+
+  factory TrashEntry.fromJson(Map<String, dynamic> j) => TrashEntry(
+        kind: j['kind'] as String? ?? '',
+        id: j['id'] as String? ?? '',
+        name: j['name'] as String? ?? '',
+        deletedAt: (j['deletedAt'] as num?)?.toInt() ?? 0,
+        payload: ((j['payload'] as Map?) ?? const {})
+            .cast<String, dynamic>(),
+      );
+}
 
 class Store extends ChangeNotifier implements PlayoffStore {
   List<Team> teams = [];
@@ -24,6 +76,69 @@ class Store extends ChangeNotifier implements PlayoffStore {
   List<RegPlayer> regPlayers = [];
   List<Draft> drafts = [];
   List<ManualStatEntry> manualStats = [];
+
+  /// Deletion tombstones (Sync Fix "D", Phase C0): every delete*
+  /// records one; sync carries them to the cloud so a deleted
+  /// record is never resurrected by a stale copy held elsewhere
+  /// (the 2026-10-23 delete-resurrection defect — see
+  /// lib/entity_sync.dart and SYNC_FIX_D_PLAN.md §4). An explicit
+  /// re-add of the same id (upsert / backup restore) clears the
+  /// tombstone again: that is the admin-restore path.
+  List<Tombstone> tombstones = [];
+
+  /// Soft-delete snapshots (Feature 1 — Trash + Restore), scoped
+  /// per identity exactly like [tombstones]. A delete of a match,
+  /// team or tournament snapshots the record here BEFORE removal;
+  /// restoring re-inserts it through the normal upsert path (which
+  /// clears its tombstone — the admin-restore path above), and a
+  /// permanent delete drops only the snapshot, leaving the
+  /// tombstone in place so the record stays deleted everywhere.
+  /// Records deleted before this feature have no snapshot and
+  /// cannot be restored (they never appear here).
+  List<TrashEntry> _trash = [];
+
+  /// Restored-record markers (Feature 1 follow-up, D batch): when a
+  /// record is explicitly restored (Trash restore, or a backup
+  /// import) its local tombstone is cleared by the upsert — but the
+  /// CLOUD may still hold that tombstone, and the sync merge kills
+  /// any record whose tombstone it cannot out-rank. So a restore
+  /// also remembers the tombstone's `deletedAt` here (key
+  /// `'<kind>|<id>'`), and StoreEntityDocStore.readAll emits the
+  /// record with `restored: true` and its stamp floored above this
+  /// value until a sync round spends the cloud tombstone (the
+  /// coordinator clears the marker at that moment). A fresh delete
+  /// of the same record drops the marker again.
+  Map<String, int> _restoredMarkers = {};
+
+  /// The tombstone `deletedAt` a restored record must out-rank in
+  /// the entity sync, or null when the record was not restored
+  /// against a tombstone.
+  int? restoredMarkerFor(String kind, String id) =>
+      _restoredMarkers['$kind|$id'];
+
+  /// Drops the restored marker for one record (the sync round has
+  /// spent its tombstone, or the record was deleted again).
+  void clearRestoredMarker(String kind, String id) {
+    _restoredMarkers.remove('$kind|$id');
+  }
+
+  /// All (kind, id) pairs currently carrying a restored marker —
+  /// the sync coordinator reconciles these after every round.
+  List<(String, String)> get restoredMarkerRecords => [
+        for (final key in _restoredMarkers.keys)
+          if (key.contains('|'))
+            (
+              key.substring(0, key.indexOf('|')),
+              key.substring(key.indexOf('|') + 1),
+            ),
+      ];
+
+  /// Trash entries, newest first.
+  List<TrashEntry> get trashEntries {
+    final sorted = List<TrashEntry>.of(_trash)
+      ..sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
+    return List.unmodifiable(sorted);
+  }
 
   /// This identity's account profile (feature #3) — set for signed-in
   /// accounts, always null for guests / the locked scope.
@@ -40,6 +155,9 @@ class Store extends ChangeNotifier implements PlayoffStore {
   static const _kDrafts = 'score60_drafts_v1';
   static const _kManual = 'score60_manualstats_v1';
   static const _kProfile = 'score60_profile_v1';
+  static const _kTombstones = 'score60_tombstones_v1';
+  static const _kTrash = 'score60_trash_v1';
+  static const _kRestored = 'score60_restored_v1';
   static const _kWelcome = 'score60_welcome_v1';
   static const _kLastModified = 'score60_last_modified_v1';
 
@@ -93,6 +211,27 @@ class Store extends ChangeNotifier implements PlayoffStore {
             prefs.getString(_scoped(_kManual)), ManualStatEntry.fromJson) ??
         manualStats;
     profile = _decodeProfile(prefs.getString(_scoped(_kProfile))) ?? profile;
+    tombstones =
+        _decodeTombstones(prefs.getString(_scoped(_kTombstones))) ??
+            tombstones;
+    _trash = _decodeTrash(prefs.getString(_scoped(_kTrash))) ?? _trash;
+    _restoredMarkers =
+        _decodeRestoredMarkers(prefs.getString(_scoped(_kRestored))) ??
+            _restoredMarkers;
+    // Load-time consistency (mirrors the tombstone self-heal in
+    // [importJson]): a record that exists locally again — e.g. it
+    // was restored or re-added by another path — must not also sit
+    // in Trash.
+    _trash.removeWhere((e) => _recordExistsLocally(e.kind, e.id));
+    // A restored marker is only meaningful while its record exists
+    // locally; the record being gone means the restore was itself
+    // undone (deleted again / scope reset), so the marker is spent.
+    _restoredMarkers.removeWhere((key, _) {
+      final sep = key.indexOf('|');
+      if (sep <= 0) return true;
+      return !_recordExistsLocally(
+          key.substring(0, sep), key.substring(sep + 1));
+    });
     welcomeDone = prefs.getBool(_kWelcome) ?? false;
     loaded = true;
     notifyListeners();
@@ -113,6 +252,9 @@ class Store extends ChangeNotifier implements PlayoffStore {
     regPlayers = [];
     drafts = [];
     manualStats = [];
+    tombstones = [];
+    _trash = [];
+    _restoredMarkers = {};
     profile = null;
     loaded = false;
     await load();
@@ -191,6 +333,9 @@ class Store extends ChangeNotifier implements PlayoffStore {
       _kReg,
       _kDrafts,
       _kManual,
+      _kTombstones,
+      _kTrash,
+      _kRestored,
     ];
     for (final base in dataKeys) {
       final v = prefs.getString(base);
@@ -297,8 +442,46 @@ class Store extends ChangeNotifier implements PlayoffStore {
       dec('manualStats', ManualStatEntry.fromJson),
       (e) => e.id,
     );
+    // Restoring a record from a backup file is an explicit restore
+    // (the admin-restore path): any record that exists locally
+    // again loses its tombstone, or the restore would be undone by
+    // the next sync round. The tombstone's deletedAt is kept as a
+    // restored marker first, so the entity sync can still prove
+    // this restore against a tombstone held only in the cloud.
+    for (final t in tombstones) {
+      if (_recordExistsLocally(t.kind, t.id)) {
+        final key = '${t.kind}|${t.id}';
+        final prev = _restoredMarkers[key];
+        if (prev == null || t.deletedAt > prev) {
+          _restoredMarkers[key] = t.deletedAt;
+        }
+      }
+    }
+    tombstones.removeWhere((t) => _recordExistsLocally(t.kind, t.id));
+    // The same consistency rule for Trash: a record that exists
+    // locally again must not also sit in Trash.
+    _trash.removeWhere((e) => _recordExistsLocally(e.kind, e.id));
     await persist();
     return counts;
+  }
+
+  bool _recordExistsLocally(String kind, String id) {
+    switch (kind) {
+      case EntityKind.matches:
+        return matches.any((m) => m.id == id);
+      case EntityKind.teams:
+        return teams.any((t) => t.id == id);
+      case EntityKind.tournaments:
+        return tournaments.any((t) => t.id == id);
+      case EntityKind.regPlayers:
+        return regPlayers.any((r) => r.id == id);
+      case EntityKind.drafts:
+        return drafts.any((d) => d.id == id);
+      case EntityKind.manualStats:
+        return manualStats.any((e) => e.id == id);
+      default:
+        return false;
+    }
   }
 
   /// Reset App (§29): explain → confirm (UI) → wipe ALL user data.
@@ -311,6 +494,13 @@ class Store extends ChangeNotifier implements PlayoffStore {
     regPlayers = [];
     drafts = [];
     manualStats = [];
+    // A reset is a local wipe, not a sync deletion: tombstones are
+    // cleared with everything else, exactly as before this fix a
+    // reset left no trace in the sync layer either (the push
+    // guard's empty-dataset rules govern what reaches the cloud).
+    tombstones = [];
+    _trash = [];
+    _restoredMarkers = {};
     profile = null;
     welcomeDone = false;
     await persist();
@@ -371,7 +561,198 @@ class Store extends ChangeNotifier implements PlayoffStore {
     } else {
       await p.setString(_scoped(_kProfile), jsonEncode(prof.toJson()));
     }
+    await p.setString(
+      _scoped(_kTombstones),
+      jsonEncode(tombstones.map((t) => t.toJson()).toList()),
+    );
+    await p.setString(
+      _scoped(_kTrash),
+      jsonEncode(_trash.map((e) => e.toJson()).toList()),
+    );
+    await p.setString(
+      _scoped(_kRestored),
+      jsonEncode(_restoredMarkers),
+    );
     await p.setBool(_kWelcome, welcomeDone);
+  }
+
+  List<TrashEntry>? _decodeTrash(String? raw) {
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list
+          .map((e) => TrashEntry.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.kind.isNotEmpty && t.id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return null; // corrupt entry: caller keeps the previous set
+    }
+  }
+
+  Map<String, int>? _decodeRestoredMarkers(String? raw) {
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final e in map.entries)
+          if (e.value is num) e.key: (e.value as num).toInt(),
+      };
+    } catch (_) {
+      return null; // corrupt entry: caller keeps the previous set
+    }
+  }
+
+  List<Tombstone>? _decodeTombstones(String? raw) {
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list
+          .map((e) => Tombstone.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.kind.isNotEmpty && t.id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return null; // corrupt entry: caller keeps the previous set
+    }
+  }
+
+  // ---------- tombstones (Sync Fix "D") ----------
+
+  /// Records (or refreshes) the tombstone for one deleted record.
+  void _recordTombstone(String kind, String id) {
+    tombstones.removeWhere((t) => t.kind == kind && t.id == id);
+    tombstones.add(Tombstone(
+      kind: kind,
+      id: id,
+      deletedAt: DateTime.now().millisecondsSinceEpoch,
+    ));
+    // A fresh delete supersedes any earlier restore of this record.
+    clearRestoredMarker(kind, id);
+  }
+
+  /// Clears the tombstone for one record: an explicit re-add of
+  /// the same id is the admin-restore path (plan §4).
+  void _clearTombstone(String kind, String id) {
+    tombstones.removeWhere((t) => t.kind == kind && t.id == id);
+  }
+
+  /// Unions tombstones received from the cloud into the local set
+  /// (per record, the newest deletion wins). Returns true when the
+  /// local set changed. Never removes a local tombstone — a
+  /// deletion this device made cannot be un-made by a pull.
+  bool absorbTombstones(Iterable<Tombstone> incoming) {
+    var changed = false;
+    for (final t in incoming) {
+      if (t.kind.isEmpty || t.id.isEmpty) continue;
+      final i =
+          tombstones.indexWhere((x) => x.kind == t.kind && x.id == t.id);
+      if (i < 0) {
+        tombstones.add(t);
+        changed = true;
+      } else if (t.deletedAt > tombstones[i].deletedAt) {
+        tombstones[i] = t;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /// Ids of matches this identity has deleted (locally or via a
+  /// pulled tombstone): sync must never let such a record back in.
+  Set<String> get tombstonedMatchIds => {
+        for (final t in tombstones)
+          if (t.kind == EntityKind.matches) t.id,
+      };
+
+  // ---------- trash (Feature 1 — Trash + Restore) ----------
+
+  static Map<String, dynamic> _deepCopyPayload(Map<String, dynamic> m) =>
+      jsonDecode(jsonEncode(m)) as Map<String, dynamic>;
+
+  String _matchTrashName(Match m) {
+    final title = m.matchTitle.trim();
+    if (title.isNotEmpty) return title;
+    final a = teamName(m.teamAId);
+    final b = teamName(m.teamBId);
+    if (a == 'Unknown team' && b == 'Unknown team') return 'Match ${m.id}';
+    return '$a vs $b';
+  }
+
+  /// Snapshots [payload] into Trash for (kind, id), replacing any
+  /// older entry for the same record. Called BEFORE the record is
+  /// removed, so the payload is complete.
+  void _snapshotToTrash(
+    String kind,
+    String id,
+    String name,
+    Map<String, dynamic> payload,
+  ) {
+    _trash.removeWhere((e) => e.kind == kind && e.id == id);
+    _trash.add(TrashEntry(
+      kind: kind,
+      id: id,
+      name: name,
+      deletedAt: DateTime.now().millisecondsSinceEpoch,
+      payload: _deepCopyPayload(payload),
+    ));
+  }
+
+  /// Restores one trashed record: the snapshot is re-inserted
+  /// through the existing upsert path for its kind, which clears
+  /// the record's tombstone — the admin-restore semantics of the
+  /// D plan §4 (a restored record beats its tombstone). See
+  /// lib/entity_sync_coordinator.dart: StoreEntityDocStore marks
+  /// a record that reaches a sync round still carrying its
+  /// tombstone as `restored: true` with its stamp floored above
+  /// the tombstone's deletedAt, so the merge/gate let it survive
+  /// and spend the tombstone. The trash entry is removed and the
+  /// result persisted (via the upsert's own persist).
+  Future<void> restoreFromTrash(String kind, String id) async {
+    final i = _trash.indexWhere((e) => e.kind == kind && e.id == id);
+    if (i < 0) return;
+    final entry = _trash[i];
+    final payload = _deepCopyPayload(entry.payload);
+    // Remember the tombstone this restore must out-rank BEFORE the
+    // upsert below clears it locally: the cloud may still hold that
+    // tombstone, and without the marker the next entity-sync round
+    // would read this record as an ordinary (un-flagged) copy and
+    // let the cloud tombstone kill it again (Feature 1 follow-up).
+    final tomb = tombstoneFor(tombstones, kind, id);
+    if (tomb != null) {
+      _restoredMarkers['$kind|$id'] = tomb.deletedAt;
+    }
+    // Decode FIRST: if the payload were corrupt, the trash entry
+    // must survive instead of being lost with nothing restored.
+    switch (kind) {
+      case EntityKind.matches:
+        final m = Match.fromJson(payload);
+        _trash.removeAt(i);
+        await upsertMatch(m);
+        break;
+      case EntityKind.teams:
+        final t = Team.fromJson(payload);
+        _trash.removeAt(i);
+        await upsertTeam(t);
+        break;
+      case EntityKind.tournaments:
+        final t = Tournament.fromJson(payload);
+        _trash.removeAt(i);
+        await upsertTournament(t);
+        break;
+      default:
+        // Unknown kind: nothing restorable — drop the entry so it
+        // cannot sit in Trash forever.
+        _trash.removeAt(i);
+        await persist();
+        break;
+    }
+  }
+
+  /// Permanently deletes one trashed record: only the snapshot is
+  /// dropped. The tombstone recorded at delete time MUST remain —
+  /// it is what keeps the record deleted everywhere.
+  Future<void> permanentlyDeleteFromTrash(String kind, String id) async {
+    _trash.removeWhere((e) => e.kind == kind && e.id == id);
+    await persist();
   }
 
   /// Wall-clock ms of the last local change (used by cloud sync).
@@ -478,6 +859,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   Future<void> upsertRegPlayer(RegPlayer r) async {
+    _clearTombstone(EntityKind.regPlayers, r.id);
     final i = regPlayers.indexWhere((x) => x.id == r.id);
     if (i >= 0) {
       regPlayers[i] = r;
@@ -489,10 +871,12 @@ class Store extends ChangeNotifier implements PlayoffStore {
 
   Future<void> deleteRegPlayer(String id) async {
     regPlayers.removeWhere((r) => r.id == id);
+    _recordTombstone(EntityKind.regPlayers, id);
     await persist();
   }
 
   Future<void> upsertDraft(Draft d) async {
+    _clearTombstone(EntityKind.drafts, d.id);
     final i = drafts.indexWhere((x) => x.id == d.id);
     if (i >= 0) {
       drafts[i] = d;
@@ -504,6 +888,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
 
   Future<void> deleteDraft(String id) async {
     drafts.removeWhere((d) => d.id == id);
+    _recordTombstone(EntityKind.drafts, id);
     await persist();
   }
 
@@ -516,6 +901,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   Future<void> addManualStat(ManualStatEntry e) async {
+    _clearTombstone(EntityKind.manualStats, e.id);
     manualStats.insert(0, e);
     await persist();
   }
@@ -524,6 +910,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
   /// Replacement happens in place so the entries list order is
   /// stable; an unknown id inserts at the top, like an add.
   Future<void> upsertManualStat(ManualStatEntry e) async {
+    _clearTombstone(EntityKind.manualStats, e.id);
     final i = manualStats.indexWhere((x) => x.id == e.id);
     if (i >= 0) {
       manualStats[i] = e;
@@ -535,6 +922,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
 
   Future<void> deleteManualStat(String id) async {
     manualStats.removeWhere((e) => e.id == id);
+    _recordTombstone(EntityKind.manualStats, id);
     await persist();
   }
 
@@ -579,6 +967,10 @@ class Store extends ChangeNotifier implements PlayoffStore {
 
   // ---------- mutations ----------
   Future<void> upsertTeam(Team team) async {
+    _clearTombstone(EntityKind.teams, team.id);
+    // A record that exists again must not also sit in Trash.
+    _trash.removeWhere(
+        (e) => e.kind == EntityKind.teams && e.id == team.id);
     final i = teams.indexWhere((t) => t.id == team.id);
     if (i >= 0) {
       teams[i] = team;
@@ -589,7 +981,15 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   Future<void> deleteTeam(String id) async {
+    // Snapshot into Trash BEFORE removal (Feature 1), so the team
+    // can be restored exactly as it was.
+    final team = teamById(id);
+    if (team != null) {
+      _snapshotToTrash(EntityKind.teams, id,
+          team.name.isNotEmpty ? team.name : id, team.toJson());
+    }
     teams.removeWhere((t) => t.id == id);
+    _recordTombstone(EntityKind.teams, id);
     for (final tr in tournaments) {
       tr.teamIds.remove(id);
     }
@@ -597,6 +997,9 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   Future<void> upsertTournament(Tournament t) async {
+    _clearTombstone(EntityKind.tournaments, t.id);
+    _trash.removeWhere(
+        (e) => e.kind == EntityKind.tournaments && e.id == t.id);
     final i = tournaments.indexWhere((x) => x.id == t.id);
     if (i >= 0) {
       tournaments[i] = t;
@@ -607,11 +1010,21 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   Future<void> deleteTournament(String id) async {
+    // Snapshot into Trash BEFORE removal (Feature 1).
+    final t = tournamentById(id);
+    if (t != null) {
+      _snapshotToTrash(EntityKind.tournaments, id,
+          t.name.isNotEmpty ? t.name : id, t.toJson());
+    }
     tournaments.removeWhere((t) => t.id == id);
+    _recordTombstone(EntityKind.tournaments, id);
     await persist();
   }
 
   Future<void> upsertMatch(Match m) async {
+    _clearTombstone(EntityKind.matches, m.id);
+    _trash.removeWhere(
+        (e) => e.kind == EntityKind.matches && e.id == m.id);
     final i = matches.indexWhere((x) => x.id == m.id);
     if (i >= 0) {
       matches[i] = m;
@@ -622,7 +1035,18 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   Future<void> deleteMatch(String id) async {
+    // Snapshot into Trash BEFORE removal (Feature 1), so the match
+    // — innings and all — can be restored exactly as it was.
+    final m = matchById(id);
+    if (m != null) {
+      _snapshotToTrash(
+          EntityKind.matches, id, _matchTrashName(m), m.toJson());
+    }
     matches.removeWhere((m) => m.id == id);
+    // The tombstone is the fix for the delete-resurrection defect:
+    // without it, the sync union merge brings this match back from
+    // the cloud (or the other phone) on the very next round.
+    _recordTombstone(EntityKind.matches, id);
     await persist();
   }
 }
