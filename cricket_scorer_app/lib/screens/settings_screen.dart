@@ -13,6 +13,7 @@ import 'backup_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'registration_screen.dart';
+import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Store store;
@@ -299,6 +300,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Player import/export',
                   subtitle: 'Excel / CSV player lists',
                   onTap: () => _open(RegistrationScreen(store: store)),
+                ),
+                const Divider(height: 1),
+                _settingsRow(
+                  icon: Icons.delete_sweep,
+                  title: 'Trash',
+                  subtitle: 'Restore or permanently delete removed items',
+                  onTap: () => _open(TrashScreen(store: store)),
                 ),
               ],
             ),

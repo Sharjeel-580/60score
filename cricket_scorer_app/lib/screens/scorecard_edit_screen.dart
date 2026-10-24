@@ -364,15 +364,30 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
       fig.balls = balls;
       fig.fours = fours;
       fig.sixes = sixes;
-      fig.out = e.out;
-      if (!e.out) {
-        fig.howOut = '';
-      } else if (e.howOut.text.trim() == e.originalDisplay) {
-        fig.howOut = e.originalRaw; // untouched: keep the token form
+      // Full dismissal set cascade: plain dismissal texts typed
+      // here ('retired out', 'timed out', 'obstructing the field',
+      // 'hit the ball twice', 'mankad' / 'Mankad (Name)') are stored
+      // verbatim — fielderCreditFromHowOut gives them no fielder
+      // credit (except a mankad id token, credited as a run out),
+      // and dismissal counting follows fig.out alone. 'retired
+      // hurt' is NOT a dismissal: it never counts as out, and a
+      // retired-hurt marker survives figure edits untouched.
+      final typedHow = e.howOut.text.trim();
+      var isOut = e.out;
+      String how;
+      if (isOut && typedHow.toLowerCase() == 'retired hurt') {
+        isOut = false;
+        how = 'retired hurt';
+      } else if (!isOut) {
+        how = e.originalRaw == 'retired hurt' ? 'retired hurt' : '';
+      } else if (typedHow == e.originalDisplay) {
+        how = e.originalRaw; // untouched: keep the token form
       } else {
-        fig.howOut = e.howOut.text.trim(); // edited: stored verbatim
+        how = typedHow; // edited: stored verbatim
       }
-      if (e.out) outs++;
+      fig.out = isOut;
+      fig.howOut = how;
+      if (isOut) outs++;
     }
     if (outs > inn.effectiveMaxWickets) {
       return '${store.teamName(inn.battingTeamId)}: $outs batters out, '

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../player_insights.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
+import 'nrr_calculator_screen.dart';
 import 'settings_screen.dart';
 import 'tournament_stats.dart';
 
@@ -1180,6 +1182,17 @@ class _StatsScreenState extends State<StatsScreen> {
         icon: const Icon(Icons.compare_arrows),
         label: const Text('Head-to-head'),
       ),
+      const SizedBox(height: 8),
+      FilledButton.tonalIcon(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => NrrCalculatorScreen(store: store),
+          ),
+        ),
+        icon: const Icon(Icons.calculate),
+        label: const Text('NRR Calculator'),
+      ),
     ];
   }
 
@@ -2050,6 +2063,67 @@ class PlayerProfileScreen extends StatelessWidget {
     final c = career[playerId] ?? CareerStats(playerId);
     final reg = store.regById(playerId);
     final manual = store.manualStats.where((e) => e.playerId == playerId);
+    // Feature 6 (D batch): chart breakdowns from real stored data
+    // only; the section is omitted entirely when there is nothing
+    // to chart (honest empty state).
+    final insights = buildPlayerInsights(store.matches, playerId);
+    const dismissalLabels = {
+      'bowled': 'Bowled',
+      'caught': 'Caught',
+      'lbw': 'LBW',
+      'runOut': 'Run out',
+      'mankad': 'Mankad',
+      'stumped': 'Stumped',
+      'hitWicket': 'Hit wicket',
+      'retiredOut': 'Retired out',
+      'retiredHurt': 'Retired hurt',
+      'obstructing': 'Obstructing',
+      'hitTwice': 'Hit twice',
+      'timedOut': 'Timed out',
+    };
+    Widget insightTitle(String t) => Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Text(
+        t,
+        style: const TextStyle(fontWeight: FontWeight.bold, color: kGold),
+      ),
+    );
+    Widget barRow(
+            String label, double value, double max, Color color, String text) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 96,
+                child: Text(
+                  label,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: max <= 0 ? 0 : (value / max).clamp(0.0, 1.0),
+                    minHeight: 10,
+                    backgroundColor: Colors.white12,
+                    color: color,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 46,
+                child: Text(
+                  text,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        );
     Widget row(String k, String v) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -2116,6 +2190,98 @@ class PlayerProfileScreen extends StatelessWidget {
             c.wickets == 0 ? '-' : c.bowlingSR.toStringAsFixed(1),
           ),
           row('Best figures', c.bestFigures),
+          if (!insights.isEmpty) ...[
+            const Divider(height: 24),
+            const Text(
+              'Insights',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: kCyan,
+              ),
+            ),
+            if (insights.batting.runsByPosition.isNotEmpty) ...[
+              insightTitle('Runs by batting position'),
+              for (final e in (insights.batting.runsByPosition.entries
+                      .toList()
+                    ..sort((a, b) => a.key.compareTo(b.key))))
+                barRow(
+                  'No. ${e.key}',
+                  e.value.runs.toDouble(),
+                  insights.batting.runsByPosition.values
+                      .map((s) => s.runs)
+                      .fold(0, (a, b) => a > b ? a : b)
+                      .toDouble(),
+                  kCyan,
+                  '${e.value.runs}',
+                ),
+            ],
+            if (insights.batting.dismissalTypeCounts.isNotEmpty) ...[
+              insightTitle('How this batter gets out'),
+              for (final e in (insights.batting.dismissalTypeCounts.entries
+                      .toList()
+                    ..sort((a, b) => b.value.compareTo(a.value))))
+                barRow(
+                  dismissalLabels[e.key] ?? e.key,
+                  e.value.toDouble(),
+                  insights.batting.dismissalTypeCounts.values
+                      .fold(0, (a, b) => a > b ? a : b)
+                      .toDouble(),
+                  kCopper,
+                  '${e.value}',
+                ),
+            ],
+            if (insights.batting.innings > 0) ...[
+              insightTitle('Innings by score'),
+              for (final label in kRunsBucketLabels)
+                if ((insights.batting.runsBuckets[label] ?? 0) > 0)
+                  barRow(
+                    label,
+                    (insights.batting.runsBuckets[label] ?? 0).toDouble(),
+                    insights.batting.runsBuckets.values
+                        .fold(0, (a, b) => a > b ? a : b)
+                        .toDouble(),
+                    kCyan,
+                    '${insights.batting.runsBuckets[label]}',
+                  ),
+            ],
+            if (insights.bowling.wicketsByType.isNotEmpty) ...[
+              insightTitle('Wickets by type'),
+              for (final e in (insights.bowling.wicketsByType.entries
+                      .toList()
+                    ..sort((a, b) => b.value.compareTo(a.value))))
+                barRow(
+                  dismissalLabels[e.key] ?? e.key,
+                  e.value.toDouble(),
+                  insights.bowling.wicketsByType.values
+                      .fold(0, (a, b) => a > b ? a : b)
+                      .toDouble(),
+                  kGold,
+                  '${e.value}',
+                ),
+            ],
+            if (insights.bowling.perMatchEconomy.isNotEmpty) ...[
+              insightTitle('Economy by match'),
+              for (final f in insights.bowling.perMatchEconomy)
+                barRow(
+                  () {
+                    final m = store.matchById(f.matchId);
+                    if (m == null ||
+                        f.inningsNo < 1 ||
+                        f.inningsNo > m.innings.length) {
+                      return 'Match';
+                    }
+                    return 'vs ${store.teamName(m.innings[f.inningsNo - 1].bowlingTeamId)}';
+                  }(),
+                  f.economy,
+                  insights.bowling.perMatchEconomy
+                      .map((x) => x.economy)
+                      .fold(0.0, (a, b) => a > b ? a : b),
+                  kGold,
+                  f.economy.toStringAsFixed(1),
+                ),
+            ],
+          ],
           const Divider(height: 24),
           const Text(
             'Fielding & MVP',

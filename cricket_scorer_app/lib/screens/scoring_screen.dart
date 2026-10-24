@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../dls.dart';
 import '../models.dart';
+import '../nrr_calculator.dart';
 import '../potm.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../tts_service.dart';
 import '../tournament_engine.dart';
 import '../widgets/charts.dart';
 import '../widgets/potm_picker.dart';
 import 'scorecard_screen.dart';
+import 'super_over_screen.dart';
 
 class ScoringScreen extends StatefulWidget {
   final Store store;
@@ -22,6 +26,16 @@ class ScoringScreen extends StatefulWidget {
 class _ScoringScreenState extends State<ScoringScreen> {
   Store get store => widget.store;
   Match get match => widget.match;
+
+  @override
+  void initState() {
+    super.initState();
+    // Feature 7 (D batch): load the persisted voice-commentary
+    // setting (default OFF) so the AppBar toggle shows the truth.
+    TtsService.instance.loadEnabled().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   InningsState get inn {
     if (match.innings.isEmpty) startInnings(match, 1);
@@ -162,9 +176,20 @@ class _ScoringScreenState extends State<ScoringScreen> {
   ) {
     return DropdownButtonFormField<String>(
       initialValue: value,
+      // Expanded + ellipsis (owner UI rule 2026-10-24): long
+      // player names must never push the dropdown past the
+      // dialog/screen width.
+      isExpanded: true,
       decoration: InputDecoration(labelText: label),
       items: ids
-          .map((id) => DropdownMenuItem(value: id, child: Text(nameOf(id))))
+          .map((id) => DropdownMenuItem(
+                value: id,
+                child: Text(
+                  nameOf(id),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ))
           .toList(),
       onChanged: onChanged,
     );
@@ -252,13 +277,25 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         onPressed: () => setD(() => runs++),
                         icon: const Icon(Icons.add_circle_outline),
                       ),
-                      Text(runsLabel),
+                      // Flexible (owner UI rule 2026-10-24):
+                      // labels like 'runs completed (run out)'
+                      // must wrap inside the dialog, not spill.
+                      Flexible(
+                        child: Text(
+                          runsLabel,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
                     ],
                   ),
                 if (wicketTypes.isNotEmpty) ...[
                   const Divider(),
                   DropdownButtonFormField<String?>(
                     initialValue: wicketType,
+                    // Expanded + ellipsis (owner UI rule
+                    // 2026-10-24): 'Obstructing the Field' etc.
+                    // must fit the dialog at 360dp.
+                    isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Wicket (optional)',
                     ),
@@ -268,24 +305,42 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         child: Text('No wicket'),
                       ),
                       ...wicketTypes.map(
-                        (w) => DropdownMenuItem(value: w, child: Text(w)),
+                        (w) => DropdownMenuItem(
+                          value: w,
+                          child: Text(
+                            w,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ),
                     ],
                     onChanged: (v) => setD(() => wicketType = v),
                   ),
+                  // Fielder selector: hidden for dismissals with
+                  // no fielder choice — Bowled / LBW / Hit Wicket
+                  // (bowler only), Mankad (fielder is fixed to the
+                  // bowler), Retired Out, Obstructing the Field,
+                  // Hit the Ball Twice and Timed Out (no fielder).
                   if (wicketType != null &&
                       wicketType != 'Bowled' &&
                       wicketType != 'LBW' &&
-                      wicketType != 'Hit Wicket')
+                      wicketType != 'Hit Wicket' &&
+                      wicketType != 'Mankad' &&
+                      wicketType != 'Retired Out' &&
+                      wicketType != 'Obstructing the Field' &&
+                      wicketType != 'Hit the Ball Twice' &&
+                      wicketType != 'Timed Out')
                     _playerDropdown(
                       'Fielder',
                       bowlingXI,
                       fielder,
                       (v) => setD(() => fielder = v),
                     ),
-                  if (wicketType == 'Run Out')
+                  if (wicketType == 'Run Out' || wicketType == 'Mankad')
                     DropdownButtonFormField<bool>(
                       initialValue: outIsStriker,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Who is out?',
                       ),
@@ -316,6 +371,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
                   'Run Out': 'runOut',
                   'Stumped': 'stumped',
                   'Hit Wicket': 'hitWicket',
+                  'Mankad': 'mankad',
+                  'Retired Out': 'retiredOut',
+                  'Obstructing the Field': 'obstructing',
+                  'Hit the Ball Twice': 'hitTwice',
+                  'Timed Out': 'timedOut',
                 };
                 Navigator.pop(
                   c,
@@ -325,8 +385,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     wicketType: wicketType == null
                         ? ''
                         : (typeMap[wicketType] ?? ''),
-                    fielderId: fielder ?? '',
-                    outPlayerId: wicketType == 'Run Out'
+                    // Mankad: the bowler is the fielder of record.
+                    fielderId: wicketType == 'Mankad'
+                        ? inn.currentBowlerId
+                        : (fielder ?? ''),
+                    outPlayerId:
+                        (wicketType == 'Run Out' || wicketType == 'Mankad')
                         ? (outIsStriker ? inn.strikerId : inn.nonStrikerId)
                         : '',
                   ),
@@ -341,12 +405,282 @@ class _ScoringScreenState extends State<ScoringScreen> {
   }
 
   Future<void> _record(BallInput input) async {
-    final ok = applyBall(inn, input);
+    // Feature 7: capture pre-ball facts for milestone detection —
+    // every scoring path on this screen funnels through _record.
+    final s = inn;
+    final strikerBefore = s.strikerId;
+    final runsBefore =
+        strikerBefore.isEmpty ? 0 : (s.batting[strikerBefore]?.runs ?? 0);
+    final legalBefore = s.legalBalls;
+    final ok = applyBall(s, input);
     if (!ok) {
       _snack('Ball could not be recorded');
       return;
     }
     await _afterChange();
+    _speakBallEvents(input, strikerBefore, runsBefore, legalBefore);
+  }
+
+  /// Feature 7 — voice commentary: speaks (in order) a wicket
+  /// call, a 50/100 milestone and the over-end summary for the
+  /// ball just recorded. No-op unless the persisted TTS setting is
+  /// ON; TtsService swallows all errors so scoring can never be
+  /// blocked by speech.
+  void _speakBallEvents(
+    BallInput input,
+    String strikerBefore,
+    int runsBefore,
+    int legalBefore,
+  ) {
+    final tts = TtsService.instance;
+    if (!tts.enabled) return;
+    final s = inn;
+    final phrases = <String>[];
+    if (input.isWicket && s.events.isNotEmpty) {
+      phrases.add(ttsWicket(
+        batsmanName: nameOf(s.events.last.outPlayerId),
+        teamName: store.teamName(s.battingTeamId),
+        runs: s.totalRuns,
+        wickets: s.wickets,
+      ));
+    }
+    if (strikerBefore.isNotEmpty) {
+      final runsAfter = s.batting[strikerBefore]?.runs ?? 0;
+      if ((runsBefore < 50 && runsAfter >= 50) ||
+          (runsBefore < 100 && runsAfter >= 100)) {
+        phrases.add(ttsMilestone(
+          batsmanName: nameOf(strikerBefore),
+          runs: runsAfter,
+        ));
+      }
+    }
+    if (s.legalBalls > legalBefore && s.legalBalls % s.ballsPerOver == 0) {
+      phrases.add(ttsOverSummary(
+        teamName: store.teamName(s.battingTeamId),
+        runs: s.totalRuns,
+        wickets: s.wickets,
+        oversText: oversText(s.legalBalls, s.ballsPerOver),
+        target: s.target > 0 ? s.target : null,
+        ballsBowled: s.legalBalls,
+        ballsTotal: s.oversLimit * s.ballsPerOver,
+      ));
+    }
+    for (final p in phrases) {
+      tts.speak(p);
+    }
+  }
+
+  /// Feature 2 — Revised target (DLS): Duckworth–Lewis Standard
+  /// Edition calculation for the common local cases — innings 2
+  /// shortened before it starts, innings 1 terminated early, and
+  /// ONE interruption during innings 2. The result can be applied
+  /// as the live target of the current (second) innings; nothing
+  /// is changed until the scorer taps Apply.
+  Future<void> _showDlsDialog() async {
+    final bpo = match.ballsPerOver;
+    double? oversOf(String text) {
+      final balls = ballsFromOversText(text, bpo);
+      return balls == null ? null : balls / bpo;
+    }
+
+    String oversLabel(int balls) =>
+        '${balls ~/ bpo}.${balls % bpo}';
+
+    final t1Score = TextEditingController(
+      text: match.innings.isNotEmpty
+          ? '${match.innings[0].totalRuns}'
+          : '',
+    );
+    final t2StartOvers = TextEditingController(
+      text: match.innings.length >= 2
+          ? oversLabel(
+              match.innings[1].oversLimit * bpo)
+          : oversLabel(match.oversLimit * bpo),
+    );
+    final t1OversLeft = TextEditingController(text: '0');
+    final t1Wkts = TextEditingController(text: '0');
+    final intAt = TextEditingController();
+    final intWkts = TextEditingController(text: '0');
+    final intResumed = TextEditingController();
+    var t1Terminated = false;
+    var hasInterruption = false;
+    DlsResult? result;
+    String? error;
+
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) {
+          Widget field(String label, TextEditingController ctl) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: TextField(
+                  controller: ctl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: label,
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              );
+          void compute() {
+            final score = int.tryParse(t1Score.text.trim());
+            final t2Overs = oversOf(t2StartOvers.text);
+            if (score == null || score < 0) {
+              setD(() {
+                error = 'Team 1 score theek se likho';
+                result = null;
+              });
+              return;
+            }
+            if (t2Overs == null || t2Overs < 0) {
+              setD(() {
+                error = 'Innings 2 ke overs theek se likho (e.g. 6.3)';
+                result = null;
+              });
+              return;
+            }
+            final startOvers = match.oversLimit.toDouble();
+            var r1 = dlResourcePct(
+                oversRemaining: startOvers, wicketsLost: 0);
+            if (t1Terminated) {
+              final left = oversOf(t1OversLeft.text);
+              final wk = int.tryParse(t1Wkts.text.trim());
+              if (left == null || wk == null || wk < 0 || wk > 10) {
+                setD(() {
+                  error = 'Innings 1 termination walay numbers theek karo';
+                  result = null;
+                });
+                return;
+              }
+              r1 = resourcesForTerminatedInnings(
+                oversAtStart: startOvers,
+                oversRemainingAtTermination: left,
+                wicketsLostAtTermination: wk,
+              );
+            }
+            var r2 = dlResourcePct(oversRemaining: t2Overs, wicketsLost: 0);
+            if (hasInterruption) {
+              final at = oversOf(intAt.text);
+              final resumed = oversOf(intResumed.text);
+              final wk = int.tryParse(intWkts.text.trim());
+              if (at == null || resumed == null || wk == null ||
+                  wk < 0 || wk > 10) {
+                setD(() {
+                  error = 'Interruption walay numbers theek karo';
+                  result = null;
+                });
+                return;
+              }
+              r2 = resourcesAfterInterruptions(
+                oversAtStart: t2Overs,
+                interruptions: [
+                  (
+                    oversAtInterruption: at,
+                    wickets: wk,
+                    oversAtResumption: resumed,
+                  ),
+                ],
+              );
+            }
+            setD(() {
+              error = null;
+              result = dlsTarget(
+                team1Score: score,
+                team1ResourcePct: r1,
+                team2ResourcePct: r2,
+              );
+            });
+          }
+
+          final canApply = result != null &&
+              match.innings.length >= 2 &&
+              match.status == 'live';
+          return AlertDialog(
+            title: const Text('Revised target (DLS)'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  field('Team 1 score', t1Score),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Innings 1 ended early'),
+                    value: t1Terminated,
+                    onChanged: (v) => setD(() => t1Terminated = v),
+                  ),
+                  if (t1Terminated) ...[
+                    field('Overs left when innings 1 ended', t1OversLeft),
+                    field('Wickets lost at that point', t1Wkts),
+                  ],
+                  field('Overs for innings 2 (start)', t2StartOvers),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Play stopped during innings 2'),
+                    value: hasInterruption,
+                    onChanged: (v) => setD(() => hasInterruption = v),
+                  ),
+                  if (hasInterruption) ...[
+                    field('Overs left when play stopped', intAt),
+                    field('Wickets lost at that point', intWkts),
+                    field('Overs left when play resumed', intResumed),
+                  ],
+                  const Text(
+                    'Duckworth–Lewis Standard Edition (G50 = 245). '
+                    'Overs are written as overs.balls, e.g. 6.3.',
+                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                  ),
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  if (result != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Par score: ${result!.parScore.toStringAsFixed(1)}\n'
+                        'Revised target: ${result!.target}\n'
+                        'Resources — Team 1: '
+                        '${result!.team1ResourcePct.toStringAsFixed(1)}% • '
+                        'Team 2: '
+                        '${result!.team2ResourcePct.toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: kCyan,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Close'),
+              ),
+              TextButton(onPressed: compute, child: const Text('Calculate')),
+              FilledButton(
+                onPressed: canApply
+                    ? () async {
+                        inn.target = result!.target;
+                        Navigator.pop(c);
+                        await _afterChange();
+                        _snack('Target set to ${result!.target} (DLS)');
+                      }
+                    : null,
+                child: const Text('Apply as target'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   /// Wagon-wheel plot dialog: the scorer taps the wheel where the ball went.
@@ -411,6 +745,19 @@ class _ScoringScreenState extends State<ScoringScreen> {
         ),
         actions: [
           IconButton(
+            icon: Icon(
+              TtsService.instance.enabled
+                  ? Icons.volume_up
+                  : Icons.volume_off,
+            ),
+            tooltip: 'Voice commentary (TTS)',
+            onPressed: () async {
+              final tts = TtsService.instance;
+              await tts.setEnabled(!tts.enabled);
+              if (mounted) setState(() {});
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.undo),
             tooltip: 'Undo last ball',
             onPressed: inn.events.isEmpty
@@ -430,6 +777,14 @@ class _ScoringScreenState extends State<ScoringScreen> {
               final nav = Navigator.of(context);
               if (v == 'xi') {
                 await _editPlayingXi();
+              } else if (v == 'dls') {
+                await _showDlsDialog();
+              } else if (v == 'retirehurt') {
+                await _retireHurt();
+              } else if (v == 'retiredout') {
+                await _retiredOutBetweenBalls();
+              } else if (v == 'timedout') {
+                await _timedOut();
               } else if (v == 'scorecard') {
                 nav.push(
                   MaterialPageRoute(
@@ -477,6 +832,22 @@ class _ScoringScreenState extends State<ScoringScreen> {
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'xi', child: Text('Edit Playing XI')),
+              PopupMenuItem(
+                value: 'dls',
+                child: Text('Revised target (DLS)'),
+              ),
+              PopupMenuItem(
+                value: 'retirehurt',
+                child: Text('Retire batsman (hurt)'),
+              ),
+              PopupMenuItem(
+                value: 'retiredout',
+                child: Text('Retired Out (between balls)'),
+              ),
+              PopupMenuItem(
+                value: 'timedout',
+                child: Text('Timed Out (batter not yet in)'),
+              ),
               PopupMenuItem(value: 'scorecard', child: Text('View scorecard')),
               PopupMenuItem(value: 'noresult', child: Text('Mark no result')),
               PopupMenuItem(value: 'delete', child: Text('Delete match')),
@@ -623,6 +994,81 @@ class _ScoringScreenState extends State<ScoringScreen> {
     }
   }
 
+  /// Menu action: retire a batsman HURT (full dismissal set).
+  /// Not a wicket — he may resume later via "Select next batter",
+  /// which lists him again because he is not out.
+  Future<void> _retireHurt() async {
+    final inn = this.inn;
+    if (match.status != 'live' || inn.isComplete) {
+      _snack('The innings is not in play');
+      return;
+    }
+    final atCrease = [inn.strikerId, inn.nonStrikerId]
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (atCrease.isEmpty) {
+      _snack('No batsman at the crease');
+      return;
+    }
+    final idx = await _pickPlayer('Retire batsman (hurt)', atCrease);
+    if (idx == null) return;
+    if (retireBatsmanHurt(inn, atCrease[idx])) {
+      await _afterChange();
+    } else {
+      _snack('That batsman cannot retire hurt');
+    }
+  }
+
+  /// Menu action: Retired Out between balls — a wicket with no
+  /// ball bowled and no bowler credit; he cannot return.
+  Future<void> _retiredOutBetweenBalls() async {
+    final inn = this.inn;
+    if (match.status != 'live' || inn.isComplete) {
+      _snack('The innings is not in play');
+      return;
+    }
+    final atCrease = [inn.strikerId, inn.nonStrikerId]
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (atCrease.isEmpty) {
+      _snack('No batsman at the crease');
+      return;
+    }
+    final idx = await _pickPlayer('Retired Out — who?', atCrease);
+    if (idx == null) return;
+    if (dismissBatsmanWithoutBall(inn, atCrease[idx], 'retiredOut')) {
+      await _afterChange();
+    } else {
+      _snack('That batsman cannot be retired out');
+    }
+  }
+
+  /// Menu action: Timed Out — a batsman who has NOT come in yet
+  /// loses his wicket without a ball being bowled.
+  Future<void> _timedOut() async {
+    final inn = this.inn;
+    if (match.status != 'live' || inn.isComplete) {
+      _snack('The innings is not in play');
+      return;
+    }
+    final candidates = inn.battingXI.where((id) {
+      if (id == inn.strikerId || id == inn.nonStrikerId) return false;
+      final f = inn.batting[id];
+      return f == null || !f.batted;
+    }).toList();
+    if (candidates.isEmpty) {
+      _snack('Every batter has already come in');
+      return;
+    }
+    final idx = await _pickPlayer('Timed Out — who?', candidates);
+    if (idx == null) return;
+    if (dismissBatsmanWithoutBall(inn, candidates[idx], 'timedOut')) {
+      await _afterChange();
+    } else {
+      _snack('That batsman cannot be timed out');
+    }
+  }
+
   String _bowlerLine(InningsState inn) {
     final f = inn.bowling[inn.currentBowlerId];
     if (f == null) return '';
@@ -752,7 +1198,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
       }
     }
     final overEvents = events.sublist(start.clamp(0, events.length));
-    return Row(
+    // Wrap, not Row (owner UI rule 2026-10-24): a wide-heavy over
+    // has more chips than a 360dp screen fits on one line — the
+    // chips must flow to the next line instead of overflowing.
+    return Wrap(
+      spacing: 0,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         const Text('This over: ', style: TextStyle(color: Colors.white60)),
         ...overEvents.map(
@@ -854,6 +1306,22 @@ class _ScoringScreenState extends State<ScoringScreen> {
               ),
               const SizedBox(height: 8),
               _momPicker(),
+              if (matchIsTied(match)) ...[
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            SuperOverScreen(store: store, match: match),
+                      ),
+                    );
+                    if (mounted) setState(() {});
+                  },
+                  icon: const Icon(Icons.flash_on),
+                  label: const Text('Play Super Over'),
+                ),
+              ],
               const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: () async {
@@ -1005,6 +1473,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
                         'Run Out',
                         'Stumped',
                         'Hit Wicket',
+                        'Mankad',
+                        'Retired Out',
+                        'Obstructing the Field',
+                        'Hit the Ball Twice',
+                        'Timed Out',
                       ],
                     );
                     if (input != null && input.isWicket) {

@@ -9,6 +9,7 @@ import '../store.dart';
 import '../summary_share.dart';
 import '../theme.dart';
 import 'scorecard_edit_screen.dart';
+import 'super_over_screen.dart';
 import '../widgets/charts.dart';
 import '../widgets/player_avatar.dart';
 import '../widgets/potm_picker.dart';
@@ -48,6 +49,25 @@ class ScorecardScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Match Centre'),
           actions: [
+            // Super Over entry (Feature 5): a tied match can be
+            // decided — or its super overs viewed / continued —
+            // from the completed match's centre.
+            if (matchIsTied(match))
+              IconButton(
+                icon: const Icon(Icons.flash_on),
+                tooltip: 'Super Over',
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          SuperOverScreen(store: store, match: match),
+                    ),
+                  );
+                  if (context.mounted) {
+                    (context as Element).markNeedsBuild();
+                  }
+                },
+              ),
             // Post-match corrections (v1.3.4): a completed match's
             // scorecard AND summary stay editable after save and
             // after sharing — the Summary derives from the same
@@ -600,9 +620,9 @@ class ScorecardScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        f.out
-                            ? resolveHowOut(f.howOut, nameOf)
-                            : 'not out',
+                        // 'retired hurt' shows for a not-out figure
+                        // carrying that marker (see scoring.dart).
+                        batFigStatusText(f, nameOf),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
