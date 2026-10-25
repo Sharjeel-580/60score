@@ -242,6 +242,18 @@ class SyncService {
   Timer? _pushTimer;
   Timer? _retryTimer;
   bool _applyingRemote = false;
+
+  /// Scoring guard (user design, v1.4.3): while a match is being
+  /// scored on this device, NO remote data may be applied at all.
+  /// The live listener's snapshots and pulls are ignored for the
+  /// duration of scoring, so the scoring screen's match object is
+  /// never silently replaced mid-match (balls scored into a
+  /// detached object were lost without a trace). Local persist and
+  /// the cloud push keep running throughout; when scoring ends
+  /// (match completes, or the scoring screen closes), a full sync
+  /// (push + pull) converges both sides. Set by the scoring
+  /// screens; read by the remote-apply paths below.
+  bool scoringActive = false;
   DateTime? _lastSyncAt;
   String? _lastError;
 
@@ -703,6 +715,8 @@ class SyncService {
     required bool settleGuard,
     bool pushPhotosAfter = false,
   }) async {
+    // Scoring guard: never apply remote data while scoring.
+    if (scoringActive) return false;
     final uid = AuthService().currentUser!.uid;
     if (store.identityId != uid) return false;
     final migration = await coordinator.runMigrationIfNeeded();
@@ -835,6 +849,25 @@ class SyncService {
     }
   }
 
+  /// Full sync for when scoring ends (match completed, or the
+  /// scoring screen closed): push any unsynced local work first,
+  /// then pull, so both sides converge. Safe to call when offline
+  /// or logged out (no-ops). Callers clear [scoringActive] before
+  /// invoking this, so the pull is not gated by the guard. The
+  /// push here is fire-and-forget like every other push in this
+  /// file; the pull's own push-back paths and the next live
+  /// snapshot converge any remainder.
+  Future<void> syncAfterScoring(Store store) async {
+    // Called unawaited from screen dispose/completion: never throw.
+    try {
+      if (_docRef() == null) return;
+      if (_pushDirty) _attemptPush(store);
+      await pull(store);
+    } catch (e) {
+      debugPrint('syncAfterScoring failed: $e');
+    }
+  }
+
   /// The shared decision core of [pull] and the live listener:
   /// decode the remote document, decide via [decidePull] (emptiness
   /// outranks timestamps — the v1.3.3 rules govern live receives
@@ -852,6 +885,12 @@ class SyncService {
     Map<String, dynamic> data, {
     required bool settleGuard,
   }) async {
+    // Scoring guard: never apply remote data while scoring. This
+    // is checked at apply time (not just at pull entry) so a pull
+    // that started before scoring opened still cannot detach the
+    // match mid-match. Deferred snapshots are not lost: the next
+    // pull after scoring ends re-reads them.
+    if (scoringActive) return false;
     final ref = _docRef();
     if (ref == null) return false;
     final remoteAt = (data['updatedAt'] as num?)?.toInt() ?? 0;
