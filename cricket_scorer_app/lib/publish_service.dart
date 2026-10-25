@@ -28,10 +28,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'auth_service.dart';
 import 'models.dart';
 import 'photo_sync.dart';
 import 'store.dart';
@@ -113,15 +111,9 @@ class PublishService {
   PublishService._internal();
 
   Timer? _republishTimer;
+
   String? _lastError;
   String? get lastError => _lastError;
-
-  static const _kCollection = 'published_tournaments';
-
-  CollectionReference<Map<String, dynamic>>? _collection() {
-    if (!AuthService().firebaseReady) return null;
-    return FirebaseFirestore.instance.collection(_kCollection);
-  }
 
   // ---------- Snapshot slice (pure — unit-testable) ----------
 
@@ -217,125 +209,55 @@ class PublishService {
 
   // ---------- Owner actions ----------
 
-  Future<String?> _writeDoc(Store store, Tournament t, String uid) async {
-    final col = _collection();
-    if (col == null) return 'Cloud is not available right now.';
-    try {
-      await col.doc(t.id).set({
-        'ownerUid': uid,
-        'name': t.name,
-        'venue': t.venue,
-        'logoBase64': t.logoBase64,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'data': encodeSlice(buildSlice(store, t)),
-      });
-      _lastError = null;
-      return null;
-    } catch (e) {
-      _lastError = e.toString();
-      debugPrint('Publish write failed: $e');
-      return _writeErrorMessage(e);
-    }
-  }
+  // Fully local (v1.4.5): the publish write funnel and the republish
+  // loop are deleted — the app makes no Firestore write from any
+  // path. If publish is ever re-enabled, they come back together.
 
-  /// User-readable reason for a failed publish write, by Firestore
-  /// error code — the manual publish action shows this in a SnackBar,
-  /// so a failure is never silent or unexplained (v1.3.2, bug #R1:
-  /// previously every failure looked the same and background
-  /// re-publish failures left no trace but the recorded [lastError]).
-  static String _writeErrorMessage(Object e) {
-    if (e is FirebaseException) {
-      switch (e.code) {
-        case 'permission-denied':
-          return 'The cloud refused to publish this tournament '
-              '(permission denied).';
-        case 'invalid-argument':
-          return 'This tournament is too large to publish.';
-        case 'unavailable':
-          return 'Could not reach the cloud — check your internet '
-              'connection.';
-      }
-    }
-    return 'Could not reach the cloud — check your internet connection.';
-  }
-
-  /// Publishes [t] publicly. Returns null on success, otherwise a
-  /// user-readable error. Publishing is a manual owner action and
-  /// requires login — guests and logged-out users get a clear message.
+  /// Publishes [t] publicly. Fully local (v1.4.5): publishing is
+  /// OFF — the app makes no network call, and the tournament is
+  /// NOT marked published, so the UI never shows a false
+  /// "Published" state. The returned message is what the toggle
+  /// shows.
   Future<String?> publish(Store store, Tournament t) async {
-    final auth = AuthService();
-    if (!auth.firebaseReady) {
-      return 'Cloud account is not set up yet. Publishing needs the cloud.';
-    }
-    if (!auth.isLoggedIn) {
-      return 'Log in to publish a tournament.';
-    }
-    final err = await _writeDoc(store, t, auth.currentUser!.uid);
-    if (err != null) return err;
-    t.published = true;
-    await store.persist();
-    return null;
+    return 'Publishing is off in this version — everything stays on your phone.';
   }
 
-  /// Unpublishes [t]: deletes the public document and clears the flag.
+  /// Unpublishes [t]. Fully local (v1.4.5): unpublishing is OFF,
+  /// and the app must never delete anything from Firestore — so
+  /// the public copy (if any, from an older version) stays exactly
+  /// as it is, and the local flag is left untouched. The returned
+  /// message is what the toggle shows.
   Future<String?> unpublish(Store store, Tournament t) async {
-    String? err;
-    final col = _collection();
-    if (col != null && AuthService().isLoggedIn) {
-      try {
-        await col.doc(t.id).delete();
-        _lastError = null;
-      } catch (e) {
-        _lastError = e.toString();
-        debugPrint('Unpublish failed: $e');
-        err = 'The public copy could not be removed (no internet?). '
-            'It may stay visible until you unpublish again while online.';
-      }
-    }
-    t.published = false;
-    await store.persist();
-    return err;
+    return 'Unpublishing is off in this version — the public copy stays as-is.';
   }
 
   /// Fire-and-forget removal of the public document when its
-  /// tournament is deleted locally, so no orphan stays searchable.
+  /// tournament is deleted locally. Fully local (v1.4.5): NO-OP —
+  /// deleting a local tournament must never delete the cloud copy.
   void deletePublishedDoc(String tournamentId) {
-    final col = _collection();
-    if (col == null || !AuthService().isLoggedIn) return;
-    col.doc(tournamentId).delete().catchError((Object e) {
-      debugPrint('Published doc cleanup failed: $e');
-      return null;
-    });
+    return;
   }
 
-  /// Called from Store.persist(). While any of the owner's tournaments
-  /// is published, its snapshot is re-pushed debounced — the same
-  /// pattern as cloud sync. No-op for guests / logged-out users.
+  /// Called from Store.persist(). Fully local (v1.4.5): NO-OP —
+  /// no published-snapshot write runs from any path (edits, balls,
+  /// close). The timer field is kept for cancelPending's sake,
+  /// but nothing ever arms it now.
   void scheduleRepublish(Store store) {
-    final auth = AuthService();
-    if (!auth.firebaseReady || !auth.isLoggedIn) return;
-    if (!hasPublished(store)) return;
-    _republishTimer?.cancel();
-    _republishTimer =
-        Timer(const Duration(seconds: 5), () => _republishAll(store));
+    return;
   }
 
-  Future<void> _republishAll(Store store) async {
-    final auth = AuthService();
-    if (!auth.isLoggedIn) return;
-    final uid = auth.currentUser!.uid;
-    // Identity guard (v1.3.1): the store must still hold THIS
-    // account's data — after an account switch the pending timer of
-    // the previous identity must not publish the new one's data
-    // under the wrong owner (and vice versa).
-    if (store.identityId != uid) return;
-    for (final t in store.tournaments.where((t) => t.published)) {
-      await _writeDoc(store, t, uid);
-    }
+  /// Fires a republish deferred during scoring, if one is owed.
+  /// Fully local (v1.4.5): NO-OP — nothing is ever owed anymore
+  /// (scheduleRepublish never arms), and scoring close no longer
+  /// triggers a flush.
+  void flushDeferredRepublish(Store store) {
+    return;
   }
 
   /// Cancels a pending debounced re-publish (identity switches,
-  /// log-out).
+  /// log-out). Fully local: the timer is never armed anymore, so
+  /// this only ever cancels null — kept because the store calls
+  /// it on identity switch.
   void cancelPending() {
     _republishTimer?.cancel();
     _republishTimer = null;
@@ -343,40 +265,25 @@ class PublishService {
 
   // ---------- Viewer reads (public — guests included) ----------
 
-  List<PublishedTournament> _decodeSnap(
-      QuerySnapshot<Map<String, dynamic>> snap) {
-    final out = <PublishedTournament>[];
-    for (final d in snap.docs) {
-      final p = fromDoc(d.id, d.data());
-      if (p != null) out.add(p);
-    }
-    out.sort(
-        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    return out;
-  }
-
-  /// One-shot fetch of every published tournament.
+  /// One-shot fetch of every published tournament. Fully local
+  /// (v1.4.5): NO-OP — returns empty without any network read.
+  /// The search screen therefore shows its empty state.
   Future<List<PublishedTournament>> fetchPublished() async {
-    final col = _collection();
-    if (col == null) return [];
-    return _decodeSnap(await col.get());
+    return [];
   }
 
   /// Live list of published tournaments (updates as owners re-push).
+  /// Fully local (v1.4.5): NO-OP — an immediately-empty stream,
+  /// no Firestore subscription.
   Stream<List<PublishedTournament>> watchPublished() {
-    final col = _collection();
-    if (col == null) return Stream.value(const []);
-    return col.snapshots().map(_decodeSnap);
+    return Stream.value(const []);
   }
 
   /// Live view of one published tournament (live scores while open).
+  /// Fully local (v1.4.5): NO-OP — an immediately-null stream, no
+  /// Firestore subscription. The viewer screen shows its
+  /// not-found state.
   Stream<PublishedTournament?> watchOne(String tournamentId) {
-    final col = _collection();
-    if (col == null) return Stream.value(null);
-    return col.doc(tournamentId).snapshots().map((snap) {
-      final data = snap.data();
-      if (!snap.exists || data == null) return null;
-      return fromDoc(snap.id, data);
-    });
+    return Stream.value(null);
   }
 }
