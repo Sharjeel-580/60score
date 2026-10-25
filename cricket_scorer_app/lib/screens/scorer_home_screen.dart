@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../auth_service.dart';
 import '../models.dart';
+import '../nav_memory.dart';
 import '../points_table_share.dart';
 import '../publish_service.dart';
 import '../scoring.dart';
@@ -827,7 +828,8 @@ class _ScorerHomeScreenState extends State<ScorerHomeScreen> {
                         ),
                       ],
                     ),
-                    if (m.status == 'completed' &&
+                    if ((m.status == 'completed' ||
+                            m.status == 'noResult') &&
                         m.resultText.trim().isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
@@ -927,7 +929,15 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Recents resume (v1.4.5): see NavMemory's contract.
+    NavMemory.save('tournament', tournament.id);
     _runPlayoffUpdate();
+  }
+
+  @override
+  void dispose() {
+    NavMemory.clear('tournament', tournament.id);
+    super.dispose();
   }
 
   Future<void> _runPlayoffUpdate() async {
@@ -1085,6 +1095,11 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
     final playoffFixtures = playoffMatchesOf(tournament.id, store.matches);
     return DefaultTabController(
       length: 3,
+      // v1.4.5: tab ORDER is Fixtures, Points Table, Stats, and the
+      // screen opens on Fixtures (index 0). Switching between tabs
+      // still works as before, and no tab state is persisted
+      // anywhere, so nothing else is affected.
+      initialIndex: 0,
       child: Scaffold(
         appBar: AppBar(
           title: Text(tournament.name),
@@ -1120,8 +1135,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
           ],
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Points Table'),
               Tab(text: 'Fixtures'),
+              Tab(text: 'Points Table'),
               Tab(text: 'Stats'),
             ],
           ),
@@ -1139,6 +1154,31 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
         ),
         body: TabBarView(
           children: [
+            // Fixtures — league and playoffs, with status-based routing
+            ListView(
+              padding: const EdgeInsets.all(10),
+              children: [
+                const SectionHeader('League Fixtures'),
+                if (leagueFixtures.isEmpty)
+                  const EmptyState(
+                    icon: Icons.event_note,
+                    title: 'No league fixtures',
+                    subtitle: 'Use the + button to add fixtures.',
+                  ),
+                for (final m in leagueFixtures) _fixtureCard(m),
+                const SectionHeader('Playoffs'),
+                if (playoffFixtures.isEmpty)
+                  const EmptyState(
+                    icon: Icons.emoji_events_outlined,
+                    title: 'No playoff fixtures',
+                    subtitle:
+                        'Semifinals and the final appear here once added.',
+                  ),
+                for (final m in playoffFixtures)
+                  _fixtureCard(m, stageOverride: stageLabel(m.stage)),
+                const SizedBox(height: 70),
+              ],
+            ),
             // Points table (ICC NRR) with playoff qualification badges
             ListView(
               padding: const EdgeInsets.all(10),
@@ -1276,31 +1316,6 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                 ),
               ],
             ),
-            // Fixtures — league and playoffs, with status-based routing
-            ListView(
-              padding: const EdgeInsets.all(10),
-              children: [
-                const SectionHeader('League Fixtures'),
-                if (leagueFixtures.isEmpty)
-                  const EmptyState(
-                    icon: Icons.event_note,
-                    title: 'No league fixtures',
-                    subtitle: 'Use the + button to add fixtures.',
-                  ),
-                for (final m in leagueFixtures) _fixtureCard(m),
-                const SectionHeader('Playoffs'),
-                if (playoffFixtures.isEmpty)
-                  const EmptyState(
-                    icon: Icons.emoji_events_outlined,
-                    title: 'No playoff fixtures',
-                    subtitle:
-                        'Semifinals and the final appear here once added.',
-                  ),
-                for (final m in playoffFixtures)
-                  _fixtureCard(m, stageOverride: stageLabel(m.stage)),
-                const SizedBox(height: 70),
-              ],
-            ),
             // Tournament stats (Stumps-style leaderboards)
             TournamentStatsTab(store: store, tournament: tournament),
           ],
@@ -1377,9 +1392,25 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
         ),
       );
       if (action == 'reset') {
+        // v1.4.5 action feedback: a failed save reverts the
+        // in-memory change, so the display never claims a save
+        // that did not land on disk.
+        final prev = tournament.pointsTableOverrides[teamId];
         tournament.pointsTableOverrides.remove(teamId);
-        await store.persist();
-        if (mounted) setState(() {});
+        final saved = await store.persistTournamentsOnly();
+        if (mounted) {
+          if (!saved && prev != null) {
+            tournament.pointsTableOverrides[teamId] = prev;
+          }
+          setState(() {});
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            SnackBar(
+              content: Text(saved
+                  ? 'Points override removed.'
+                  : 'Remove failed — try again.'),
+            ),
+          );
+        }
       } else if (action == 'save') {
         int count(TextEditingController ctrl) {
           final v = int.tryParse(ctrl.text.trim());
@@ -1388,6 +1419,7 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
         }
 
         final nrr = double.tryParse(cNrr.text.trim()) ?? 0;
+        final prev = tournament.pointsTableOverrides[teamId];
         tournament.pointsTableOverrides[teamId] = PointsTableOverride(
           played: count(cP),
           won: count(cW),
@@ -1397,8 +1429,24 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
           points: count(cPts),
           nrr: nrr,
         );
-        await store.persist();
-        if (mounted) setState(() {});
+        final saved = await store.persistTournamentsOnly();
+        if (mounted) {
+          if (!saved) {
+            if (prev != null) {
+              tournament.pointsTableOverrides[teamId] = prev;
+            } else {
+              tournament.pointsTableOverrides.remove(teamId);
+            }
+          }
+          setState(() {});
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            SnackBar(
+              content: Text(saved
+                  ? 'Points table saved.'
+                  : 'Points save failed — try again.'),
+            ),
+          );
+        }
       }
     } finally {
       for (final c in [cP, cW, cL, cT, cNR, cPts, cNrr]) {
@@ -1451,12 +1499,31 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
     );
     if (ok == true) {
       final v = int.tryParse(ctrl.text) ?? 0;
+      // v1.4.5 action feedback: revert on a failed save so the
+      // display never claims a save that did not land on disk.
+      final prev = tournament.pointsAdjustments[teamId];
       if (v == 0) {
         tournament.pointsAdjustments.remove(teamId);
       } else {
         tournament.pointsAdjustments[teamId] = v;
       }
-      await store.persist();
+      final saved = await store.persistTournamentsOnly();
+      if (context.mounted) {
+        if (!saved) {
+          if (prev != null) {
+            tournament.pointsAdjustments[teamId] = prev;
+          } else {
+            tournament.pointsAdjustments.remove(teamId);
+          }
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(saved
+                ? 'Points adjustment saved.'
+                : 'Adjustment save failed — try again.'),
+          ),
+        );
+      }
       if (mounted) setState(() {});
     }
   }
