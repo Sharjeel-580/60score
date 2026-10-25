@@ -436,7 +436,6 @@ class InningsState {
     'wideCount': wideCount,
     'events': events.map((e) => e.toJson()).toList(),
     'fallOfWickets': fallOfWickets.map((f) => f.toJson()).toList(),
-    'undoStack': undoStack,
     'currentOverBowlerRuns': currentOverBowlerRuns,
     'currentOverTeamRuns': currentOverTeamRuns,
     'maxWickets': maxWickets,
@@ -510,6 +509,23 @@ class InningsState {
     s.target = (j['target'] as num?)?.toInt() ?? 0;
     return s;
   }
+}
+
+/// Per-entry load guard, mirroring the per-entry skip in the
+/// store's list decoder: one malformed innings entry (a non-Map
+/// entry, or one whose decode throws) used to throw the whole
+/// Match.fromJson and drop the entire match on load. Bad entries
+/// are now skipped so the rest of the match still loads.
+List<InningsState> _safeInningsList(Object? raw) {
+  final out = <InningsState>[];
+  for (final e in (raw as List?) ?? []) {
+    try {
+      out.add(InningsState.fromJson(e as Map<String, dynamic>));
+    } catch (_) {
+      // Skip this entry, keep the rest.
+    }
+  }
+  return out;
 }
 
 class Match {
@@ -640,14 +656,10 @@ class Match {
       tossDecision: j['tossDecision'] as String? ?? 'bat',
       status: j['status'] as String? ?? 'live',
       stage: j['stage'] as String? ?? 'league',
-      innings: ((j['innings'] as List?) ?? [])
-          .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      innings: _safeInningsList(j['innings']),
       // Records written before the Super Over feature have no such
       // key and read as an empty list.
-      superOverInnings: ((j['superOverInnings'] as List?) ?? [])
-          .map((e) => InningsState.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      superOverInnings: _safeInningsList(j['superOverInnings']),
       resultText: j['resultText'] as String? ?? '',
       totalWickets: (j['totalWickets'] as num?)?.toInt() ?? 0,
       lastManStands: j['lastManStands'] as bool? ?? false,
