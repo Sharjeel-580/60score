@@ -132,6 +132,100 @@ class PointsTableOverride {
   }
 }
 
+/// Manual per-player stats override (v1.4.5): edited BASE counters
+/// only. Mirror of [PointsTableOverride]: the row is fully replaced
+/// by these counters, and derived values (average, strike rate,
+/// economy, best figures, MVP) recompute from them via [CareerStats]
+/// getters — they are never stored. Pre-filled from the computed row
+/// by the edit dialog; removed per player via Reset.
+class PlayerStatsOverride {
+  int matches;
+  int inningsBatted;
+  int notOuts;
+  int runs;
+  int ballsFaced;
+  int highScore;
+  int hundreds;
+  int fifties;
+  int fours;
+  int sixes;
+  int ballsBowled;
+  int runsConceded;
+  int wickets;
+  int bestWickets;
+  int bestRuns;
+  int catches;
+  int stumpings;
+  int runOuts;
+
+  PlayerStatsOverride({
+    this.matches = 0,
+    this.inningsBatted = 0,
+    this.notOuts = 0,
+    this.runs = 0,
+    this.ballsFaced = 0,
+    this.highScore = 0,
+    this.hundreds = 0,
+    this.fifties = 0,
+    this.fours = 0,
+    this.sixes = 0,
+    this.ballsBowled = 0,
+    this.runsConceded = 0,
+    this.wickets = 0,
+    this.bestWickets = 0,
+    this.bestRuns = 0,
+    this.catches = 0,
+    this.stumpings = 0,
+    this.runOuts = 0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'matches': matches,
+        'inningsBatted': inningsBatted,
+        'notOuts': notOuts,
+        'runs': runs,
+        'ballsFaced': ballsFaced,
+        'highScore': highScore,
+        'hundreds': hundreds,
+        'fifties': fifties,
+        'fours': fours,
+        'sixes': sixes,
+        'ballsBowled': ballsBowled,
+        'runsConceded': runsConceded,
+        'wickets': wickets,
+        'bestWickets': bestWickets,
+        'bestRuns': bestRuns,
+        'catches': catches,
+        'stumpings': stumpings,
+        'runOuts': runOuts,
+      };
+
+  /// Tolerant: missing keys read as 0, so old data keeps working.
+  factory PlayerStatsOverride.fromJson(Map<String, dynamic> j) {
+    int iv(String k) => (j[k] as num?)?.toInt() ?? 0;
+    return PlayerStatsOverride(
+      matches: iv('matches'),
+      inningsBatted: iv('inningsBatted'),
+      notOuts: iv('notOuts'),
+      runs: iv('runs'),
+      ballsFaced: iv('ballsFaced'),
+      highScore: iv('highScore'),
+      hundreds: iv('hundreds'),
+      fifties: iv('fifties'),
+      fours: iv('fours'),
+      sixes: iv('sixes'),
+      ballsBowled: iv('ballsBowled'),
+      runsConceded: iv('runsConceded'),
+      wickets: iv('wickets'),
+      bestWickets: iv('bestWickets'),
+      bestRuns: iv('bestRuns'),
+      catches: iv('catches'),
+      stumpings: iv('stumpings'),
+      runOuts: iv('runOuts'),
+    );
+  }
+}
+
 class Tournament {
   String id;
   String name;
@@ -142,6 +236,11 @@ class Tournament {
   /// Manual points-table row overrides (v1.4.4): teamId -> edited row.
   /// Empty means every row is computed. Removed per team via Reset.
   Map<String, PointsTableOverride> pointsTableOverrides;
+  /// Manual per-player stats overrides (v1.4.5): playerId -> edited
+  /// base counters. Empty means every row is computed. Removed per
+  /// player via Reset. Derived values are NOT stored — they
+  /// recompute from these counters via CareerStats getters.
+  Map<String, PlayerStatsOverride> playerStatsOverrides;
   /// Final (locked) playoff qualification: ordered team IDs, rank 1..4.
   /// Empty until the league stage is finalized. Derived by the playoff
   /// engine — never edited by hand.
@@ -168,6 +267,7 @@ class Tournament {
     this.logoBase64 = '',
     Map<String, int>? pointsAdjustments,
     Map<String, PointsTableOverride>? pointsTableOverrides,
+    Map<String, PlayerStatsOverride>? playerStatsOverrides,
     List<String>? qualifiedTeamIds,
     this.qualificationFinalized = false,
     this.published = false,
@@ -175,6 +275,7 @@ class Tournament {
   }) : teamIds = teamIds ?? [],
        pointsAdjustments = pointsAdjustments ?? {},
        pointsTableOverrides = pointsTableOverrides ?? {},
+       playerStatsOverrides = playerStatsOverrides ?? {},
        qualifiedTeamIds = qualifiedTeamIds ?? [];
 
   Map<String, dynamic> toJson() => {
@@ -186,6 +287,9 @@ class Tournament {
     'pointsAdjustments': pointsAdjustments,
     'pointsTableOverrides': {
       for (final e in pointsTableOverrides.entries) e.key: e.value.toJson(),
+    },
+    'playerStatsOverrides': {
+      for (final e in playerStatsOverrides.entries) e.key: e.value.toJson(),
     },
     'qualifiedTeamIds': qualifiedTeamIds,
     'qualificationFinalized': qualificationFinalized,
@@ -218,6 +322,24 @@ class Tournament {
         }
       });
     }
+    // Same tolerance for per-player stats overrides (v1.4.5).
+    final statOverrides = <String, PlayerStatsOverride>{};
+    final rawStatOverrides = j['playerStatsOverrides'];
+    if (rawStatOverrides is Map) {
+      rawStatOverrides.forEach((k, v) {
+        try {
+          if (v is Map<String, dynamic>) {
+            statOverrides[k as String] = PlayerStatsOverride.fromJson(v);
+          } else if (v is Map) {
+            statOverrides[k as String] = PlayerStatsOverride.fromJson(
+              v.map((kk, vv) => MapEntry(kk as String, vv)),
+            );
+          }
+        } catch (_) {
+          // Skip just this entry.
+        }
+      });
+    }
     return Tournament(
       id: j['id'] as String,
       name: j['name'] as String,
@@ -226,6 +348,7 @@ class Tournament {
       logoBase64: j['logoBase64'] as String? ?? '',
       pointsAdjustments: adj,
       pointsTableOverrides: overrides,
+      playerStatsOverrides: statOverrides,
       qualifiedTeamIds:
           ((j['qualifiedTeamIds'] as List?) ?? [])
               .map((e) => e as String)
@@ -529,6 +652,88 @@ class UndoStep {
     required this.widePenalty,
     required this.noBallPenalty,
   });
+
+  /// Delta steps only: scalars + figure copies + lengths. No events,
+  /// no JSON, so a step stays small and cheap to persist (v1.4.5).
+  Map<String, dynamic> toJson() => {
+        'totalRuns': totalRuns,
+        'wickets': wickets,
+        'legalBalls': legalBalls,
+        'strikerId': strikerId,
+        'nonStrikerId': nonStrikerId,
+        'currentBowlerId': currentBowlerId,
+        'lastBowlerId': lastBowlerId,
+        'awaitingBatter': awaitingBatter,
+        'awaitingBowler': awaitingBowler,
+        'batting': batting.map((k, v) => MapEntry(k, v.toJson())),
+        'bowling': bowling.map((k, v) => MapEntry(k, v.toJson())),
+        'widesRuns': widesRuns,
+        'noBallRuns': noBallRuns,
+        'byeRuns': byeRuns,
+        'legByeRuns': legByeRuns,
+        'noBallCount': noBallCount,
+        'wideCount': wideCount,
+        'eventsLength': eventsLength,
+        'fallOfWicketsLength': fallOfWicketsLength,
+        'currentOverBowlerRuns': currentOverBowlerRuns,
+        'currentOverTeamRuns': currentOverTeamRuns,
+        'target': target,
+        'maxWickets': maxWickets,
+        'widePenalty': widePenalty,
+        'noBallPenalty': noBallPenalty,
+      };
+
+  factory UndoStep.fromJson(Map<String, dynamic> j) {
+    Map<String, BatFig> batFigs(Map? m) {
+      final out = <String, BatFig>{};
+      for (final entry in (m ?? {}).entries) {
+        try {
+          out[entry.key as String] =
+              BatFig.fromJson(entry.value as Map<String, dynamic>);
+        } catch (_) {}
+      }
+      return out;
+    }
+
+    Map<String, BowlFig> bowlFigs(Map? m) {
+      final out = <String, BowlFig>{};
+      for (final entry in (m ?? {}).entries) {
+        try {
+          out[entry.key as String] =
+              BowlFig.fromJson(entry.value as Map<String, dynamic>);
+        } catch (_) {}
+      }
+      return out;
+    }
+
+    return UndoStep(
+      totalRuns: (j['totalRuns'] as num?)?.toInt() ?? 0,
+      wickets: (j['wickets'] as num?)?.toInt() ?? 0,
+      legalBalls: (j['legalBalls'] as num?)?.toInt() ?? 0,
+      strikerId: j['strikerId'] as String? ?? '',
+      nonStrikerId: j['nonStrikerId'] as String? ?? '',
+      currentBowlerId: j['currentBowlerId'] as String? ?? '',
+      lastBowlerId: j['lastBowlerId'] as String? ?? '',
+      awaitingBatter: j['awaitingBatter'] as bool? ?? false,
+      awaitingBowler: j['awaitingBowler'] as bool? ?? false,
+      batting: batFigs(j['batting'] as Map?),
+      bowling: bowlFigs(j['bowling'] as Map?),
+      widesRuns: (j['widesRuns'] as num?)?.toInt() ?? 0,
+      noBallRuns: (j['noBallRuns'] as num?)?.toInt() ?? 0,
+      byeRuns: (j['byeRuns'] as num?)?.toInt() ?? 0,
+      legByeRuns: (j['legByeRuns'] as num?)?.toInt() ?? 0,
+      noBallCount: (j['noBallCount'] as num?)?.toInt() ?? 0,
+      wideCount: (j['wideCount'] as num?)?.toInt() ?? 0,
+      eventsLength: (j['eventsLength'] as num?)?.toInt() ?? 0,
+      fallOfWicketsLength: (j['fallOfWicketsLength'] as num?)?.toInt() ?? 0,
+      currentOverBowlerRuns: (j['currentOverBowlerRuns'] as num?)?.toInt() ?? 0,
+      currentOverTeamRuns: (j['currentOverTeamRuns'] as num?)?.toInt() ?? 0,
+      target: (j['target'] as num?)?.toInt() ?? 0,
+      maxWickets: (j['maxWickets'] as num?)?.toInt() ?? 0,
+      widePenalty: j['widePenalty'] as bool? ?? true,
+      noBallPenalty: j['noBallPenalty'] as bool? ?? true,
+    );
+  }
 }
 
 class InningsState {
@@ -558,13 +763,21 @@ class InningsState {
   List<BallEvent> events = [];
   List<FallOfWicket> fallOfWickets = [];
   List<UndoStep> undoStack =
-      []; // pre-action reverse steps (v1.4.4), never persisted
+      []; // pre-action reverse steps (v1.4.4); persisted since v1.4.5,
+  // capped at 50 — steps are small deltas (scalars + figure copies
+  // + lengths, no events, no JSON), unlike the old snapshot strings.
   int currentOverBowlerRuns = 0; // for maiden detection
   int currentOverTeamRuns = 0; // all team runs this over (maiden detection)
   int target = 0; // 0 = no target (first innings)
   int maxWickets = 0; // 0 = default (XI - 1); set from match settings
   bool widePenalty = true;
   bool noBallPenalty = true;
+  // v1.4.5: scorer ended this innings early via the scoring ⋮ menu
+  // ("End innings"). Not a counter — the totals stay exactly as
+  // scored; the flag only makes [isComplete] true so the existing
+  // innings-break card (Start 2nd innings / match finish) appears.
+  // Old JSON without the key loads as false (not ended).
+  bool endedEarly = false;
 
   int get effectiveMaxWickets =>
       maxWickets > 0 ? maxWickets : battingXI.length - 1;
@@ -572,7 +785,8 @@ class InningsState {
   bool get isComplete =>
       legalBalls >= oversLimit * ballsPerOver ||
       wickets >= effectiveMaxWickets ||
-      (target > 0 && totalRuns >= target);
+      (target > 0 && totalRuns >= target) ||
+      endedEarly;
 
   int get extrasTotal => widesRuns + noBallRuns + byeRuns + legByeRuns;
 
@@ -611,12 +825,14 @@ class InningsState {
     'wideCount': wideCount,
     'events': events.map((e) => e.toJson()).toList(),
     'fallOfWickets': fallOfWickets.map((f) => f.toJson()).toList(),
+    'undoStack': undoStack.map((u) => u.toJson()).toList(),
     'currentOverBowlerRuns': currentOverBowlerRuns,
     'currentOverTeamRuns': currentOverTeamRuns,
     'maxWickets': maxWickets,
     'widePenalty': widePenalty,
     'noBallPenalty': noBallPenalty,
     'target': target,
+    'endedEarly': endedEarly,
   };
 
   factory InningsState.fromJson(Map<String, dynamic> j) {
@@ -674,12 +890,27 @@ class InningsState {
         s.fallOfWickets.add(FallOfWicket.fromJson(e as Map<String, dynamic>));
       } catch (_) {}
     }
-    // Undo is session-only (v1.4.4): a legacy payload may still carry
-    // the old string-snapshot stack, but it is dropped on load —
-    // restoring it would reintroduce the snapshot balloon, and an
-    // old session's undo history is meaningless in a new session.
-    // A missing key likewise yields an empty stack. Never throws.
-    s.undoStack = [];
+    // Undo is persisted since v1.4.5 (delta reverse steps, capped at
+    // 50 — small by design, unlike the old snapshot strings). A
+    // missing key yields an empty stack, so old JSON keeps working;
+    // legacy string snapshots are skipped, and one bad entry never
+    // throws the innings away. Never throws.
+    final steps = <UndoStep>[];
+    final rawStack = j['undoStack'];
+    if (rawStack is List) {
+      for (final e in rawStack) {
+        try {
+          if (e is Map<String, dynamic>) {
+            steps.add(UndoStep.fromJson(e));
+          } else if (e is Map) {
+            steps.add(UndoStep.fromJson(Map<String, dynamic>.from(e)));
+          }
+          // Else: legacy string snapshot — skipped.
+        } catch (_) {}
+      }
+    }
+    s.undoStack =
+        steps.length > 50 ? steps.sublist(steps.length - 50) : steps;
     s.currentOverBowlerRuns =
         (j['currentOverBowlerRuns'] as num?)?.toInt() ?? 0;
     s.currentOverTeamRuns = (j['currentOverTeamRuns'] as num?)?.toInt() ?? 0;
@@ -687,6 +918,7 @@ class InningsState {
     s.widePenalty = j['widePenalty'] as bool? ?? true;
     s.noBallPenalty = j['noBallPenalty'] as bool? ?? true;
     s.target = (j['target'] as num?)?.toInt() ?? 0;
+    s.endedEarly = j['endedEarly'] as bool? ?? false;
     return s;
   }
 }
