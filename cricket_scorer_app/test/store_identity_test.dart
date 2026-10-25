@@ -192,4 +192,101 @@ void main() {
     expect(s.profile!.displayName, 'Player');
     expect(s.profile!.contact, '+923001234567');
   });
+
+  group('guest-to-owner migration (v1.4.1)', () {
+    Future<void> writeGuestData() async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'cricscore_teams_v1__guest',
+        jsonEncode([Team(id: 'g_team', name: 'Guest XI').toJson()]),
+      );
+      await prefs.setString(
+        'cricscore_tournaments_v1__guest',
+        jsonEncode([
+          Tournament(id: 'g_t', name: 'Guest Cup').toJson(),
+        ]),
+      );
+    }
+
+    test('owner sign-in copies guest data and keeps guest keys',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      await writeGuestData();
+      final prefs = await SharedPreferences.getInstance();
+
+      final s = Store();
+      await s.activateAccount('uid_owner', email: kOwnerEmail);
+      expect(s.teams.map((t) => t.id), ['g_team']);
+      expect(s.tournaments.map((t) => t.id), ['g_t']);
+
+      // Guest keys survive as backup — nothing is deleted.
+      expect(prefs.getString('cricscore_teams_v1__guest'), isNotNull);
+      expect(
+          prefs.getString('cricscore_tournaments_v1__guest'), isNotNull);
+      // And the copied owner keys hold the same data.
+      expect(prefs.getString('cricscore_teams_v1__uid_owner'), isNotNull);
+
+      // Logging out restores the guest workspace exactly as it was.
+      await s.activateIdentity('guest');
+      expect(s.teams.map((t) => t.id), ['g_team']);
+      expect(s.tournaments.map((t) => t.id), ['g_t']);
+    });
+
+    test('a non-owner sign-in never migrates guest data', () async {
+      SharedPreferences.setMockInitialValues({});
+      await writeGuestData();
+      final prefs = await SharedPreferences.getInstance();
+
+      final s = Store();
+      await s.activateAccount('uid_fan', email: 'fan@example.com');
+      expect(s.teams, isEmpty);
+      expect(s.tournaments, isEmpty);
+      // A phone login carries no email: also never migrates.
+      await s.activateAccount('uid_phone');
+      expect(s.teams, isEmpty);
+      // Direct calls refuse too.
+      expect(await s.migrateGuestDataToOwner('uid_owner'), isFalse);
+      expect(
+          await s.migrateGuestDataToOwner('uid_owner',
+              email: 'fan@example.com'),
+          isFalse);
+      expect(prefs.getString('cricscore_teams_v1__guest'), isNotNull);
+
+      // The owner can still migrate afterwards on the same phone.
+      await s.activateAccount('uid_owner', email: kOwnerEmail);
+      expect(s.teams.map((t) => t.id), ['g_team']);
+      expect(s.tournaments.map((t) => t.id), ['g_t']);
+    });
+
+    test('an owner scope with its own data is never overwritten',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final s = Store();
+      await s.activateIdentity('uid_owner');
+      await s.upsertTournament(
+          Tournament(id: 'owner_t', name: 'Owner League'));
+      await writeGuestData();
+
+      expect(
+          await s.migrateGuestDataToOwner('uid_owner',
+              email: kOwnerEmail),
+          isFalse);
+      await s.activateIdentity('uid_owner');
+      expect(s.tournaments.map((t) => t.id), ['owner_t']);
+      expect(s.teams, isEmpty);
+    });
+
+    test('upgrade install loses no local data: guest scope still loads',
+        () async {
+      // Simulates a 1.3.9 -> 1.4.1 upgrade install: the same
+      // SharedPreferences keys, no wipe, no key renames.
+      SharedPreferences.setMockInitialValues({});
+      await writeGuestData();
+
+      final s = Store();
+      await s.activateIdentity('guest');
+      expect(s.teams.map((t) => t.id), ['g_team']);
+      expect(s.tournaments.map((t) => t.id), ['g_t']);
+    });
+  });
 }
