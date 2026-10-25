@@ -85,30 +85,41 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
 
   Future<void> _boot() async {
     final minSplash = Future.delayed(const Duration(milliseconds: 1400));
-    // Settle Firebase auth FIRST (bounded): which identity's data
-    // loads depends on who — if anyone — is signed in on this device.
-    await AuthService().waitReady(const Duration(seconds: 2));
-    final auth = AuthService();
-    if (auth.isLoggedIn) {
-      // The signed-in account's OWN data scope (with the owner-only
-      // claim of any pre-v1.3.1 device data on first run), then
-      // refresh it from the cloud in the background.
-      final user = auth.currentUser!;
-      await store.activateAccount(
-        user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        phoneNumber: user.phoneNumber,
-      );
-      SyncService().pull(store); // fire-and-forget, last-write-wins
-      // Live receive (v1.3.4): other devices' writes apply on their
-      // own while the app runs.
-      SyncService().startLiveSync(store);
-    } else {
-      await store.activateIdentity('guest');
+    try {
+      // Settle Firebase auth FIRST (bounded): which identity's data
+      // loads depends on who — if anyone — is signed in on this device.
+      await AuthService().waitReady(const Duration(seconds: 2));
+      final auth = AuthService();
+      if (auth.isLoggedIn) {
+        // The signed-in account's OWN data scope (with the owner-only
+        // claim of any pre-v1.3.1 device data on first run), then
+        // refresh it from the cloud in the background.
+        final user = auth.currentUser!;
+        await store.activateAccount(
+          user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          phoneNumber: user.phoneNumber,
+        );
+        SyncService().pull(store); // fire-and-forget, last-write-wins
+        // Live receive (v1.3.4): other devices' writes apply on their
+        // own while the app runs.
+        SyncService().startLiveSync(store);
+      } else {
+        await store.activateIdentity('guest');
+      }
+      // Daily automatic backup (keeps last 14) — fire and forget.
+      runDailyAutoBackup(store);
+    } catch (_) {
+      // Launch hardening: a failure during boot (corrupt local
+      // data, a failing identity switch) must never leave the app
+      // stuck on the splash screen — the "app won't open at all"
+      // symptom. Fall back to whatever is loaded (possibly empty)
+      // and still enter the app; cloud sync retries on resume.
+      try {
+        if (!store.loaded) await store.activateIdentity('guest');
+      } catch (_) {}
     }
-    // Daily automatic backup (keeps last 14) — fire and forget.
-    runDailyAutoBackup(store);
     await minSplash;
     if (!mounted) return;
     setState(() => _ready = true);
