@@ -51,8 +51,9 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
 
   @override
   void dispose() {
-    // Scoring guard: super-over scoring closed — run a full sync
-    // (push + pull). (v1.4.4: live sync no longer exists.)
+    // Scoring guard: super-over scoring closed — run the
+    // local-only close (final local save, no push, no pull —
+    // v1.4.5 fully local).
     if (SyncService().scoringActive) {
       SyncService().scoringActive = false;
       unawaited(SyncService().syncAfterScoring(store));
@@ -72,14 +73,22 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
     try {
       computeResult(match, store.teamName);
       // Smoothness (v1.4.3): per ball, only the matches key is
-      // written — see ScoringScreen._afterChange.
-      await store.persistMatchesOnly();
+      // written — see ScoringScreen._afterChange. v1.4.5 action
+      // feedback: per-ball success stays silent, a failed save
+      // surfaces (persist returns false instead of throwing now).
+      final saved = await store.persistMatchesOnly();
+      if (!saved) {
+        DebugInfo.record('Ball save failed', StackTrace.current);
+        _snack('Ball could not be saved — try again.');
+      }
     } catch (e, st) {
       // Silent-close guard, same as ScoringScreen._afterChange:
       // this runs unawaited from the ball buttons, so a throw here
-      // used to be an unhandled async error. Record it instead.
+      // used to be an unhandled async error. Record it instead —
+      // and tell the user, so a failed update is never silent.
       DebugInfo.record(e, st);
       debugPrint('SuperOver _afterChange failed: $e');
+      _snack('Scoring update failed — try again.');
     }
     if (mounted) setState(() {});
   }
@@ -312,7 +321,45 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
   Future<void> _noBall() async {
     final runs = await _runsDialog('No ball — runs off the bat', 0);
     if (runs == null) return;
-    await _record(BallInput(extraType: 'noBall', batRuns: runs));
+    if (!mounted) return;
+    // Run out on a no-ball (same law as the main scoring screen):
+    // this flow previously offered no wicket choice here, so a run
+    // out on a no-ball could not be recorded in a single entry.
+    final runOut = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Run out on this no-ball?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('No wicket'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Run Out'),
+          ),
+        ],
+      ),
+    );
+    if (runOut != true) {
+      await _record(BallInput(extraType: 'noBall', batRuns: runs));
+      return;
+    }
+    final fielderId = await _pickPlayer('Fielder', inn.bowlingXI);
+    if (fielderId == null) return;
+    final ends = [inn.strikerId, inn.nonStrikerId]
+        .where((id) => id.isNotEmpty)
+        .toList();
+    final outPlayerId = await _pickPlayer('Who is out?', ends);
+    if (outPlayerId == null) return;
+    await _record(BallInput(
+      extraType: 'noBall',
+      batRuns: runs,
+      isWicket: true,
+      wicketType: 'runOut',
+      fielderId: fielderId,
+      outPlayerId: outPlayerId,
+    ));
   }
 
   Future<void> _startNextInnings() async {
@@ -341,6 +388,10 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
             onPressed: inn.events.isEmpty && inn.undoStack.isEmpty
                 ? null
                 : () async {
+                    if (inn.undoStack.isEmpty) {
+                      _snack('Undo is not available for this ball.');
+                      return;
+                    }
                     if (undoLastBall(inn)) await _afterChange();
                   },
           ),
@@ -600,6 +651,10 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
           onPressed: inn.events.isEmpty && inn.undoStack.isEmpty
               ? null
               : () async {
+                  if (inn.undoStack.isEmpty) {
+                    _snack('Undo is not available for this ball.');
+                    return;
+                  }
                   if (undoLastBall(inn)) await _afterChange();
                 },
           icon: const Icon(Icons.undo),
