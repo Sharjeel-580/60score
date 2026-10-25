@@ -7,11 +7,15 @@
 // Known simplification (documented in scoring.dart): a batsman
 // dismissed in super-over round 1 is not barred from round 2 —
 // every round starts from the full match XI with fresh figures.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../debug_info.dart';
 import '../models.dart';
 import '../scoring.dart';
 import '../store.dart';
+import '../sync_service.dart';
 import '../theme.dart';
 
 class SuperOverScreen extends StatefulWidget {
@@ -35,10 +39,25 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
   @override
   void initState() {
     super.initState();
+    // Scoring guard (same as ScoringScreen): super-over balls
+    // mutate the same match object, so no remote snapshot may be
+    // applied while this screen is open either.
+    SyncService().scoringActive = true;
     if (match.superOverInnings.isEmpty) {
       startSuperOverInnings(match, 1);
     }
     _current = match.superOverInnings.length - 1;
+  }
+
+  @override
+  void dispose() {
+    // Scoring guard: super-over scoring closed — reopen live sync
+    // and run a full sync (push + pull).
+    if (SyncService().scoringActive) {
+      SyncService().scoringActive = false;
+      unawaited(SyncService().syncAfterScoring(store));
+    }
+    super.dispose();
   }
 
   InningsState get inn => match.superOverInnings[_current];
@@ -50,8 +69,18 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
   /// Mirror of ScoringScreen._afterChange: recompute the match
   /// result (so a decided super over rewrites resultText) and persist.
   Future<void> _afterChange() async {
-    computeResult(match, store.teamName);
-    await store.persist();
+    try {
+      computeResult(match, store.teamName);
+      // Smoothness (v1.4.3): per ball, only the matches key is
+      // written — see ScoringScreen._afterChange.
+      await store.persistMatchesOnly();
+    } catch (e, st) {
+      // Silent-close guard, same as ScoringScreen._afterChange:
+      // this runs unawaited from the ball buttons, so a throw here
+      // used to be an unhandled async error. Record it instead.
+      DebugInfo.record(e, st);
+      debugPrint('SuperOver _afterChange failed: $e');
+    }
     if (mounted) setState(() {});
   }
 
