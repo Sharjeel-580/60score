@@ -80,11 +80,24 @@ class _ExtrasEdit {
   final TextEditingController byes = TextEditingController();
   final TextEditingController legByes = TextEditingController();
 
+  /// Delivery counts (v1.4.5): how many wide / no-ball deliveries
+  /// were bowled. Unlike the runs above, the counts are normally
+  /// derived from the bowling figures on save (see
+  /// recomputeInningsTotals) — these fields let the scorer correct
+  /// them directly, and the typed count then wins over the derived
+  /// one, exactly like the team total override below. Byes and
+  /// leg-byes have no separate count in the model (only runs), so
+  /// runs are all they get.
+  final TextEditingController wideCount = TextEditingController();
+  final TextEditingController noBallCount = TextEditingController();
+
   void dispose() {
     wides.dispose();
     noBalls.dispose();
     byes.dispose();
     legByes.dispose();
+    wideCount.dispose();
+    noBallCount.dispose();
   }
 }
 
@@ -97,6 +110,12 @@ class _InnEdit {
   /// when set, it overrides the total recomputed from the figures.
   final TextEditingController total = TextEditingController();
   int? totalOverride;
+
+  /// Directly edited delivery counts (v1.4.5, same pattern):
+  /// when set, they override the counts recomputed from the
+  /// bowling figures.
+  int? wideCountOverride;
+  int? noBallCountOverride;
 
   void dispose() {
     for (final e in bat.values) {
@@ -185,8 +204,12 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
     ie.extras.noBalls.text = '${inn.noBallRuns}';
     ie.extras.byes.text = '${inn.byeRuns}';
     ie.extras.legByes.text = '${inn.legByeRuns}';
+    ie.extras.wideCount.text = '${inn.wideCount}';
+    ie.extras.noBallCount.text = '${inn.noBallCount}';
     ie.total.text = '${inn.totalRuns}';
     ie.totalOverride = null;
+    ie.wideCountOverride = null;
+    ie.noBallCountOverride = null;
   }
 
   /// Dismissal text shown for editing: resolve the stored id tokens
@@ -446,15 +469,18 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
     inn.noBallRuns = noBalls;
     inn.byeRuns = byes;
     inn.legByeRuns = legByes;
+    // Directly edited delivery counts (v1.4.5): lenient like the
+    // points-table edit — bad or negative input coerces to 0,
+    // never refuses the save. Validated here, applied on save
+    // AFTER recomputeInningsTotals, so the typed count wins over
+    // the figure-derived one.
+    ie.wideCountOverride = _intOf(ie.extras.wideCount) ?? 0;
+    ie.noBallCountOverride = _intOf(ie.extras.noBallCount) ?? 0;
     // Directly edited team total: validated here, applied on save
     // AFTER the totals are recomputed from the figures, so the typed
-    // total wins over the computed one.
-    final total = _intOf(ie.total);
-    if (total == null) {
-      return '${store.teamName(inn.battingTeamId)}: team total must be '
-          'a number (0 or more).';
-    }
-    ie.totalOverride = total;
+    // total wins over the computed one. Lenient like the counts
+    // (v1.4.5): bad input coerces to 0 instead of refusing.
+    ie.totalOverride = _intOf(ie.total) ?? 0;
     return null;
   }
 
@@ -476,6 +502,12 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
       recomputeInningsTotals(inn);
       final override = _inns[i].totalOverride;
       if (override != null) inn.totalRuns = override;
+      // Directly edited delivery counts win over the
+      // figure-derived counts, same as the total above.
+      final wideCountOverride = _inns[i].wideCountOverride;
+      if (wideCountOverride != null) inn.wideCount = wideCountOverride;
+      final noBallCountOverride = _inns[i].noBallCountOverride;
+      if (noBallCountOverride != null) inn.noBallCount = noBallCountOverride;
       // The undo history describes the pre-edit balls; it must not
       // resurrect them over the corrected record.
       inn.undoStack = [];
@@ -488,17 +520,41 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
     widget.match.xiB = List.of(_edit.xiB);
     final text = computeResult(widget.match, store.teamName);
     if (text.isNotEmpty) widget.match.resultText = text;
-    await store.persist();
+    // M1: only the match changed → matches-only save. v1.4.5 action
+    // feedback: a failed save keeps the editor open so the user can
+    // retry instead of silently losing the corrections.
+    final saved = await store.persistMatchesOnly();
+    if (!saved) {
+      if (mounted) {
+        _snack('Scorecard save failed — changes were not saved. Try again.');
+      }
+      return;
+    }
     // Corrected totals can move the points table / playoff seeds.
     final tid = widget.match.tournamentId;
     if (tid != null && mounted) {
-      final update = await applyPlayoffUpdate(store, tid);
-      if (update.needsConfirmation && mounted) {
+      PlayoffUpdate? update;
+      try {
+        update = await applyPlayoffUpdate(store, tid);
+      } catch (_) {
+        update = null;
+      }
+      if (update == null) {
+        // The scorecard itself is saved; only the playoff reseed
+        // failed — say so instead of crashing the save flow.
+        if (mounted) {
+          _snack('Scorecard saved, but the playoff update failed.');
+        }
+      } else if (update.needsConfirmation && mounted) {
+        // Final local: the dialog builder closure below captures
+        // this, and a non-final nullable local loses promotion
+        // inside closures — so pin it first.
+        final confirmed = update;
         final apply = await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
             title: const Text('Playoff reseeding needed'),
-            content: Text(update.message),
+            content: Text(confirmed.message),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(c, false),
@@ -512,7 +568,13 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
           ),
         );
         if (apply == true) {
-          await applyPlayoffUpdate(store, tid, force: true);
+          try {
+            await applyPlayoffUpdate(store, tid, force: true);
+          } catch (_) {
+            if (mounted) {
+              _snack('Playoff reseed failed — table may be stale.');
+            }
+          }
         }
       }
     }
@@ -542,6 +604,18 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
             'to override it. The result, the points table and the '
             'player stats all update from the corrected record when '
             'you save.',
+            style: TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          // M4a (v1.4.5): figure edits change figures/totals and clear
+          // the undo stack, but never rewrite the ball-by-ball
+          // events — the event list stays exactly as scored. Points
+          // and stats read figures/totals, not events, so the tables
+          // stay consistent with the corrected figures.
+          const Text(
+            'Note: editing figures changes figures and totals only — '
+            'the ball-by-ball events stay as scored, and the undo '
+            'history for this match is cleared on save.',
             style: TextStyle(color: Colors.white60, fontSize: 13),
           ),
           const SizedBox(height: 12),
@@ -664,6 +738,29 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
                 _numField('Byes', ie.extras.byes),
                 _numField('Leg byes', ie.extras.legByes),
               ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Extras (counts)',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: kCopper,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                _numField('Wide count', ie.extras.wideCount),
+                _numField('No-ball count', ie.extras.noBallCount),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Counts override the totals derived from the bowling '
+              'figures above.',
+              style: TextStyle(fontSize: 11, color: Colors.white38),
             ),
             const Divider(height: 20),
             const Text(
