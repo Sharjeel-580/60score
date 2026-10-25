@@ -125,6 +125,7 @@ List<PointsRow> leaguePointsTable(
   t.teamIds,
   allMatches.where((m) => m.stage == 'league').toList(),
   pointsAdjustments: t.pointsAdjustments,
+  pointsTableOverrides: t.pointsTableOverrides,
 );
 
 /// Recompute qualification and playoff assignments for [tournamentId].
