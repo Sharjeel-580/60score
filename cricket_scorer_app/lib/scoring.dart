@@ -35,6 +35,17 @@ String _snapshot(InningsState s) {
   return jsonEncode(j);
 }
 
+/// Push one undo snapshot, keeping the in-memory history bounded to the
+/// last 50 snapshots. The stack is never persisted (see InningsState.toJson),
+/// so a long innings can no longer grow every per-ball save quadratically.
+/// Undo still works within a session; only restart-persistent undo is lost.
+void _pushUndo(InningsState s) {
+  s.undoStack.add(_snapshot(s));
+  if (s.undoStack.length > 50) {
+    s.undoStack.removeRange(0, s.undoStack.length - 50);
+  }
+}
+
 void _restore(InningsState s, String snap) {
   final j = jsonDecode(snap) as Map<String, dynamic>;
   final t = InningsState.fromJson(j);
@@ -114,7 +125,7 @@ bool applyBall(InningsState s, BallInput input) {
   if (s.strikerId == '' || s.nonStrikerId == '' || s.currentBowlerId == '') {
     return false;
   }
-  s.undoStack.add(_snapshot(s));
+  _pushUndo(s);
 
   final strikerAtBall = s.strikerId;
   final nonStrikerAtBall = s.nonStrikerId;
@@ -290,7 +301,7 @@ bool retireBatsmanHurt(InningsState s, String playerId) {
   if (playerId != s.strikerId && playerId != s.nonStrikerId) return false;
   final fig = s.batting[playerId];
   if (fig == null || fig.out) return false;
-  s.undoStack.add(_snapshot(s));
+  _pushUndo(s);
   fig.batted = true;
   fig.out = false;
   fig.howOut = 'retired hurt';
@@ -332,7 +343,7 @@ bool dismissBatsmanWithoutBall(
     // Retired out applies to a batsman at the crease.
     if (!atCrease) return false;
   }
-  s.undoStack.add(_snapshot(s));
+  _pushUndo(s);
   s.wickets++;
   final fig = s.batting.putIfAbsent(playerId, () => BatFig());
   fig.batted = true;
@@ -1123,10 +1134,14 @@ List<PointsRow> computePointsTable(
     }
     final i1 = m.innings[0];
     final i2 = m.innings[1];
-    // NRR accounting
+    // NRR accounting. A poisoned innings (batting/bowling team id
+    // outside this tournament's team ids, or empty) is skipped
+    // instead of throwing: one bad record must not kill the whole
+    // table.
     void account(InningsState inn) {
-      final batRow = rows[inn.battingTeamId]!;
-      final bowlRow = rows[inn.bowlingTeamId]!;
+      final batRow = rows[inn.battingTeamId];
+      final bowlRow = rows[inn.bowlingTeamId];
+      if (batRow == null || bowlRow == null) return;
       final balls = _adjustedBalls(inn);
       batRow.runsFor += inn.totalRuns;
       batRow.ballsFor += balls;
@@ -1144,9 +1159,18 @@ List<PointsRow> computePointsTable(
       final soWinner = superOverWinnerId(m);
       if (soWinner != null) {
         final loserId = soWinner == m.teamAId ? m.teamBId : m.teamAId;
-        rows[soWinner]!.won++;
-        rows[soWinner]!.points += 2;
-        rows[loserId]!.lost++;
+        // Same poisoned-id guard as account(): a winner id outside
+        // the table cannot be attributed to either side, so neither
+        // side gets the win/loss (the match still counts as played
+        // above). Never fall back to a tie here — the super over
+        // did decide it, just unattributably.
+        final wRow = rows[soWinner];
+        final lRow = rows[loserId];
+        if (wRow != null && lRow != null) {
+          wRow.won++;
+          wRow.points += 2;
+          lRow.lost++;
+        }
       } else {
         a.tied++;
         b.tied++;
@@ -1158,9 +1182,15 @@ List<PointsRow> computePointsTable(
           ? i1.battingTeamId
           : i2.battingTeamId;
       final loserId = winnerId == m.teamAId ? m.teamBId : m.teamAId;
-      rows[winnerId]!.won++;
-      rows[winnerId]!.points += 2;
-      rows[loserId]!.lost++;
+      // Same poisoned-id guard: when the winning innings' team id
+      // is unknown, neither side can be attributed the result.
+      final wRow = rows[winnerId];
+      final lRow = rows[loserId];
+      if (wRow != null && lRow != null) {
+        wRow.won++;
+        wRow.points += 2;
+        lRow.lost++;
+      }
     }
   }
   pointsAdjustments.forEach((teamId, extra) {
