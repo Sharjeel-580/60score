@@ -11,11 +11,12 @@
 // - Player photos travel separately, one document per player in
 //   users/{uid}/photos/{playerId} (see photo_sync.dart) — photoBase64
 //   is stripped from the backup JSON so this document stays small.
-// - Push: debounced ~1s after any Store.persist(), only when logged
-//   in (v1.3.4: was 5s). A push that fails (offline) stays "dirty"
-//   and retries automatically — when the Firestore listener reports
-//   the server is reachable again, on a periodic timer, and when
-//   the app returns to the foreground.
+// - Push (v1.4.5 fully local): NO push at any point. A save only
+//   marks the store dirty (bookkeeping); scoring close is
+//   local-only, manual sync is removed, and the pull-settle flush
+//   never runs from UI. The engine below stays in place but
+//   unreachable — re-wiring it would reintroduce the traffic the
+//   fully-local version removes. Nothing retries on its own.
 // - Pull: after login and on app start (if logged in). Non-match
 //   collections are last-write-wins by timestamp (see decidePull).
 //   MATCHES are merged per record instead (v1.3.5): the whole-dataset
@@ -225,35 +226,16 @@ enum PullDecision {
   noImport,
 }
 
-/// Result of one manual sync round, for the Profile screen's
-/// feedback. [ok] means the round ran (logged in, not scoring, no
-/// error); [changed] means remote data was applied; [error] is a
-/// short failure reason when [ok] is false ('scoring' / 'login' for
-/// the guard cases, otherwise the sync error text).
-class ManualSyncResult {
-  final bool ok;
-  final bool changed;
-  final String? error;
-  const ManualSyncResult(
-      {required this.ok, required this.changed, this.error});
-}
-
 class SyncService {
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
   SyncService._internal();
 
-  /// How long after a local change its push fires (v1.3.4: ~1s —
-  /// the old 5s debounce made "auto" sync feel manual).
-  static const Duration pushDebounce = Duration(seconds: 1);
-
-  /// Cadence of the background retry while a push is owed to the
-  /// cloud (the listener's reconnect signal and the app-resume hook
-  /// usually beat it to the retry).
-  static const Duration retryInterval = Duration(seconds: 20);
-
-  Timer? _pushTimer;
-  Timer? _retryTimer;
+  // v1.4.5 offline-first: the debounce timer and the periodic
+  // retry timer are retired — pushes run only at explicit sync
+  // points, so neither constant has a use left. (Removed, not
+  // kept as dead knobs; the test that asserted them now pins the
+  // offline-first contract instead.)
   bool _applyingRemote = false;
 
   /// Scoring guard (user design, v1.4.3; hardened v1.4.4 light
@@ -265,16 +247,17 @@ class SyncService {
   /// gates in [_attemptPush], [_pushCurrent] and [pull], so scoring
   /// cannot spend radio, battery or time on sync. Local persist
   /// keeps running (matches-only per ball); a push owed at scoring
-  /// time is NOT dropped — [_pushDirty] stays set and the close-time
-  /// [syncAfterScoring] (or a manual [syncNow]) flushes it once
-  /// scoring ends. Set by the scoring screens; read by every sync
-  /// entry point below.
+  /// time is NOT dropped — [_pushDirty] stays set. In the
+  /// fully-local version nothing flushes it (scoring close is
+  /// local-only, manual sync is removed); the flag is bookkeeping
+  /// only. Set by the scoring screens; read by the retained engine.
   bool scoringActive = false;
   DateTime? _lastSyncAt;
   String? _lastError;
 
   /// Local changes exist that no successful push has carried yet
-  /// (v1.3.4 offline→online retry state).
+  /// (v1.4.5 offline-first: set by every save via [schedulePush],
+  /// cleared only by a completed sync-point push or [cancelPending]).
   bool _pushDirty = false;
 
   /// Bumped by every push request; a finishing push only clears
@@ -516,27 +499,41 @@ class SyncService {
         .collection('photos');
   }
 
-  /// Called from Store.persist(). Debounced push — safe to call often.
+  /// Full offline-first (v1.4.5): a local save NEVER triggers a
+  /// cloud push on its own. This only records the debt — [_pushDirty]
+  /// plus a generation bump (so a push already in flight does not
+  /// clear a newer save's debt when it completes) — and returns.
+  /// The debt is never flushed in the fully-local version: the
+  /// sync points that used to flush it are local-only or removed.
+  /// The old ~1s debounce timer is
+  /// gone: no automatic push after any edit, ball or other save,
+  /// online or offline. Called from every Store.persist path.
   void schedulePush(Store store) {
     if (_applyingRemote) return;
-    final ref = _docRef();
-    if (ref == null) return;
     _pushDirty = true;
     _pushGen++;
-    _pushTimer?.cancel();
-    _pushTimer = Timer(pushDebounce, () => _attemptPush(store));
   }
 
+  /// Offline-first debt flag (also the test seam): true when local
+  /// saves since the last completed push have not gone up yet.
+  /// In the fully-local version no push ever clears it (only
+  /// [cancelPending] on identity switch does); it is bookkeeping
+  /// for the retained engine.
+  bool get hasUnpushedChanges => _pushDirty;
+
   /// One push attempt for the CURRENT identity, with every guard
-  /// applied. Used by the debounce timer and by the offline-retry
-  /// paths (listener reconnect signal, periodic timer, app resume).
-  void _attemptPush(Store store) {
+  /// applied. Retained but unreachable in the fully-local version:
+  /// its former callers (scoring close, manual sync) are local-only
+  /// or removed; the only remaining caller is the unwired live
+  /// listener. Kept intact (not deleted) so the engine can be
+  /// re-wired later without a rewrite.
+  Future<void> _attemptPush(Store store) async {
     final ref = _docRef();
     if (ref == null) return;
     // Light version (v1.4.4): no network while scoring. This is a
     // DEFER, not a drop — [_pushDirty] stays set (the callers that
-    // matter, schedulePush and the retry timer, only ever set it),
-    // and syncAfterScoring / syncNow flush it once scoring ends.
+    // matter, schedulePush, only ever set it). In the fully-local
+    // version nothing flushes it; the flag is bookkeeping only.
     if (scoringActive) return;
     final uid = AuthService().currentUser!.uid;
     // The identity may have changed since the push was scheduled
@@ -564,40 +561,20 @@ class SyncService {
       _pushDirty = false;
       return;
     }
-    _pushCurrent(store);
+    await _pushCurrent(store);
   }
 
-  /// Cancels a pending debounced push (identity switches, log-out).
-  /// Also stops the live listener and the retry timer, clears the
-  /// per-identity stamps, and restarts the push guard: the next
-  /// identity's first push waits for its own first pull, and no
-  /// listener event can leak one account's data into another's
-  /// scope.
+  /// Clears the unsynced-changes debt (identity switches, log-out).
+  /// Also stops the live listener, clears the per-identity stamps,
+  /// and restarts the push guard: the next identity's first push
+  /// waits for its own first pull, and no listener event can leak
+  /// one account's data into another's scope.
   void cancelPending() {
-    _pushTimer?.cancel();
-    _pushTimer = null;
     stopLiveSync();
-    _stopRetryTimer();
     _pushDirty = false;
     _lastPushedAt = 0;
     _lastAppliedRemoteAt = 0;
     _guard.reset();
-  }
-
-  void _startRetryTimer(Store store) {
-    if (_retryTimer != null) return;
-    _retryTimer = Timer.periodic(retryInterval, (_) {
-      if (!_pushDirty || _docRef() == null) {
-        _stopRetryTimer();
-        return;
-      }
-      _attemptPush(store);
-    });
-  }
-
-  void _stopRetryTimer() {
-    _retryTimer?.cancel();
-    _retryTimer = null;
   }
 
   Future<void> _push(
@@ -652,20 +629,19 @@ class SyncService {
       _lastSyncAt = DateTime.now();
       _lastError = null;
       // The debt is paid only when no newer change arrived while
-      // this push was in flight; that change's own debounce timer
-      // (or the retry paths) carries it otherwise.
+      // this push was in flight; a newer change's debt stays set
+      // for the next explicit sync point (v1.4.5 offline-first —
+      // no timer or retry carries it anymore).
       if (_pushGen == gen) {
         _pushDirty = false;
-        _stopRetryTimer();
       }
     } catch (e) {
       _lastError = e.toString();
       // Offline (or a transient failure): the change still owes
-      // the cloud a push. It retries when connectivity returns —
-      // the live listener's reconnect signal, the periodic retry
-      // timer, or the next app resume (v1.3.4).
+      // the cloud a push. Nothing retries on its own (v1.4.5
+      // offline-first) — the debt stays set and no sync point
+      // pushes it in the fully-local version.
       _pushDirty = true;
-      _startRetryTimer(store);
       debugPrint('Sync push failed: $e');
     }
   }
@@ -801,7 +777,6 @@ class SyncService {
             settleGuard: false, pushPhotosAfter: true));
         if (_pushGen == gen) {
           _pushDirty = false;
-          _stopRetryTimer();
         }
         return;
       } catch (e) {
@@ -829,11 +804,12 @@ class SyncService {
   /// re-publish is armed so published tournaments restored by the
   /// pull actually reach the public collection (bug #R1). A pull
   /// that FAILS leaves the guard closed — pushes stay deferred until
-  /// a pull completes (next app start or "Sync now").
+  /// a pull completes (no pull runs from UI in the fully-local
+  /// version, so the guard simply stays closed).
   Future<bool> pull(Store store) async {
     // Light version (v1.4.4): no network while scoring — the fetch
-    // itself is skipped, not just the apply. Deferred work runs at
-    // scoring close (syncAfterScoring) or on manual syncNow. This
+    // itself is skipped, not just the apply. Deferred work no
+    // longer runs anywhere (fully-local version). This
     // gate sits before _docRef() on purpose, so the decision never
     // needs Firebase state.
     if (scoringActive) return false;
@@ -885,53 +861,20 @@ class SyncService {
   /// then pull, so both sides converge. Safe to call when offline
   /// or logged out (no-ops). Callers clear [scoringActive] before
   /// invoking this, so the pull is not gated by the guard. The
-  /// push here is fire-and-forget like every other push in this
-  /// file; the pull's own push-back paths and the next close-time
-  /// or manual round converge any remainder.
+  /// Scoring close (v1.4.5 fully local): the close is LOCAL ONLY.
+  /// No push, no pull, no republish trigger — the app makes no
+  /// network call when scoring ends. The final local save is
+  /// guaranteed here (idempotent with the per-ball / completion
+  /// saves that already ran), and the scoringActive flag is
+  /// already cleared by every caller before this runs. The sync
+  /// engine below stays in place but unreachable; re-wiring it
+  /// would reintroduce the traffic the fully-local version removes.
+  /// Never throws (called unawaited from screen dispose).
   Future<void> syncAfterScoring(Store store) async {
-    // Called unawaited from screen dispose/completion: never throw.
     try {
-      if (_docRef() == null) return;
-      if (_pushDirty) _attemptPush(store);
-      await pull(store);
+      await store.persistMatchesOnly();
     } catch (e) {
-      debugPrint('syncAfterScoring failed: $e');
-    }
-  }
-
-  /// One manual sync round (v1.4.4 light version): push any unsynced
-  /// local work, then pull. This and [syncAfterScoring] are the only
-  /// sync entry points left — boot, resume and live triggers are
-  /// gone. Never throws; the result tells the Profile screen what
-  /// feedback to show. A no-op while scoring is open (the Profile
-  /// screen never shows during scoring, but the guard is enforced
-  /// here anyway) and when logged out.
-  Future<ManualSyncResult> syncNow(Store store) async {
-    if (scoringActive) {
-      return const ManualSyncResult(
-          ok: false, changed: false, error: 'scoring');
-    }
-    if (_docRef() == null) {
-      return const ManualSyncResult(
-          ok: false, changed: false, error: 'login');
-    }
-    try {
-      if (_pushDirty) _attemptPush(store);
-      // Fresh attempt: the pull below is the awaited signal. The
-      // push above is fire-and-forget by design (as in
-      // syncAfterScoring); a push that lands late converges on the
-      // next round.
-      _lastError = null;
-      final changed = await pull(store);
-      if (_lastError != null) {
-        return ManualSyncResult(
-            ok: false, changed: changed, error: _lastError);
-      }
-      return ManualSyncResult(ok: true, changed: changed);
-    } catch (e) {
-      _lastError = e.toString();
-      return ManualSyncResult(
-          ok: false, changed: false, error: e.toString());
+      debugPrint('syncAfterScoring local save failed: $e');
     }
   }
 
@@ -942,7 +885,8 @@ class SyncService {
   /// true when remote data was applied.
   ///
   /// [settleGuard] is true for an activation's real pulls (login /
-  /// app start / "Sync now") and for a listener event that lands
+  /// app start — both unwired in the fully-local version) and for
+  /// a listener event that lands
   /// before any pull settled; later listener events must NOT
   /// re-settle, because settle rewrites the guard's imported/remote
   /// bookkeeping for the whole activation.
@@ -1261,9 +1205,11 @@ class SyncService {
     if (_applyingRemote) return;
     // An event served from the SERVER (not the local cache) proves
     // connectivity is back: a push that failed while offline
-    // retries right now instead of waiting for the periodic timer.
+    // retries right now. Fire-and-forget here on purpose (this
+    // listener path is dormant since v1.4.4 — nothing starts it —
+    // and a listener event must never block on a push).
     if (!snap.metadata.isFromCache && _pushDirty) {
-      _attemptPush(store);
+      unawaited(_attemptPush(store));
     }
     if (!snap.exists) return;
     final data = snap.data();
@@ -1288,9 +1234,10 @@ class SyncService {
   /// App returned to the foreground (v1.4.4 light version): NO-OP
   /// on purpose. Automatic resume sync is removed — a foreground
   /// return used to push/pull on its own, which is exactly the
-  /// silent background traffic the light version removes. Sync now
-  /// happens only at scoring close ([syncAfterScoring]) or on
-  /// manual [syncNow]. The method is kept (rather than deleting
+  /// silent background traffic the light version removes. There
+  /// is no sync at all in the fully-local version (scoring close
+  /// is local-only, manual sync is removed). The method is kept
+  /// (rather than deleting
   /// it) so the wiring change stays visible here, not hidden.
   Future<void> onAppResumed(Store store) async {}
 
