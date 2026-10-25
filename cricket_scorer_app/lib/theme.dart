@@ -515,12 +515,17 @@ class ScoreButton extends StatelessWidget {
           Icon(icon, size: 18, color: fg),
           const SizedBox(width: 8),
         ],
-        Text(
-          label,
-          style: TextStyle(
-            color: fg,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
+        // Flexible (v1.4.5): a long label must ellipsize instead of
+        // overflowing the button at narrow widths (360dp screens).
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: fg,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
           ),
         ),
       ],
