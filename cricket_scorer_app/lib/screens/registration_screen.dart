@@ -80,7 +80,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               for (final r in rows) {
                 store.regPlayers.add(r.toRegPlayer(Store.newId('reg')));
               }
-              await store.persist();
+              await store.persistRegPlayersOnly();
               if (mounted) setState(() {});
             },
           ),
