@@ -180,7 +180,7 @@ Future<Tournament?> showTournamentEditDialog(
   existing.venue = venueCtrl.text.trim();
   existing.logoBase64 = logoBase64;
   existing.oversLimit = oversLimit;
-  await store.persist();
+  await store.persistTournamentsOnly();
   return existing;
 }
 
