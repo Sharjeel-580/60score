@@ -13,6 +13,7 @@ import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
+import 'qualification_chances_screen.dart';
 
 class NrrCalculatorScreen extends StatefulWidget {
   final Store store;
@@ -330,6 +331,18 @@ class _NrrCalculatorScreenState extends State<NrrCalculatorScreen> {
             'ko rival se aage nikalne ke liye kya karna hoga. Ye sirf '
             'calculator hai — table ya matches tabdeel nahi hote.',
             style: TextStyle(color: kSilver, fontSize: 12.5),
+          ),
+          const SizedBox(height: 10),
+          ScoreButton(
+            label: 'Qualification chances (all teams)',
+            icon: Icons.analytics_outlined,
+            kind: ScoreButtonKind.ghost,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => QualificationChancesScreen(store: store),
+              ),
+            ),
           ),
           const SectionHeader('Tournament & Teams'),
           DropdownButtonFormField<String>(
