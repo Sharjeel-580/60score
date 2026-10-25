@@ -1,10 +1,11 @@
-// Scoring guard (v1.4.3, user design): while a match is being
-// scored, NO remote snapshot may be applied at all; local persist
-// and the cloud push keep running; a full sync runs when scoring
-// ends. These tests pin the wiring (the scoring screens arm the
-// guard while open and disarm it on close) and the end-to-end
-// property the guard exists for: balls scored around a would-be
-// remote event are never lost.
+// Scoring guard (v1.4.3, user design; hardened v1.4.4 light
+// version): while a match is being scored, NO network runs at all
+// — no push, no pull, no listener traffic. Local persist keeps
+// running (matches-only per ball); a push owed during scoring is
+// deferred to scoring close, never dropped. These tests pin the
+// wiring (the scoring screens arm the guard while open and disarm
+// it on close) and the end-to-end property the guard exists for:
+// balls scored around a would-be remote event are never lost.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
