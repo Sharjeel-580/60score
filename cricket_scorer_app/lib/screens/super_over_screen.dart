@@ -40,8 +40,8 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
   void initState() {
     super.initState();
     // Scoring guard (same as ScoringScreen): super-over balls
-    // mutate the same match object, so no remote snapshot may be
-    // applied while this screen is open either.
+    // mutate the same match object, so no network may run while
+    // this screen is open either (v1.4.4 light version).
     SyncService().scoringActive = true;
     if (match.superOverInnings.isEmpty) {
       startSuperOverInnings(match, 1);
@@ -51,8 +51,8 @@ class _SuperOverScreenState extends State<SuperOverScreen> {
 
   @override
   void dispose() {
-    // Scoring guard: super-over scoring closed — reopen live sync
-    // and run a full sync (push + pull).
+    // Scoring guard: super-over scoring closed — run a full sync
+    // (push + pull). (v1.4.4: live sync no longer exists.)
     if (SyncService().scoringActive) {
       SyncService().scoringActive = false;
       unawaited(SyncService().syncAfterScoring(store));
