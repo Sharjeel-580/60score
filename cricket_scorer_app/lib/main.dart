@@ -9,7 +9,6 @@ import 'theme.dart';
 import 'auth_service.dart';
 import 'backup_service.dart';
 import 'debug_info.dart';
-import 'sync_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
@@ -79,12 +78,12 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Returning to the app re-syncs on its own (v1.3.4): unsynced
-    // offline changes push first, otherwise a pull brings in what
-    // other devices scored meanwhile.
-    if (state == AppLifecycleState.resumed) {
-      SyncService().onAppResumed(store);
-    }
+    // v1.4.4 light version: returning to the app NO LONGER re-syncs
+    // on its own (the v1.3.4 resume hook is gone). Sync happens
+    // only at scoring close or on manual "Sync now" (Profile), so
+    // a foreground return costs no network and cannot pull remote
+    // data over local work. The observer registration stays (the
+    // mixin is still declared); it simply has no sync work now.
   }
 
   Future<void> _boot() async {
@@ -96,8 +95,13 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
       final auth = AuthService();
       if (auth.isLoggedIn) {
         // The signed-in account's OWN data scope (with the owner-only
-        // claim of any pre-v1.3.1 device data on first run), then
-        // refresh it from the cloud in the background.
+        // claim of any pre-v1.3.1 device data on first run).
+        // v1.4.4 light version: boot NO LONGER pulls or subscribes
+        // to live sync on its own — the app opens on local data
+        // only. Fresh data arrives at scoring close, or on manual
+        // "Sync now" (Profile). This is the offline-first rule:
+        // opening the app must never wait on, or be changed by,
+        // the network.
         final user = auth.currentUser!;
         await store.activateAccount(
           user.uid,
@@ -105,10 +109,6 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
           displayName: user.displayName,
           phoneNumber: user.phoneNumber,
         );
-        SyncService().pull(store); // fire-and-forget, last-write-wins
-        // Live receive (v1.3.4): other devices' writes apply on their
-        // own while the app runs.
-        SyncService().startLiveSync(store);
       } else {
         await store.activateIdentity('guest');
       }
@@ -119,7 +119,8 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
       // data, a failing identity switch) must never leave the app
       // stuck on the splash screen — the "app won't open at all"
       // symptom. Fall back to whatever is loaded (possibly empty)
-      // and still enter the app; cloud sync retries on resume.
+      // and still enter the app; sync runs at scoring close or
+      // manually (no auto retry on resume anymore).
       try {
         if (!store.loaded) await store.activateIdentity('guest');
       } catch (_) {}
