@@ -10,6 +10,7 @@ import '../tournament_engine.dart';
 import '../widgets/player_avatar.dart';
 import 'fixture_detail_screen.dart';
 import 'match_setup_screen.dart';
+import 'nrr_calculator_screen.dart';
 import 'scorecard_screen.dart';
 import 'scoring_screen.dart';
 import 'settings_screen.dart';
@@ -1239,6 +1240,19 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                   child: Text(
                     'NRR uses the ICC rule: aggregate runs per over scored minus conceded across the tournament; a team bowled out is deemed to have faced its full overs quota.',
                     style: TextStyle(fontSize: 11, color: Colors.white38),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: FilledButton.tonalIcon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => NrrCalculatorScreen(store: store),
+                      ),
+                    ),
+                    icon: const Icon(Icons.calculate),
+                    label: const Text('NRR Calculator'),
                   ),
                 ),
               ],
