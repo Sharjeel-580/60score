@@ -225,6 +225,19 @@ enum PullDecision {
   noImport,
 }
 
+/// Result of one manual sync round, for the Profile screen's
+/// feedback. [ok] means the round ran (logged in, not scoring, no
+/// error); [changed] means remote data was applied; [error] is a
+/// short failure reason when [ok] is false ('scoring' / 'login' for
+/// the guard cases, otherwise the sync error text).
+class ManualSyncResult {
+  final bool ok;
+  final bool changed;
+  final String? error;
+  const ManualSyncResult(
+      {required this.ok, required this.changed, this.error});
+}
+
 class SyncService {
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
@@ -243,16 +256,19 @@ class SyncService {
   Timer? _retryTimer;
   bool _applyingRemote = false;
 
-  /// Scoring guard (user design, v1.4.3): while a match is being
-  /// scored on this device, NO remote data may be applied at all.
-  /// The live listener's snapshots and pulls are ignored for the
-  /// duration of scoring, so the scoring screen's match object is
-  /// never silently replaced mid-match (balls scored into a
-  /// detached object were lost without a trace). Local persist and
-  /// the cloud push keep running throughout; when scoring ends
-  /// (match completes, or the scoring screen closes), a full sync
-  /// (push + pull) converges both sides. Set by the scoring
-  /// screens; read by the remote-apply paths below.
+  /// Scoring guard (user design, v1.4.3; hardened v1.4.4 light
+  /// version): while a match is being scored on this device, NO
+  /// network traffic runs at all — no push, no pull, no listener
+  /// event is even fetched. The v1.4.3 rule (remote data is never
+  /// APPLIED mid-match) still holds, but the light version goes
+  /// further: the apply-time guard is now backed by entry-point
+  /// gates in [_attemptPush], [_pushCurrent] and [pull], so scoring
+  /// cannot spend radio, battery or time on sync. Local persist
+  /// keeps running (matches-only per ball); a push owed at scoring
+  /// time is NOT dropped — [_pushDirty] stays set and the close-time
+  /// [syncAfterScoring] (or a manual [syncNow]) flushes it once
+  /// scoring ends. Set by the scoring screens; read by every sync
+  /// entry point below.
   bool scoringActive = false;
   DateTime? _lastSyncAt;
   String? _lastError;
@@ -517,6 +533,11 @@ class SyncService {
   void _attemptPush(Store store) {
     final ref = _docRef();
     if (ref == null) return;
+    // Light version (v1.4.4): no network while scoring. This is a
+    // DEFER, not a drop — [_pushDirty] stays set (the callers that
+    // matter, schedulePush and the retry timer, only ever set it),
+    // and syncAfterScoring / syncNow flush it once scoring ends.
+    if (scoringActive) return;
     final uid = AuthService().currentUser!.uid;
     // The identity may have changed since the push was scheduled
     // (log-out, account switch): never write one identity's data
@@ -768,6 +789,10 @@ class SyncService {
   /// mirrors the legacy [_push]: the debt clears only when no
   /// newer change arrived while the round ran.
   Future<void> _pushCurrent(Store store) async {
+    // Light version (v1.4.4): the low-level sender is gated too, so
+    // no caller — settle flush included — can push mid-match. The
+    // debt ([_pushDirty]) survives; the close-time sync flushes it.
+    if (scoringActive) return;
     final coordinator = _buildCoordinator(store);
     if (coordinator != null) {
       final gen = _pushGen;
@@ -806,6 +831,12 @@ class SyncService {
   /// that FAILS leaves the guard closed — pushes stay deferred until
   /// a pull completes (next app start or "Sync now").
   Future<bool> pull(Store store) async {
+    // Light version (v1.4.4): no network while scoring — the fetch
+    // itself is skipped, not just the apply. Deferred work runs at
+    // scoring close (syncAfterScoring) or on manual syncNow. This
+    // gate sits before _docRef() on purpose, so the decision never
+    // needs Firebase state.
+    if (scoringActive) return false;
     final ref = _docRef();
     if (ref == null) return false;
     final uid = AuthService().currentUser!.uid;
@@ -855,8 +886,8 @@ class SyncService {
   /// or logged out (no-ops). Callers clear [scoringActive] before
   /// invoking this, so the pull is not gated by the guard. The
   /// push here is fire-and-forget like every other push in this
-  /// file; the pull's own push-back paths and the next live
-  /// snapshot converge any remainder.
+  /// file; the pull's own push-back paths and the next close-time
+  /// or manual round converge any remainder.
   Future<void> syncAfterScoring(Store store) async {
     // Called unawaited from screen dispose/completion: never throw.
     try {
@@ -865,6 +896,42 @@ class SyncService {
       await pull(store);
     } catch (e) {
       debugPrint('syncAfterScoring failed: $e');
+    }
+  }
+
+  /// One manual sync round (v1.4.4 light version): push any unsynced
+  /// local work, then pull. This and [syncAfterScoring] are the only
+  /// sync entry points left — boot, resume and live triggers are
+  /// gone. Never throws; the result tells the Profile screen what
+  /// feedback to show. A no-op while scoring is open (the Profile
+  /// screen never shows during scoring, but the guard is enforced
+  /// here anyway) and when logged out.
+  Future<ManualSyncResult> syncNow(Store store) async {
+    if (scoringActive) {
+      return const ManualSyncResult(
+          ok: false, changed: false, error: 'scoring');
+    }
+    if (_docRef() == null) {
+      return const ManualSyncResult(
+          ok: false, changed: false, error: 'login');
+    }
+    try {
+      if (_pushDirty) _attemptPush(store);
+      // Fresh attempt: the pull below is the awaited signal. The
+      // push above is fire-and-forget by design (as in
+      // syncAfterScoring); a push that lands late converges on the
+      // next round.
+      _lastError = null;
+      final changed = await pull(store);
+      if (_lastError != null) {
+        return ManualSyncResult(
+            ok: false, changed: changed, error: _lastError);
+      }
+      return ManualSyncResult(ok: true, changed: changed);
+    } catch (e) {
+      _lastError = e.toString();
+      return ManualSyncResult(
+          ok: false, changed: false, error: e.toString());
     }
   }
 
@@ -1075,6 +1142,14 @@ class SyncService {
   /// backup document. No-op for guests / logged-out state (stops
   /// any running listener instead). Safe to call repeatedly for
   /// the same account.
+  /// Live listener subscription (v1.3.4). KEPT but NO LONGER WIRED
+  /// in the v1.4.4 light version: boot and login no longer call
+  /// this, so no listener exists in normal use and no background
+  /// traffic or remote apply can fire on its own. The method and
+  /// its stop path stay so the engine is intact (not rewritten)
+  /// and cancelPending/stopLiveSync keep working; re-wiring it
+  /// would reintroduce the automatic traffic the light version
+  /// removes.
   void startLiveSync(Store store) {
     final ref = _docRef();
     if (ref == null) {
@@ -1210,20 +1285,14 @@ class SyncService {
     }
   }
 
-  /// App returned to the foreground: when this device holds changes
-  /// that never reached the cloud (scored offline), push them
-  /// first; otherwise pull — so a match finished on another device
-  /// shows up here on its own, with no manual step (v1.3.4). The
-  /// push-first order protects unsynced local work from the
-  /// last-write-wins import.
-  Future<void> onAppResumed(Store store) async {
-    if (_docRef() == null) return;
-    if (_pushDirty) {
-      _attemptPush(store);
-    } else {
-      await pull(store);
-    }
-  }
+  /// App returned to the foreground (v1.4.4 light version): NO-OP
+  /// on purpose. Automatic resume sync is removed — a foreground
+  /// return used to push/pull on its own, which is exactly the
+  /// silent background traffic the light version removes. Sync now
+  /// happens only at scoring close ([syncAfterScoring]) or on
+  /// manual [syncNow]. The method is kept (rather than deleting
+  /// it) so the wiring change stays visible here, not hidden.
+  Future<void> onAppResumed(Store store) async {}
 
   /// Applies already-decoded remote collections to [store] and
   /// persists the result without triggering a push (the pull's own
