@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../debug_info.dart';
 import '../dls.dart';
 import '../models.dart';
 import '../nrr_calculator.dart';
 import '../potm.dart';
 import '../scoring.dart';
 import '../store.dart';
+import '../sync_service.dart';
 import '../theme.dart';
 import '../tts_service.dart';
 import '../tournament_engine.dart';
@@ -35,6 +39,11 @@ class _ScoringScreenState extends State<ScoringScreen> {
   @override
   void initState() {
     super.initState();
+    // Scoring guard (user design): while this screen is open, no
+    // remote snapshot may be applied at all — local persist and
+    // the cloud push keep running, and a full sync runs when
+    // scoring ends (see _afterChange and dispose).
+    SyncService().scoringActive = true;
     // Feature 7 (D batch): load the persisted voice-commentary
     // setting (default OFF) so the AppBar toggle shows the truth.
     TtsService.instance.loadEnabled().then((_) {
@@ -53,6 +62,17 @@ class _ScoringScreenState extends State<ScoringScreen> {
     if (mounted) setState(() => _showVoiceHint = false);
   }
 
+  @override
+  void dispose() {
+    // Scoring guard: scoring closed — reopen live sync and run a
+    // full sync (push + pull) so both sides converge.
+    if (SyncService().scoringActive) {
+      SyncService().scoringActive = false;
+      unawaited(SyncService().syncAfterScoring(store));
+    }
+    super.dispose();
+  }
+
   InningsState get inn {
     if (match.innings.isEmpty) startInnings(match, 1);
     return match.innings.last;
@@ -62,9 +82,34 @@ class _ScoringScreenState extends State<ScoringScreen> {
   Team? teamOf(String id) => store.teamById(id);
 
   Future<void> _afterChange() async {
-    computeResult(match, store.teamName);
-    await store.persist();
-    await _runPlayoffUpdate();
+    final wasLive = match.status == 'live';
+    try {
+      computeResult(match, store.teamName);
+      // Smoothness (v1.4.3): per ball, only the matches key is
+      // written — teams/photos and everything else are untouched
+      // by a ball, so re-encoding them per ball was pure load.
+      await store.persistMatchesOnly();
+      await _runPlayoffUpdate();
+    } catch (e, st) {
+      // Silent-close guard: _afterChange runs inside _record,
+      // which every ball button calls WITHOUT await — a throw
+      // here used to be an unhandled async error that killed the
+      // app with no dialog. Record it for the debug screen and
+      // keep the UI on the last good state instead.
+      DebugInfo.record(e, st);
+      debugPrint('Scoring _afterChange failed: $e');
+    }
+    // Scoring guard: scoring ends when the match leaves live
+    // status — reopen live sync and run a full sync at once, so
+    // the completed result converges everywhere immediately.
+    // Undo after completion returns the match to live, which
+    // re-arms the guard for the resumed scoring.
+    if (wasLive && match.status != 'live') {
+      SyncService().scoringActive = false;
+      unawaited(SyncService().syncAfterScoring(store));
+    } else if (!wasLive && match.status == 'live') {
+      SyncService().scoringActive = true;
+    }
     if (mounted) setState(() {});
   }
 
