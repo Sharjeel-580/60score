@@ -9,6 +9,7 @@ import 'theme.dart';
 import 'auth_service.dart';
 import 'backup_service.dart';
 import 'debug_info.dart';
+import 'nav_memory.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
@@ -21,6 +22,9 @@ import 'screens/teams_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/draft_screen.dart';
+import 'screens/fixture_detail_screen.dart';
+import 'screens/scorecard_screen.dart';
+import 'screens/scoring_screen.dart';
 import 'widgets/app_logo.dart';
 import 'widgets/splash_logo_image.dart';
 
@@ -62,6 +66,9 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
   bool _ready = false;
   bool _wasGate = false;
   bool _welcomeScheduled = false;
+  // Recents resume (v1.4.5): loaded once at boot, before the shell
+  // builds, so a cold start can restore the last inner screen.
+  NavRestore? _restore;
 
   @override
   void initState() {
@@ -79,11 +86,12 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // v1.4.4 light version: returning to the app NO LONGER re-syncs
-    // on its own (the v1.3.4 resume hook is gone). Sync happens
-    // only at scoring close or on manual "Sync now" (Profile), so
-    // a foreground return costs no network and cannot pull remote
-    // data over local work. The observer registration stays (the
-    // mixin is still declared); it simply has no sync work now.
+    // on its own (the v1.3.4 resume hook is gone). There is no sync
+    // at all anymore (scoring close is local-only, manual sync is
+    // removed), so a foreground return costs no network and cannot
+    // pull remote data over local work. The observer registration
+    // stays (the mixin is still declared); it simply has no sync
+    // work now.
   }
 
   Future<void> _boot() async {
@@ -98,8 +106,8 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
         // claim of any pre-v1.3.1 device data on first run).
         // v1.4.4 light version: boot NO LONGER pulls or subscribes
         // to live sync on its own — the app opens on local data
-        // only. Fresh data arrives at scoring close, or on manual
-        // "Sync now" (Profile). This is the offline-first rule:
+        // only. No fresh data arrives over the network at all in
+        // the fully-local version. This is the offline-first rule:
         // opening the app must never wait on, or be changed by,
         // the network.
         final user = auth.currentUser!;
@@ -125,6 +133,10 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
         if (!store.loaded) await store.activateIdentity('guest');
       } catch (_) {}
     }
+    // Recents resume: read the saved destination AFTER the store is
+    // loaded (its existence is checked against loaded data at
+    // restore time, so a stale record safely falls back to home).
+    _restore = await NavMemory.load();
     await minSplash;
     if (!mounted) return;
     setState(() => _ready = true);
@@ -232,7 +244,7 @@ class _SplashGateState extends State<SplashGate> with WidgetsBindingObserver {
         }
         return AnimatedBuilder(
           animation: store,
-          builder: (context, _) => HomeShell(store: store),
+          builder: (context, _) => HomeShell(store: store, restore: _restore),
         );
       },
     );
@@ -308,7 +320,11 @@ class _SplashView extends StatelessWidget {
 /// without changing tabs; More opens the drawer.
 class HomeShell extends StatefulWidget {
   final Store store;
-  const HomeShell({super.key, required this.store});
+  // Recents resume (v1.4.5): the destination saved at boot, if any.
+  // Null means a normal cold start (fresh install / no prior
+  // context / record already cleared) → home, as before.
+  final NavRestore? restore;
+  const HomeShell({super.key, required this.store, this.restore});
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -319,6 +335,52 @@ class _HomeShellState extends State<HomeShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   Store get store => widget.store;
+
+  @override
+  void initState() {
+    super.initState();
+    final r = widget.restore;
+    if (r != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _restore(r));
+    }
+  }
+
+  /// Recents resume: push the saved inner screen when its record
+  /// still exists in the loaded store. A stale record (deleted
+  /// match/tournament, or a status that no longer fits the screen)
+  /// falls back to home — never a crash, never a blank screen.
+  /// Match routing mirrors _openFixture: live → scoring,
+  /// completed → scorecard, anything else → fixture detail.
+  void _restore(NavRestore r) {
+    if (!mounted) return;
+    Widget? page;
+    switch (r.kind) {
+      case 'tournament':
+        final t = store.tournamentById(r.id);
+        if (t != null) {
+          page = TournamentDetailScreen(store: store, tournament: t);
+        }
+      case 'scoring':
+      case 'scorecard':
+      case 'fixture':
+        final m = store.matchById(r.id);
+        if (m != null) {
+          if (m.status == 'live') {
+            page = ScoringScreen(store: store, match: m);
+          } else if (m.status == 'completed') {
+            page = ScorecardScreen(store: store, match: m);
+          } else {
+            page = FixtureDetailScreen(store: store, matchId: m.id);
+          }
+        }
+    }
+    final target = page;
+    if (target == null || !mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => target),
+    );
+  }
 
   /// Bottom-nav index -> IndexedStack page index.
   int get _pageIndex => _navIndex == 3 ? 2 : _navIndex;
@@ -356,10 +418,23 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: _buildDrawer(),
-      body: IndexedStack(
+    // Back navigation (v1.4.5): tab switches are state, not routes,
+    // so Back from the Matches/Statistics tabs used to exit the app
+    // outright. Now Back from a non-home tab returns to the Home tab,
+    // and only Back from the Home tab exits. Pushed routes
+    // (tournament detail, fixture, scoring, ...) pop normally above
+    // this — this scope only governs the shell route itself, and
+    // dialogs/drawer (routes on top) still close first by default.
+    // No double-tap-to-exit, no new confirm dialogs.
+    return PopScope(
+      canPop: _navIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && mounted) setState(() => _navIndex = 0);
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _buildDrawer(),
+        body: IndexedStack(
         index: _pageIndex,
         children: [
           HomeScreen(
@@ -381,6 +456,7 @@ class _HomeShellState extends State<HomeShell> {
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
+      ),
     );
   }
 
