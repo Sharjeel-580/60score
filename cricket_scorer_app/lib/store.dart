@@ -523,9 +523,21 @@ class Store extends ChangeNotifier implements PlayoffStore {
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List;
-      return list.map((e) => fromJson(e as Map<String, dynamic>)).toList();
+      // Per-entry fallback (launch hardening): one poisoned record
+      // used to drop the WHOLE list — a single corrupt match could
+      // empty the app's data on launch. Now only the bad entry is
+      // skipped and every good record still loads.
+      final out = <T>[];
+      for (final e in list) {
+        try {
+          out.add(fromJson(e as Map<String, dynamic>));
+        } catch (_) {
+          // Skip this entry, keep the rest.
+        }
+      }
+      return out;
     } catch (_) {
-      return null; // corrupt entry: caller keeps the previous list
+      return null; // wholly unreadable: caller keeps the previous list
     }
   }
 
