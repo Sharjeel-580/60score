@@ -447,14 +447,12 @@ class InningsState {
 
   factory InningsState.fromJson(Map<String, dynamic> j) {
     final s = InningsState(
-      battingTeamId: j['battingTeamId'] as String,
-      bowlingTeamId: j['bowlingTeamId'] as String,
-      battingXI: ((j['battingXI'] as List?) ?? [])
-          .map((e) => e as String)
-          .toList(),
-      bowlingXI: ((j['bowlingXI'] as List?) ?? [])
-          .map((e) => e as String)
-          .toList(),
+      // Launch hardening: see Match.fromJson — missing team ids
+      // read as '' instead of throwing the whole innings away.
+      battingTeamId: j['battingTeamId'] as String? ?? '',
+      bowlingTeamId: j['bowlingTeamId'] as String? ?? '',
+      battingXI: ((j['battingXI'] as List?) ?? []).whereType<String>().toList(),
+      bowlingXI: ((j['bowlingXI'] as List?) ?? []).whereType<String>().toList(),
       oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 20,
       ballsPerOver: (j['ballsPerOver'] as num?)?.toInt() ?? 6,
     );
@@ -467,31 +465,42 @@ class InningsState {
     s.lastBowlerId = j['lastBowlerId'] as String? ?? '';
     s.awaitingBatter = j['awaitingBatter'] as bool? ?? false;
     s.awaitingBowler = j['awaitingBowler'] as bool? ?? false;
+    // Launch hardening: one malformed figure/event entry used to
+    // throw the whole innings away. Bad entries are now skipped so
+    // the rest of the innings still loads.
     final bat = (j['batting'] as Map?) ?? {};
-    bat.forEach(
-      (k, v) =>
-          s.batting[k as String] = BatFig.fromJson(v as Map<String, dynamic>),
-    );
+    for (final entry in bat.entries) {
+      try {
+        s.batting[entry.key as String] =
+            BatFig.fromJson(entry.value as Map<String, dynamic>);
+      } catch (_) {}
+    }
     final bowl = (j['bowling'] as Map?) ?? {};
-    bowl.forEach(
-      (k, v) =>
-          s.bowling[k as String] = BowlFig.fromJson(v as Map<String, dynamic>),
-    );
+    for (final entry in bowl.entries) {
+      try {
+        s.bowling[entry.key as String] =
+            BowlFig.fromJson(entry.value as Map<String, dynamic>);
+      } catch (_) {}
+    }
     s.widesRuns = (j['widesRuns'] as num?)?.toInt() ?? 0;
     s.noBallRuns = (j['noBallRuns'] as num?)?.toInt() ?? 0;
     s.byeRuns = (j['byeRuns'] as num?)?.toInt() ?? 0;
     s.legByeRuns = (j['legByeRuns'] as num?)?.toInt() ?? 0;
     s.noBallCount = (j['noBallCount'] as num?)?.toInt() ?? 0;
     s.wideCount = (j['wideCount'] as num?)?.toInt() ?? 0;
-    s.events = ((j['events'] as List?) ?? [])
-        .map((e) => BallEvent.fromJson(e as Map<String, dynamic>))
-        .toList();
-    s.fallOfWickets = ((j['fallOfWickets'] as List?) ?? [])
-        .map((e) => FallOfWicket.fromJson(e as Map<String, dynamic>))
-        .toList();
-    s.undoStack = ((j['undoStack'] as List?) ?? [])
-        .map((e) => e as String)
-        .toList();
+    s.events = [];
+    for (final e in ((j['events'] as List?) ?? [])) {
+      try {
+        s.events.add(BallEvent.fromJson(e as Map<String, dynamic>));
+      } catch (_) {}
+    }
+    s.fallOfWickets = [];
+    for (final e in ((j['fallOfWickets'] as List?) ?? [])) {
+      try {
+        s.fallOfWickets.add(FallOfWicket.fromJson(e as Map<String, dynamic>));
+      } catch (_) {}
+    }
+    s.undoStack = ((j['undoStack'] as List?) ?? []).whereType<String>().toList();
     s.currentOverBowlerRuns =
         (j['currentOverBowlerRuns'] as num?)?.toInt() ?? 0;
     s.currentOverTeamRuns = (j['currentOverTeamRuns'] as num?)?.toInt() ?? 0;
@@ -613,18 +622,21 @@ class Match {
   };
 
   factory Match.fromJson(Map<String, dynamic> j) {
+    // Launch hardening: a stored record with a missing id/team
+    // field used to throw here and (via _decodeList) drop the whole
+    // matches list on launch. Missing ids now read as '' instead.
     final m = Match(
-      id: j['id'] as String,
+      id: j['id'] as String? ?? '',
       tournamentId: j['tournamentId'] as String?,
-      teamAId: j['teamAId'] as String,
-      teamBId: j['teamBId'] as String,
-      xiA: ((j['xiA'] as List?) ?? []).map((e) => e as String).toList(),
-      xiB: ((j['xiB'] as List?) ?? []).map((e) => e as String).toList(),
+      teamAId: j['teamAId'] as String? ?? '',
+      teamBId: j['teamBId'] as String? ?? '',
+      xiA: ((j['xiA'] as List?) ?? []).whereType<String>().toList(),
+      xiB: ((j['xiB'] as List?) ?? []).whereType<String>().toList(),
       oversLimit: (j['oversLimit'] as num?)?.toInt() ?? 20,
       ballsPerOver: (j['ballsPerOver'] as num?)?.toInt() ?? 6,
       venue: j['venue'] as String? ?? '',
       dateIso: j['dateIso'] as String? ?? '',
-      tossWinnerId: j['tossWinnerId'] as String,
+      tossWinnerId: j['tossWinnerId'] as String? ?? '',
       tossDecision: j['tossDecision'] as String? ?? 'bat',
       status: j['status'] as String? ?? 'live',
       stage: j['stage'] as String? ?? 'league',
