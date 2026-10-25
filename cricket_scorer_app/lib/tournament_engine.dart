@@ -146,7 +146,15 @@ Future<PlayoffUpdate> applyPlayoffUpdate(
   final table = leaguePointsTable(t, all);
   if (table.isEmpty) return const PlayoffUpdate(message: 'No teams');
 
-  final finalized = leagueStageFinalized(tournamentId, all);
+  // v1.4.5 Super 4 auto-fill trigger (brief): the league stage counts as
+  // done for SEEDING only when every league fixture is completed or
+  // no-result. A cancelled fixture does NOT trigger auto-fill — it must
+  // be resolved to completed/no-result, or seeded manually. (Unlike
+  // leagueStageFinalized, which also treats cancelled as finalized for
+  // the remaining-matches math in guaranteedQualifiers.)
+  final league = leagueMatchesOf(tournamentId, all);
+  final finalized = league.isNotEmpty &&
+      league.every((m) => m.status == 'completed' || m.status == 'noResult');
   var changed = false;
   final notes = <String>[];
 
@@ -204,15 +212,21 @@ Future<PlayoffUpdate> applyPlayoffUpdate(
     }
 
     // ---------- Semifinal seeding (1v4, 2v3) ----------
+    // v1.4.5 Super 4 auto-fill: fill TBA slots ONLY. A slot that already
+    // has a team — auto-filled on an earlier pass or picked manually in
+    // the fixture editor — is never overwritten by this pass, so once
+    // filled it sticks. Started playoffs are still never touched.
     void seedSemi(Match? semi, String a, String b, String label) {
       if (semi == null || playoffStarted(semi)) return;
-      if (semi.teamAId != a || semi.teamBId != b) {
+      if (semi.teamAId.isEmpty && a.isNotEmpty) {
         semi.teamAId = a;
+        changed = true;
+        notes.add('$label Team A: ${store.teamName(a)}');
+      }
+      if (semi.teamBId.isEmpty && b.isNotEmpty) {
         semi.teamBId = b;
         changed = true;
-        notes.add(
-          '$label: ${store.teamName(a)} vs ${store.teamName(b)}',
-        );
+        notes.add('$label Team B: ${store.teamName(b)}');
       }
     }
 
