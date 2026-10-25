@@ -1178,7 +1178,7 @@ class _DraftRoomScreenState extends State<DraftRoomScreen> {
         timerRunning = false;
       }
     });
-    await store.persist();
+    await store.persistDraftsOnly();
   }
 
   Future<void> _skip() async {
@@ -1209,7 +1209,7 @@ class _DraftRoomScreenState extends State<DraftRoomScreen> {
       skipTurn(draft);
       timerRunning = false;
     });
-    await store.persist();
+    await store.persistDraftsOnly();
   }
 
   Future<void> _undo() async {
@@ -1217,7 +1217,7 @@ class _DraftRoomScreenState extends State<DraftRoomScreen> {
       undoPick(draft);
       timerRunning = false;
     });
-    await store.persist();
+    await store.persistDraftsOnly();
   }
 
   String get _clock {
