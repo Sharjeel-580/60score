@@ -107,8 +107,15 @@ Widget _leaderboardRow(
   Store store,
   int rank,
   CareerStats c,
-  List<_StatCol> columns,
-) {
+  List<_StatCol> columns, {
+  // When non-null, this row is editable: the tournament whose
+  // playerStatsOverrides the edit saves into. Null in the
+  // All-tournaments view (no single tournament to override).
+  Tournament? editTournament,
+  // Matches the parent view was computed from (format filter
+  // applied), so a reset refreshes the row from the same scope.
+  List<Match>? scopeMatches,
+}) {
   final persons = allPersons(store);
   final name = persons[c.playerId] ?? store.playerName(c.playerId);
   final team = _playerTeamName(store, c.playerId);
@@ -173,11 +180,276 @@ Widget _leaderboardRow(
                 ],
               ),
             ),
+          // Stats edit (v1.4.5): a separate affordance — row tap
+          // still opens the player profile, unchanged.
+          if (editTournament != null) ...[
+            if (editTournament.playerStatsOverrides
+                .containsKey(c.playerId)) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.edit, size: 14, color: kGold),
+            ],
+            IconButton(
+              icon: const Icon(Icons.edit, size: 18),
+              tooltip: 'Edit player stats',
+              onPressed: () => _editPlayerStatsRow(
+                context,
+                store,
+                editTournament,
+                c,
+                scopeMatches,
+              ),
+            ),
+          ],
           const Icon(Icons.chevron_right, color: kSilver, size: 18),
         ],
       ),
     ),
   );
+}
+
+Widget _statField(TextEditingController ctrl, String label) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: TextField(
+      controller: ctrl,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(labelText: label),
+    ),
+  );
+}
+
+Widget _statSection(String title) {
+  return Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 4),
+    child: Text(
+      title,
+      style: const TextStyle(fontWeight: FontWeight.w800, color: kWhite),
+    ),
+  );
+}
+
+/// Refreshes a displayed row object after a stats RESET, when its
+/// fresh computed values are known (the override was just removed).
+/// The pushed leaderboard holds pre-edit objects, so without this it
+/// would keep showing the edited values until revisited.
+void _refreshRowAfterReset(
+  Store store,
+  String tournamentId,
+  CareerStats c,
+  List<Match>? scopeMatches,
+) {
+  final map = computeCareerStats(
+    scopeMatches ?? store.matches,
+    tournamentId: tournamentId,
+  );
+  applyManualStats(map, store.manualStats);
+  final fresh = map[c.playerId];
+  if (fresh == null) return;
+  copyBaseCounters(c, fresh);
+}
+
+/// Per-player stats edit (v1.4.5, mirror of the points-table row
+/// edit): the dialog is pre-filled from the existing override, else
+/// the computed row. Save stores the override on the tournament
+/// (travels with the existing blob sync, tournaments key only);
+/// Reset removes it so the row goes back to computed values.
+/// Counts parse leniently: a blank, invalid or negative count saves
+/// as 0 — never a refusal. Only base counters are editable; averages,
+/// strike rates, economy and best figures recompute from them.
+Future<void> _editPlayerStatsRow(
+  BuildContext context,
+  Store store,
+  Tournament tournament,
+  CareerStats c,
+  List<Match>? scopeMatches,
+) async {
+  final existing = tournament.playerStatsOverrides[c.playerId];
+  final persons = allPersons(store);
+  final name = persons[c.playerId] ?? store.playerName(c.playerId);
+  TextEditingController ctrl(String v) => TextEditingController(text: v);
+  int count(TextEditingController ctrl) {
+    final v = int.tryParse(ctrl.text.trim());
+    if (v == null || v < 0) return 0;
+    return v;
+  }
+
+  final cMatches = ctrl('${existing?.matches ?? c.matches}');
+  final cInnings = ctrl('${existing?.inningsBatted ?? c.inningsBatted}');
+  final cNotOuts = ctrl('${existing?.notOuts ?? c.notOuts}');
+  final cRuns = ctrl('${existing?.runs ?? c.runs}');
+  final cBalls = ctrl('${existing?.ballsFaced ?? c.ballsFaced}');
+  final cHS = ctrl('${existing?.highScore ?? c.highScore}');
+  final c100s = ctrl('${existing?.hundreds ?? c.hundreds}');
+  final c50s = ctrl('${existing?.fifties ?? c.fifties}');
+  final c4s = ctrl('${existing?.fours ?? c.fours}');
+  final c6s = ctrl('${existing?.sixes ?? c.sixes}');
+  final cBallsBowled =
+      ctrl('${existing?.ballsBowled ?? c.ballsBowled}');
+  final cRunsConceded =
+      ctrl('${existing?.runsConceded ?? c.runsConceded}');
+  final cWkts = ctrl('${existing?.wickets ?? c.wickets}');
+  final cBestWkts = ctrl('${existing?.bestWickets ?? c.bestWickets}');
+  // Computed bestRuns is a huge sentinel when no wickets exist —
+  // never show that in the field.
+  final cBestRuns = ctrl(
+      '${existing?.bestRuns ?? (c.wickets > 0 ? c.bestRuns : 0)}');
+  final cCatches = ctrl('${existing?.catches ?? c.catches}');
+  final cStumpings = ctrl('${existing?.stumpings ?? c.stumpings}');
+  final cRunOuts = ctrl('${existing?.runOuts ?? c.runOuts}');
+  final allCtrls = [
+    cMatches,
+    cInnings,
+    cNotOuts,
+    cRuns,
+    cBalls,
+    cHS,
+    c100s,
+    c50s,
+    c4s,
+    c6s,
+    cBallsBowled,
+    cRunsConceded,
+    cWkts,
+    cBestWkts,
+    cBestRuns,
+    cCatches,
+    cStumpings,
+    cRunOuts,
+  ];
+  try {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text('Edit player stats — $name'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _statSection('Batting'),
+              _statField(cMatches, 'Matches'),
+              _statField(cInnings, 'Innings batted'),
+              _statField(cNotOuts, 'Not outs'),
+              _statField(cRuns, 'Runs'),
+              _statField(cBalls, 'Balls faced'),
+              _statField(cHS, 'High score'),
+              _statField(c100s, '100s'),
+              _statField(c50s, '50s'),
+              _statField(c4s, '4s'),
+              _statField(c6s, '6s'),
+              _statSection('Bowling'),
+              _statField(cBallsBowled, 'Balls bowled'),
+              _statField(cRunsConceded, 'Runs conceded'),
+              _statField(cWkts, 'Wickets'),
+              _statField(cBestWkts, 'Best wickets'),
+              _statField(cBestRuns, 'Best runs'),
+              _statSection('Fielding'),
+              _statField(cCatches, 'Catches'),
+              _statField(cStumpings, 'Stumpings'),
+              _statField(cRunOuts, 'Run-outs'),
+              const SizedBox(height: 8),
+              const Text(
+                'Counts save as 0 when blank, invalid or negative. '
+                'Averages, strike rates, economy and best figures '
+                'recompute from these. The row is marked with a '
+                'gold pencil while edited.',
+                style: TextStyle(fontSize: 11, color: kSilver),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (existing != null)
+            TextButton(
+              onPressed: () => Navigator.pop(d, 'reset'),
+              child: const Text('Reset'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(d, null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(d, 'save'),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (action == 'reset') {
+      // v1.4.5 action feedback: revert on a failed save so the
+      // display never claims a save that did not land on disk.
+      final prev = tournament.playerStatsOverrides[c.playerId];
+      tournament.playerStatsOverrides.remove(c.playerId);
+      final saved = await store.persistTournamentsOnly();
+      if (saved) {
+        _refreshRowAfterReset(store, tournament.id, c, scopeMatches);
+      } else {
+        if (prev != null) {
+          tournament.playerStatsOverrides[c.playerId] = prev;
+          applyPlayerStatsOverrides({c.playerId: c}, {c.playerId: prev});
+        }
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(saved
+                ? 'Player stats override removed.'
+                : 'Remove failed — try again.'),
+          ),
+        );
+      }
+    } else if (action == 'save') {
+      final o = PlayerStatsOverride(
+        matches: count(cMatches),
+        inningsBatted: count(cInnings),
+        notOuts: count(cNotOuts),
+        runs: count(cRuns),
+        ballsFaced: count(cBalls),
+        highScore: count(cHS),
+        hundreds: count(c100s),
+        fifties: count(c50s),
+        fours: count(c4s),
+        sixes: count(c6s),
+        ballsBowled: count(cBallsBowled),
+        runsConceded: count(cRunsConceded),
+        wickets: count(cWkts),
+        bestWickets: count(cBestWkts),
+        bestRuns: count(cBestRuns),
+        catches: count(cCatches),
+        stumpings: count(cStumpings),
+        runOuts: count(cRunOuts),
+      );
+      final prev = tournament.playerStatsOverrides[c.playerId];
+      tournament.playerStatsOverrides[c.playerId] = o;
+      final saved = await store.persistTournamentsOnly();
+      if (!saved) {
+        // Revert so the display never claims a save that did not
+        // land on disk.
+        if (prev != null) {
+          tournament.playerStatsOverrides[c.playerId] = prev;
+          applyPlayerStatsOverrides({c.playerId: c}, {c.playerId: prev});
+        } else {
+          tournament.playerStatsOverrides.remove(c.playerId);
+        }
+      } else {
+        // Keep the displayed row truthful (pushed leaderboards hold
+        // pre-edit objects): apply the saved values to it directly.
+        applyPlayerStatsOverrides({c.playerId: c}, {c.playerId: o});
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(saved
+                ? 'Player stats saved.'
+                : 'Stats save failed — try again.'),
+          ),
+        );
+      }
+    }
+  } finally {
+    for (final x in allCtrls) {
+      x.dispose();
+    }
+  }
 }
 
 class StatsScreen extends StatefulWidget {
@@ -255,6 +527,13 @@ class _StatsScreenState extends State<StatsScreen> {
       tournamentId: _effectiveTournamentId,
     );
     applyManualStats(map, store.manualStats);
+    // Stats overrides (v1.4.5) apply AFTER computation AND manual
+    // stats, so an edited row beats both — same precedence as a
+    // points-table override beating a points adjustment. Only when
+    // a tournament is selected: an All-tournaments aggregate has no
+    // single tournament to override.
+    final t = _editTournament();
+    if (t != null) applyPlayerStatsOverrides(map, t.playerStatsOverrides);
     return map;
   }
 
@@ -264,6 +543,15 @@ class _StatsScreenState extends State<StatsScreen> {
     return list
         .where((c) => _playerTeamId(store, c.playerId) == _teamId)
         .toList();
+  }
+
+  /// Tournament that stats edits save into: the selected tournament,
+  /// or null in the All-tournaments view (an aggregate row has no
+  /// single tournament to override, so no edit affordance is shown).
+  Tournament? _editTournament() {
+    final tid = _effectiveTournamentId;
+    if (tid == null) return null;
+    return store.tournamentById(tid);
   }
 
   /// Tournament used for the points table: selected, else the first.
@@ -601,6 +889,8 @@ class _StatsScreenState extends State<StatsScreen> {
             icon: icon,
             leaders: leaders,
             columns: columns,
+            editTournament: _editTournament(),
+            scopeMatches: _filteredMatches(),
           ),
         ),
       );
@@ -841,7 +1131,15 @@ class _StatsScreenState extends State<StatsScreen> {
           for (int i = 0; i < leaders.length; i++) ...[
             if (i > 0)
               Divider(height: 1, color: kCyan.withValues(alpha: 0.12)),
-            _leaderboardRow(context, store, i + 1, leaders[i], columns),
+            _leaderboardRow(
+              context,
+              store,
+              i + 1,
+              leaders[i],
+              columns,
+              editTournament: _editTournament(),
+              scopeMatches: _filteredMatches(),
+            ),
           ],
         ],
       ),
@@ -1035,6 +1333,8 @@ class _StatsScreenState extends State<StatsScreen> {
                     icon: Icons.star,
                     leaders: byHS.where((c) => c.highScore > 0).toList(),
                     columns: hsCols,
+                    editTournament: _editTournament(),
+                    scopeMatches: _filteredMatches(),
                   ),
                 ),
               ),
@@ -1054,6 +1354,8 @@ class _StatsScreenState extends State<StatsScreen> {
                     icon: Icons.sports_cricket,
                     leaders: byBowl.where((c) => c.bestWickets > 0).toList(),
                     columns: bestCols,
+                    editTournament: _editTournament(),
+                    scopeMatches: _filteredMatches(),
                   ),
                 ),
               ),
@@ -1657,7 +1959,7 @@ class _StatsScreenState extends State<StatsScreen> {
   /// Restored from the previous version: completed-matches archive.
   void _showMatchArchive(BuildContext context) {
     final archive = store.matches
-        .where((m) => m.status == 'completed')
+        .where((m) => m.status == 'completed' || m.status == 'noResult')
         .toList()
       ..sort((a, b) => b.dateIso.compareTo(a.dateIso));
     showDialog(
@@ -1736,13 +2038,15 @@ class _StatsScreenState extends State<StatsScreen> {
 }
 
 /// Full leaderboard screen: every row from an existing computed list.
-class _FullLeaderboardScreen extends StatelessWidget {
+class _FullLeaderboardScreen extends StatefulWidget {
   final Store store;
   final String title;
   final String subtitle;
   final IconData icon;
   final List<CareerStats> leaders;
   final List<_StatCol> columns;
+  final Tournament? editTournament;
+  final List<Match>? scopeMatches;
   const _FullLeaderboardScreen({
     required this.store,
     required this.title,
@@ -1750,7 +2054,31 @@ class _FullLeaderboardScreen extends StatelessWidget {
     required this.icon,
     required this.leaders,
     required this.columns,
+    this.editTournament,
+    this.scopeMatches,
   });
+
+  @override
+  State<_FullLeaderboardScreen> createState() =>
+      _FullLeaderboardScreenState();
+}
+
+class _FullLeaderboardScreenState extends State<_FullLeaderboardScreen> {
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1758,15 +2086,15 @@ class _FullLeaderboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(icon, color: kGold, size: 22),
+            Icon(widget.icon, color: kGold, size: 22),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title),
+                  Text(widget.title),
                   Text(
-                    subtitle,
+                    widget.subtitle,
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.normal,
@@ -1779,7 +2107,7 @@ class _FullLeaderboardScreen extends StatelessWidget {
           ],
         ),
       ),
-      body: leaders.isEmpty
+      body: widget.leaders.isEmpty
           ? const Center(
               child: Text(
                 'No data yet',
@@ -1788,11 +2116,18 @@ class _FullLeaderboardScreen extends StatelessWidget {
             )
           : ListView.separated(
               padding: const EdgeInsets.all(12),
-              itemCount: leaders.length,
+              itemCount: widget.leaders.length,
               separatorBuilder: (_, _) =>
                   Divider(height: 1, color: kCyan.withValues(alpha: 0.12)),
-              itemBuilder: (c, i) =>
-                  _leaderboardRow(c, store, i + 1, leaders[i], columns),
+              itemBuilder: (c, i) => _leaderboardRow(
+                c,
+                widget.store,
+                i + 1,
+                widget.leaders[i],
+                widget.columns,
+                editTournament: widget.editTournament,
+                scopeMatches: widget.scopeMatches,
+              ),
             ),
     );
   }
