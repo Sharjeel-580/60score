@@ -75,35 +75,56 @@ class _BackupScreenState extends State<BackupScreen> {
     return rows;
   }
 
-  void _snack(String msg) {
+  /// v1.4.5 action feedback: backup/restore/export completions show
+  /// a popup (not just a snackbar) stating success or failure +
+  /// reason.
+  Future<void> _popup(String title, String message) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(child: Text(message)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
   Future<void> _doManualBackup() async {
     setState(() => _busy = true);
-    final path = await manualBackup(widget.store);
+    final result = await manualBackup(widget.store);
+    if (!mounted) return;
     setState(() {
       _busy = false;
       _reload();
     });
-    if (path.isEmpty) {
-      _snack('Backup failed — storage unavailable');
+    if (result.error != null || result.path.isEmpty) {
+      await _popup(
+        'Backup failed',
+        result.error ?? 'Storage unavailable',
+      );
     } else {
-      _snack('Backup saved: $path');
+      await _popup('Backup saved', 'Backup saved:\n${result.path}');
     }
   }
 
   Future<void> _doExportDownloads() async {
     setState(() => _busy = true);
     final path = await exportToDownloads(widget.store);
+    if (!mounted) return;
     setState(() => _busy = false);
     if (path == null) {
-      _snack('Downloads not available on this device');
+      await _popup(
+        'Export failed',
+        'Downloads not available on this device',
+      );
     } else {
-      _snack('Exported to Downloads: $path');
+      await _popup('Exported', 'Exported to Downloads:\n$path');
     }
   }
 
@@ -130,18 +151,22 @@ class _BackupScreenState extends State<BackupScreen> {
     if (ok != true) return;
     if (!mounted) return;
     setState(() => _busy = true);
-    final counts = await restoreBackup(widget.store, row.path);
+    final result = await restoreBackup(widget.store, row.path);
+    if (!mounted) return;
     setState(() {
       _busy = false;
       _reload();
     });
-    if (counts.isEmpty) {
-      _snack('Restore failed — invalid backup file');
+    if (result.error != null) {
+      await _popup(
+        'Restore failed',
+        '${result.error}\n\nNothing was changed.',
+      );
     } else {
-      final summary = counts.entries
+      final summary = result.counts.entries
           .map((e) => '${e.value} ${e.key}')
           .join(', ');
-      _snack('Restored: $summary');
+      await _popup('Restored', 'Restored: $summary');
     }
   }
 
