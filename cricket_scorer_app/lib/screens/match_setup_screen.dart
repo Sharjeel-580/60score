@@ -179,7 +179,7 @@ class _MatchSetupScreenState extends State<MatchSetupScreen> {
       final p = Player(id: Store.newId('player'), name: name);
       team.players.add(p);
       xi.add(p.id);
-      await store.persist();
+      await store.persistTeamsOnly();
       setState(() {});
     }
   }
