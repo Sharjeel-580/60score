@@ -88,9 +88,11 @@ class _LoginScreenState extends State<LoginScreen>
             );
           }
           await SyncService().pull(store);
-          // Live receive (v1.3.4): follow this account's backup for
-          // writes from other devices.
-          SyncService().startLiveSync(store);
+          // v1.4.4 light version: the one-time sign-in pull above
+          // stays (a fresh login must load the account's backup),
+          // but the live listener is NOT started anymore — no
+          // background traffic or remote apply after sign-in.
+          // Later syncs happen at scoring close or manually.
         }
       } catch (e) {
         if (!mounted) return;
