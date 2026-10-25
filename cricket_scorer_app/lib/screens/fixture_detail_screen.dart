@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../nav_memory.dart';
 import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
@@ -79,6 +80,19 @@ class FixtureDetailScreen extends StatefulWidget {
 class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
   Store get store => widget.store;
   Match? get match => store.matchById(widget.matchId);
+
+  @override
+  void initState() {
+    super.initState();
+    // Recents resume (v1.4.5): see NavMemory's contract.
+    NavMemory.save('fixture', widget.matchId);
+  }
+
+  @override
+  void dispose() {
+    NavMemory.clear('fixture', widget.matchId);
+    super.dispose();
+  }
 
   void _snack(String msg) {
     if (!mounted) return;
