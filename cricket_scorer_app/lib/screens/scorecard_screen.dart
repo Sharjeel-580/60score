@@ -1272,7 +1272,8 @@ class _BallsTab extends StatefulWidget {
 
 class _BallsTabState extends State<_BallsTab> {
   int inningsIdx = 0;
-  int? overIdx; // 1-based selected over; null = latest
+  int? overIdx; // 0-based selected over (cricket notation: first
+  // over is 0.x); null = latest
 
   Store get store => widget.store;
   Match get match => widget.match;
@@ -1289,15 +1290,17 @@ class _BallsTabState extends State<_BallsTab> {
     final totalOvers = inn.legalBalls == 0
         ? 0
         : ((inn.legalBalls - 1) ~/ bpo) + 1;
-    final selOver = (overIdx == null || overIdx! > totalOvers || overIdx! < 1)
-        ? totalOvers
-        : overIdx!;
+    final selOver =
+        (overIdx == null || overIdx! >= totalOvers || overIdx! < 0)
+            ? totalOvers - 1
+            : overIdx!;
 
-    // ball numbers + over grouping
+    // ball numbers + over grouping (cricket notation: the first
+    // over is over 0, so the first ball of the innings is 0.1).
     var legalBefore = 0;
     final numbered = <_NumberedBall>[];
     for (final e in inn.events) {
-      final overNo = legalBefore ~/ bpo + 1;
+      final overNo = legalBefore ~/ bpo;
       final ballNo = legalBefore % bpo + 1;
       numbered.add(_NumberedBall(e, overNo, ballNo));
       if (e.legalBall) legalBefore++;
@@ -1345,7 +1348,7 @@ class _BallsTabState extends State<_BallsTab> {
                       DropdownButton<int>(
                         value: selOver,
                         items: [
-                          for (var o = 1; o <= totalOvers; o++)
+                          for (var o = 0; o < totalOvers; o++)
                             DropdownMenuItem(value: o, child: Text('Over $o')),
                         ],
                         onChanged: (v) => setState(() => overIdx = v),
