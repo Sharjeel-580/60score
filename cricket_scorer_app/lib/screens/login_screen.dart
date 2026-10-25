@@ -73,21 +73,30 @@ class _LoginScreenState extends State<LoginScreen>
       // account (and the guest workspace) keeps separate local data,
       // so a login can never surface — or overwrite — somebody else's
       // tournaments on this device.
-      final store = widget.store;
-      if (store != null) {
-        final user = _auth.currentUser;
-        if (user != null) {
-          await store.activateAccount(
-            user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            phoneNumber: user.phoneNumber,
-          );
+      // Guarded: an activation failure must surface as an error,
+      // never leave a stuck screen with no message.
+      try {
+        final store = widget.store;
+        if (store != null) {
+          final user = _auth.currentUser;
+          if (user != null) {
+            await store.activateAccount(
+              user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              phoneNumber: user.phoneNumber,
+            );
+          }
+          await SyncService().pull(store);
+          // Live receive (v1.3.4): follow this account's backup for
+          // writes from other devices.
+          SyncService().startLiveSync(store);
         }
-        await SyncService().pull(store);
-        // Live receive (v1.3.4): follow this account's backup for
-        // writes from other devices.
-        SyncService().startLiveSync(store);
+      } catch (e) {
+        if (!mounted) return;
+        setState(
+            () => _error = 'Signed in, but account setup failed: $e');
+        return;
       }
       if (!mounted) return;
       final gatePassed = widget.onGatePassed;
