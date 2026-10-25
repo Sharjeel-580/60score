@@ -1025,6 +1025,78 @@ int _adjustedBalls(InningsState inn) {
   return inn.legalBalls;
 }
 
+/// Duplicate-fixture safety net (display/computation level only —
+/// records on disk are never deleted or merged).
+///
+/// EXACT RULE: two records are the same fixture when they share
+/// (tournamentId, both team ids in any order, dateIso). Records
+/// without a tournament or without a date are never collapsed: a
+/// dateless or standalone record cannot be proven to be the same
+/// fixture, and collapsing those would hide genuinely different
+/// friendlies. From each duplicate group exactly ONE record counts:
+/// a completed record beats live, noResult and upcoming ones (the
+/// codebase's standing status rank: completed > noResult > live >
+/// upcoming); when two completed records collide, the one with more
+/// legal balls recorded wins, then the one with more ball events,
+/// then the first seen (deterministic). Points, NRR and player
+/// stats all read through this, so a manual cloud repair plus a
+/// phone re-push of the same fixture can never double-count.
+List<Match> dedupeMatches(List<Match> matches) {
+  int statusRank(String status) {
+    switch (status) {
+      case 'completed':
+        return 5;
+      case 'noResult':
+        return 4;
+      case 'live':
+        return 3;
+      default:
+        return 1;
+    }
+  }
+
+  int ballsOf(Match m) =>
+      m.innings.fold(0, (sum, inn) => sum + inn.legalBalls);
+  int eventsOf(Match m) =>
+      m.innings.fold(0, (sum, inn) => sum + inn.events.length);
+
+  bool beats(Match a, Match b) {
+    final ra = statusRank(a.status);
+    final rb = statusRank(b.status);
+    if (ra != rb) return ra > rb;
+    final ba = ballsOf(a);
+    final bb = ballsOf(b);
+    if (ba != bb) return ba > bb;
+    final ea = eventsOf(a);
+    final eb = eventsOf(b);
+    if (ea != eb) return ea > eb;
+    return false;
+  }
+
+  final groups = <String, Match>{};
+  final order = <String>[];
+  for (final m in matches) {
+    final tid = m.tournamentId ?? '';
+    if (tid.isEmpty || m.dateIso.isEmpty) {
+      // Not provably one fixture: keep as its own entry.
+      final key = 'single:${m.id}';
+      if (!groups.containsKey(key)) order.add(key);
+      groups[key] = m;
+      continue;
+    }
+    final teams = [m.teamAId, m.teamBId]..sort();
+    final key = 'fixture:$tid|${teams[0]}|${teams[1]}|${m.dateIso}';
+    final prev = groups[key];
+    if (prev == null) {
+      groups[key] = m;
+      order.add(key);
+    } else if (beats(m, prev)) {
+      groups[key] = m;
+    }
+  }
+  return [for (final key in order) groups[key]!];
+}
+
 List<PointsRow> computePointsTable(
   String tournamentId,
   List<String> teamIds,
@@ -1032,7 +1104,7 @@ List<PointsRow> computePointsTable(
   Map<String, int> pointsAdjustments = const {},
 }) {
   final rows = {for (final id in teamIds) id: PointsRow(id)};
-  for (final m in matches) {
+  for (final m in dedupeMatches(matches)) {
     if (m.tournamentId != tournamentId) continue;
     if (m.status != 'completed' && m.status != 'noResult') continue;
     final a = rows[m.teamAId];
@@ -1146,10 +1218,14 @@ Map<String, CareerStats> computeCareerStats(
   final map = <String, CareerStats>{};
   CareerStats get(String id) => map.putIfAbsent(id, () => CareerStats(id));
 
-  for (final m in matches) {
+  for (final m in dedupeMatches(matches)) {
     if (tournamentId != null && m.tournamentId != tournamentId) continue;
-    // Career stats are conventionally from completed matches only.
-    if (m.status != 'completed') continue;
+    // Player figures count from completed AND no-result matches: a
+    // player who scored runs or took wickets in a washed-out match
+    // keeps them in his stats. (Points table and NRR are untouched
+    // by this: computePointsTable still gives a no-result match
+    // only played+1 / NR+1 / points+1 and no NRR effect, per ICC.)
+    if (m.status != 'completed' && m.status != 'noResult') continue;
     final xi = {...m.xiA, ...m.xiB};
     for (final pid in xi) {
       get(pid).matches++;
