@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../nav_memory.dart';
 import '../pdf_export.dart';
 import '../poster_summary.dart';
 import '../scoring.dart';
@@ -43,6 +44,18 @@ class ScorecardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Recents resume (v1.4.5): ScorecardScreen is stateless, so the
+    // save/clear pair lives in this tiny scope widget instead of a
+    // full Stateful conversion (93 field refs). Its dispose runs
+    // when the route pops, so backing out to home clears the record
+    // exactly like the stateful screens' dispose.
+    return _ScorecardNavScope(
+      matchId: match.id,
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     return DefaultTabController(
       length: 6,
       child: Scaffold(
@@ -952,7 +965,7 @@ class _SummaryTab extends StatelessWidget {
                         );
                         if (picked != null && picked.isNotEmpty) {
                           match.manOfMatchId = picked;
-                          await store.persist();
+                          await store.persistMatchesOnly();
                           // StatelessWidget: force a rebuild to show change.
                           if (context.mounted) {
                             (context as Element).markNeedsBuild();
@@ -1375,6 +1388,11 @@ class _BallsTabState extends State<_BallsTab> {
           ),
         const SizedBox(height: 10),
         const Text(
+          'Tap a ball to edit or delete it (later balls are replayed).',
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        const SizedBox(height: 6),
+        const Text(
           'Commentary',
           style: TextStyle(
             fontSize: 15,
@@ -1383,7 +1401,8 @@ class _BallsTabState extends State<_BallsTab> {
           ),
         ),
         const SizedBox(height: 6),
-        for (final n in numbered.reversed) _commentaryRow(n),
+        for (final (idx, n) in numbered.indexed.toList().reversed)
+          _commentaryRow(n, idx, inningsIdx),
         const SizedBox(height: 20),
       ],
     );
@@ -1421,44 +1440,168 @@ class _BallsTabState extends State<_BallsTab> {
     );
   }
 
-  Widget _commentaryRow(_NumberedBall n) {
+  Widget _commentaryRow(_NumberedBall n, int eventIdx, int innIdx) {
     final e = n.event;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 40,
-            child: Text(
-              '${n.overNo}.${n.ballNo}',
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
+    return InkWell(
+      onTap: () => _editBall(innIdx, eventIdx),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 40,
+              child: Text(
+                '${n.overNo}.${n.ballNo}',
+                style: const TextStyle(color: Colors.white54, fontSize: 13),
+              ),
             ),
-          ),
-          _ballChip(e),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_first(nameOf(e.bowlerId))} to ${_first(nameOf(e.strikerId))}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
+            _ballChip(e),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_first(nameOf(e.bowlerId))} to ${_first(nameOf(e.strikerId))}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _commentaryText(e),
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    _commentaryText(e),
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const Icon(
+              Icons.edit_outlined,
+              size: 16,
+              color: Colors.white38,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Per-ball edit (v1.4.5, M4b): edit a ball's runs / extra /
+  /// wicket, or delete it, then replay the innings through
+  /// [replayInningsBalls]. Later balls replay from their recorded
+  /// context, so totals, figures and fall of wickets follow the
+  /// edit. Regular innings only — super-over balls are not listed
+  /// in this tab.
+  Future<void> _editBall(int innIdx, int eventIdx) async {
+    final inn = match.innings[innIdx];
+    if (eventIdx < 0 || eventIdx >= inn.events.length) return;
+    final result = await showDialog<_BallEditResult>(
+      context: context,
+      builder: (_) => _BallEditDialog(
+        inn: inn,
+        event: inn.events[eventIdx],
+        nameOf: nameOf,
+      ),
+    );
+    if (result == null || !mounted) return;
+    final edited = List.of(inn.events);
+    if (result.delete) {
+      edited.removeAt(eventIdx);
+    } else {
+      edited[eventIdx] = result.event;
+    }
+    final replayed = replayInningsBalls(inn, edited);
+    if (replayed == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This edit cannot be replayed (it breaks the recorded '
+            'balls) — nothing was changed.',
+          ),
+        ),
+      );
+      return;
+    }
+    // Completed-match guards: the edited innings must stay
+    // complete (an edit must not reopen a finished innings), and
+    // the winner must not change (margin-only corrections allowed).
+    // Live matches have no final outcome yet, so no guard applies.
+    if (match.status == 'completed' && !replayed.isComplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This edit would reopen a completed innings — refused. '
+            'Nothing was changed.',
+          ),
+        ),
+      );
+      return;
+    }
+    final origResult = match.resultText.isNotEmpty
+        ? match.resultText
+        : computeResult(match, store.teamName);
+    final origWinner = _winnerOf(origResult);
+    final origTarget2 =
+        match.innings.length > 1 ? match.innings[1].target : 0;
+    final origResultText = match.resultText;
+    match.innings[innIdx] = replayed;
+    if (innIdx == 0 && match.innings.length > 1) {
+      // The chase target follows the corrected first-innings total.
+      match.innings[1].target = replayed.totalRuns + 1;
+    }
+    final newResult = computeResult(match, store.teamName);
+    final newWinner = _winnerOf(newResult);
+    if (match.status == 'completed' &&
+        origWinner != null &&
+        newWinner != null &&
+        origWinner != newWinner) {
+      match.innings[innIdx] = inn;
+      if (innIdx == 0 && match.innings.length > 1) {
+        match.innings[1].target = origTarget2;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This edit would change the match winner — refused. '
+            'Only margin corrections are allowed after completion.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (match.status == 'completed') match.resultText = newResult;
+    final saved = await store.persistMatchesOnly();
+    if (!saved) {
+      // Revert so the display never claims a save that did not land.
+      match.innings[innIdx] = inn;
+      if (innIdx == 0 && match.innings.length > 1) {
+        match.innings[1].target = origTarget2;
+      }
+      match.resultText = origResultText;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ball edit could not be saved — try again.'),
+        ),
+      );
+      return;
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Winner name parsed from a result line ('X won by …' → 'X',
+  /// a tie line → 'tie'), or null when the line carries no winner
+  /// (no-result / live lines) — the guard then skips, it never
+  /// refuses on an unparseable line.
+  String? _winnerOf(String result) {
+    if (result.contains(' won by ')) {
+      return result.split(' won by ').first.trim();
+    }
+    final lower = result.toLowerCase();
+    if (lower.contains('tied') || lower == 'tie') return 'tie';
+    return null;
   }
 
   String _first(String name) => name.split(' ').first;
@@ -1522,6 +1665,319 @@ class _BallsTabState extends State<_BallsTab> {
       default:
         return '${e.batRuns} runs.';
     }
+  }
+}
+
+/// Per-ball edit result (v1.4.5, M4b): the replacement ball event,
+/// or [delete] to remove the ball. Totals / legality are recomputed
+/// by the replay, so the event's totalRuns / legalBall are ignored.
+class _BallEditResult {
+  final BallEvent event;
+  final bool delete;
+  const _BallEditResult({required this.event, this.delete = false});
+}
+
+/// Per-ball edit dialog (v1.4.5, M4b): runs, extra type, and wicket
+/// for one recorded ball. The wicket dropdown only ever offers
+/// dismissals legal on the chosen extra (no-ball → run out /
+/// retired out / obstructing only, mirroring the engine law), so
+/// an illegal combination cannot be picked here — and the replay
+/// refuses it anyway if it ever arrives. Striker / bowler are not
+/// editable: the replay replays from the recorded context.
+class _BallEditDialog extends StatefulWidget {
+  final InningsState inn;
+  final BallEvent event;
+  final String Function(String) nameOf;
+  const _BallEditDialog({
+    required this.inn,
+    required this.event,
+    required this.nameOf,
+  });
+
+  @override
+  State<_BallEditDialog> createState() => _BallEditDialogState();
+}
+
+class _BallEditDialogState extends State<_BallEditDialog> {
+  static const _extraLabels = {
+    'none': 'No extra',
+    'wide': 'Wide',
+    'noBall': 'No ball',
+    'bye': 'Bye',
+    'legBye': 'Leg bye',
+  };
+  static const _wicketLabels = {
+    'bowled': 'Bowled',
+    'caught': 'Caught',
+    'lbw': 'LBW',
+    'stumped': 'Stumped',
+    'hitWicket': 'Hit wicket',
+    'runOut': 'Run out',
+    'mankad': 'Mankad',
+    'retiredOut': 'Retired out',
+    'obstructing': 'Obstructing',
+    'hitTwice': 'Hit twice',
+    'timedOut': 'Timed out',
+  };
+
+  static List<String> _allowedWickets(String extraType) {
+    switch (extraType) {
+      case 'noBall':
+        return ['runOut', 'retiredOut', 'obstructing'];
+      case 'wide':
+        return ['stumped', 'runOut'];
+      case 'bye':
+      case 'legBye':
+        return ['runOut'];
+      default:
+        return [
+          'bowled',
+          'caught',
+          'lbw',
+          'stumped',
+          'hitWicket',
+          'runOut',
+          'mankad',
+          'retiredOut',
+          'obstructing',
+          'hitTwice',
+          'timedOut',
+        ];
+    }
+  }
+
+  // Stored extra string ('' = no extra); the dropdown shows 'none'.
+  late String _extraType;
+  late TextEditingController _runs;
+  late String _wicketType; // '' = no wicket
+  late String _outPlayerId;
+  late String _fielderId;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.event;
+    _extraType = e.extraType;
+    _runs = TextEditingController(
+      text: '${_extraType == 'wide' ? e.extraRuns : e.batRuns}',
+    );
+    _wicketType = e.isWicket ? e.wicketType : '';
+    _outPlayerId = e.outPlayerId.isNotEmpty ? e.outPlayerId : e.strikerId;
+    _fielderId = e.fielderId.isNotEmpty ? e.fielderId : e.bowlerId;
+  }
+
+  @override
+  void dispose() {
+    _runs.dispose();
+    super.dispose();
+  }
+
+  bool get _hasWicket => _wicketType.isNotEmpty;
+
+  void _onExtraChanged(String? v) {
+    if (v == null) return;
+    setState(() {
+      _extraType = v == 'none' ? '' : v;
+      // A wicket type legal on the old extra may be illegal on the
+      // new one (e.g. bowled on a no-ball) — drop it rather than
+      // letting an illegal dismissal through.
+      if (_hasWicket && !_allowedWickets(_extraType).contains(_wicketType)) {
+        _wicketType = '';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inn = widget.inn;
+    final runsLabel = _extraType == 'wide'
+        ? 'Extra runs (beyond the wide penalty)'
+        : _extraType == 'noBall'
+            ? 'Runs off the bat'
+            : _extraType == 'bye' || _extraType == 'legBye'
+                ? 'Bye runs'
+                : 'Runs';
+    return AlertDialog(
+      title: const Text('Edit ball'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Extra',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+            DropdownButton<String>(
+              value: _extraType.isEmpty ? 'none' : _extraType,
+              isExpanded: true,
+              items: _extraLabels.entries
+                  .map((e) => DropdownMenuItem(
+                        value: e.key,
+                        child: Text(e.value),
+                      ))
+                  .toList(),
+              onChanged: _onExtraChanged,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _runs,
+              decoration: InputDecoration(labelText: runsLabel),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 10),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Wicket',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+            DropdownButton<String>(
+              value: _wicketType,
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem(
+                  value: '',
+                  child: Text('No wicket'),
+                ),
+                ..._allowedWickets(_extraType).map((w) => DropdownMenuItem(
+                      value: w,
+                      child: Text(_wicketLabels[w] ?? w),
+                    )),
+              ],
+              onChanged: (v) => setState(() => _wicketType = v ?? ''),
+            ),
+            if (_hasWicket) ...[
+              const SizedBox(height: 10),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Who is out?',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              DropdownButton<String>(
+                value:
+                    inn.battingXI.contains(_outPlayerId) ? _outPlayerId : null,
+                hint: const Text('Select player'),
+                isExpanded: true,
+                items: inn.battingXI
+                    .map((id) => DropdownMenuItem(
+                          value: id,
+                          child: Text(widget.nameOf(id)),
+                        ))
+                    .toList(),
+                onChanged: (v) =>
+                    setState(() => _outPlayerId = v ?? _outPlayerId),
+              ),
+              if (_wicketType != 'mankad') ...[
+                const SizedBox(height: 10),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Fielder',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+                DropdownButton<String>(
+                  value:
+                      inn.bowlingXI.contains(_fielderId) ? _fielderId : null,
+                  hint: const Text('Select player'),
+                  isExpanded: true,
+                  items: inn.bowlingXI
+                      .map((id) => DropdownMenuItem(
+                            value: id,
+                            child: Text(widget.nameOf(id)),
+                          ))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => _fielderId = v ?? _fielderId),
+                ),
+              ],
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              'Later balls are replayed from their recorded context, '
+              'so totals, figures and fall of wickets follow this edit. '
+              'The undo history for this innings is cleared.',
+              style: TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: const Text('Delete ball?'),
+                content: const Text(
+                  'This ball is removed and later balls are replayed. '
+                  'This cannot be undone.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            );
+            if (confirm == true && context.mounted) {
+              Navigator.pop(
+                context,
+                _BallEditResult(event: widget.event, delete: true),
+              );
+            }
+          },
+          child: const Text(
+            'Delete ball',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            final runs = int.tryParse(_runs.text.trim()) ?? 0;
+            final e = widget.event;
+            Navigator.pop(
+              context,
+              _BallEditResult(
+                event: BallEvent(
+                  strikerId: e.strikerId,
+                  nonStrikerId: e.nonStrikerId,
+                  bowlerId: e.bowlerId,
+                  extraType: _extraType,
+                  batRuns: _extraType == 'wide' ? 0 : runs,
+                  extraRuns: _extraType == 'wide' ? runs : 0,
+                  isWicket: _hasWicket,
+                  wicketType: _wicketType,
+                  outPlayerId: _hasWicket ? _outPlayerId : '',
+                  fielderId: _hasWicket ? _fielderId : '',
+                  zone: e.zone,
+                  shotX: e.shotX,
+                  shotY: e.shotY,
+                  totalRuns: 0, // recomputed by the replay
+                  legalBall: false, // recomputed by the replay
+                ),
+              ),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 
@@ -1835,4 +2291,33 @@ class _WagonForInningsState extends State<_WagonForInnings> {
       ],
     );
   }
+}
+
+/// Nav-memory scope for the stateless [ScorecardScreen]: saves the
+/// scorecard record on entry and clears it (only its own record)
+/// when the route pops, mirroring the stateful screens' dispose.
+class _ScorecardNavScope extends StatefulWidget {
+  final String matchId;
+  final Widget child;
+  const _ScorecardNavScope({required this.matchId, required this.child});
+
+  @override
+  State<_ScorecardNavScope> createState() => _ScorecardNavScopeState();
+}
+
+class _ScorecardNavScopeState extends State<_ScorecardNavScope> {
+  @override
+  void initState() {
+    super.initState();
+    NavMemory.save('scorecard', widget.matchId);
+  }
+
+  @override
+  void dispose() {
+    NavMemory.clear('scorecard', widget.matchId);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
