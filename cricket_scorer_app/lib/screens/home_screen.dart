@@ -431,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------- 5. Recent matches ----------
   Widget _recentMatches(BuildContext context) {
     final done = store.matches
-        .where((m) => m.status == 'completed')
+        .where((m) => m.status == 'completed' || m.status == 'noResult')
         .toList()
       ..sort((a, b) => b.dateIso.compareTo(a.dateIso));
     final show = done.take(3).toList();
@@ -516,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          const StatusPill('completed'),
+          StatusPill(m.status),
         ],
       ),
     );
