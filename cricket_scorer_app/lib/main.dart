@@ -8,6 +8,7 @@ import 'store.dart';
 import 'theme.dart';
 import 'auth_service.dart';
 import 'backup_service.dart';
+import 'debug_info.dart';
 import 'sync_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -26,6 +27,9 @@ import 'widgets/splash_logo_image.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Debug info (v1.4.3): record the latest error for the debug
+  // screen. Crash behavior itself is unchanged (see debug_info).
+  DebugInfo.installHooks();
   // Fire-and-forget: falls back to offline mode when Firebase is not set up.
   AuthService().init();
   runApp(const Score60App());
