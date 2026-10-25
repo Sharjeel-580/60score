@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../debug_info.dart';
 import '../dls.dart';
 import '../models.dart';
+import '../nav_memory.dart';
 import '../nrr_calculator.dart';
 import '../potm.dart';
 import '../scoring.dart';
@@ -41,9 +42,12 @@ class _ScoringScreenState extends State<ScoringScreen> {
     super.initState();
     // Scoring guard (user design): while this screen is open, NO
     // network runs at all (v1.4.4 light version) — a push owed
-    // during scoring is deferred, never dropped, and a full sync
-    // runs when scoring ends (see _afterChange and dispose).
+    // during scoring is deferred, never dropped, and the local-only
+    // close runs when scoring ends (see dispose).
     SyncService().scoringActive = true;
+    // Recents resume (v1.4.5): remember this screen so a cold start
+    // after an OS kill can come back here (cleared on dispose).
+    NavMemory.save('scoring', match.id);
     // Feature 7 (D batch): load the persisted voice-commentary
     // setting (default OFF) so the AppBar toggle shows the truth.
     TtsService.instance.loadEnabled().then((_) {
@@ -64,13 +68,15 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   @override
   void dispose() {
-    // Scoring guard: scoring closed — run a full sync (push + pull)
-    // so both sides converge. (v1.4.4: live sync no longer exists;
-    // this close-time sync and manual "Sync now" are the only ones.)
+    // Scoring guard: scoring closed — run the local-only close
+    // (final local save, no push, no pull — v1.4.5 fully local).
+    // (v1.4.4: live sync no longer exists; v1.4.5 removed the
+    // close-time sync and manual sync as well.)
     if (SyncService().scoringActive) {
       SyncService().scoringActive = false;
       unawaited(SyncService().syncAfterScoring(store));
     }
+    NavMemory.clear('scoring', match.id);
     super.dispose();
   }
 
@@ -89,22 +95,42 @@ class _ScoringScreenState extends State<ScoringScreen> {
       // Smoothness (v1.4.3): per ball, only the matches key is
       // written — teams/photos and everything else are untouched
       // by a ball, so re-encoding them per ball was pure load.
-      await store.persistMatchesOnly();
+      // v1.4.5 action feedback: per-ball SUCCESS stays silent, but
+      // a failed save must surface (persist returns false instead
+      // of throwing now, so the catch below would never see it).
+      final saved = await store.persistMatchesOnly();
+      if (!saved) {
+        DebugInfo.record('Ball save failed', StackTrace.current);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ball could not be saved — try again.'),
+            ),
+          );
+        }
+      }
       await _runPlayoffUpdate();
     } catch (e, st) {
       // Silent-close guard: _afterChange runs inside _record,
       // which every ball button calls WITHOUT await — a throw
       // here used to be an unhandled async error that killed the
       // app with no dialog. Record it for the debug screen and
-      // keep the UI on the last good state instead.
+      // keep the UI on the last good state instead — and tell the
+      // user, so a failed update is never silent.
       DebugInfo.record(e, st);
       debugPrint('Scoring _afterChange failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Scoring update failed — try again.'),
+          ),
+        );
+      }
     }
     // Scoring guard: scoring ends when the match leaves live
-    // status — run a full sync at once, so the completed result
-    // converges everywhere immediately. Undo after completion
-    // returns the match to live, which re-arms the guard for the
-    // resumed scoring.
+    // status — run the local-only close (final save, no network).
+    // Undo after completion returns the match to live, which
+    // re-arms the guard for the resumed scoring.
     if (wasLive && match.status != 'live') {
       SyncService().scoringActive = false;
       unawaited(SyncService().syncAfterScoring(store));
@@ -234,6 +260,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
       _snack('Playing XI is full (11 players).');
       return null;
     }
+    // Full save required here: this adds a player to the TEAM and to
+    // the match XI — two collections (teams + matches) — so neither
+    // granular persist alone covers it.
     await store.persist();
     if (mounted) setState(() {});
     return id;
@@ -1034,9 +1063,17 @@ class _ScoringScreenState extends State<ScoringScreen> {
           IconButton(
             icon: const Icon(Icons.undo),
             tooltip: 'Undo last ball',
-            onPressed: inn.events.isEmpty
+            // Undo runs only when the stack is non-empty. Events
+            // without steps (legacy data, or a restart before v1.4.5
+            // persisted the stack) must never fail silently: the
+            // button stays tappable so the reason can be told.
+            onPressed: inn.events.isEmpty && inn.undoStack.isEmpty
                 ? null
                 : () async {
+                    if (inn.undoStack.isEmpty) {
+                      _snack('Undo is not available for this ball.');
+                      return;
+                    }
                     if (undoLastBall(inn)) {
                       if (match.status == 'completed') {
                         match.status = 'live';
@@ -1068,7 +1105,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
               } else if (v == 'noresult') {
                 match.status = 'noResult';
                 match.resultText = 'No result';
-                await store.persist();
+                // Match-only change; the playoff engine below persists
+                // its own tournament changes when it has any.
+                await store.persistMatchesOnly();
                 // A no-result finalizes the fixture: refresh qualification.
                 // (No confirmation dialog here — the screen is closing;
                 // any needsConfirmation case surfaces on the next scoring
@@ -1076,6 +1115,41 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 final tid = match.tournamentId;
                 if (tid != null) await applyPlayoffUpdate(store, tid);
                 nav.pop();
+              } else if (v == 'endinnings') {
+                // v1.4.5: end the current innings early. The flag
+                // makes the innings read complete, so the existing
+                // innings-break card takes over: Start 2nd innings
+                // (target = this total + 1, via startInnings) for
+                // the 1st innings, or the normal match-finish flow
+                // for the last innings. Totals are untouched —
+                // nothing is faked into the counters.
+                final isFirst = match.innings.length == 1;
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (d) => AlertDialog(
+                    title: const Text('End innings?'),
+                    content: Text(
+                      isFirst
+                          ? 'End the 1st innings now? The 2nd innings '
+                              'will start chasing ${inn.totalRuns + 1}.'
+                          : 'End this innings now? The match will '
+                              'finish on the current totals.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(d, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(d, true),
+                        child: const Text('End innings'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm != true) return;
+                inn.endedEarly = true;
+                await _afterChange();
               } else if (v == 'delete') {
                 // v1.3.7: the standard confirm — this was the one
                 // delete in the app with none, on a LIVE match.
@@ -1104,27 +1178,34 @@ class _ScoringScreenState extends State<ScoringScreen> {
                 nav.pop();
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'xi', child: Text('Edit Playing XI')),
-              PopupMenuItem(
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'xi', child: Text('Edit Playing XI')),
+              const PopupMenuItem(
                 value: 'dls',
                 child: Text('Revised target (DLS)'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'retirehurt',
                 child: Text('Retire batsman (hurt)'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'retiredout',
                 child: Text('Retired Out (between balls)'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'timedout',
                 child: Text('Timed Out (batter not yet in)'),
               ),
-              PopupMenuItem(value: 'scorecard', child: Text('View scorecard')),
-              PopupMenuItem(value: 'noresult', child: Text('Mark no result')),
-              PopupMenuItem(value: 'delete', child: Text('Delete match')),
+              const PopupMenuItem(
+                  value: 'scorecard', child: Text('View scorecard')),
+              const PopupMenuItem(
+                  value: 'noresult', child: Text('Mark no result')),
+              // Only while the innings is still open — once it is
+              // complete the break card already owns the flow.
+              if (!inn.isComplete)
+                const PopupMenuItem(
+                    value: 'endinnings', child: Text('End innings')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete match')),
             ],
           ),
         ],
@@ -1218,7 +1299,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
           ),
           if (inn.events.isNotEmpty && match.status == 'live')
             _liveWagonCard(inn),
-          if (needsOpeners)
+          // A completed innings always shows the break card, even
+          // when openers were never picked (e.g. End innings tapped
+          // on a fresh match) — the openers prompt on a completed
+          // innings would be a dead end, since no ball can be bowled.
+          if (inn.isComplete)
+            _inningsBreakCard()
+          else if (needsOpeners)
             FilledButton.icon(
               onPressed: _chooseOpeners,
               icon: const Icon(Icons.play_arrow),
@@ -1240,8 +1327,6 @@ class _ScoringScreenState extends State<ScoringScreen> {
               icon: const Icon(Icons.sports_baseball),
               label: const Text('Select bowler for next over'),
             )
-          else if (inn.isComplete)
-            _inningsBreakCard()
           else if (match.status == 'live')
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1651,7 +1736,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
                     }
                   }
                   match.status = 'completed';
-                  await store.persist();
+                  await store.persistMatchesOnly();
                   nav.pushReplacement(
                     MaterialPageRoute(
                       builder: (_) =>
@@ -1678,7 +1763,7 @@ class _ScoringScreenState extends State<ScoringScreen> {
         final picked = await showPotmPickerDialog(context, store, match);
         if (picked != null && picked.isNotEmpty) {
           match.manOfMatchId = picked;
-          await store.persist();
+          await store.persistMatchesOnly();
           if (mounted) setState(() {});
         }
       },
