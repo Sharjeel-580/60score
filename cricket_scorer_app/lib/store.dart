@@ -261,8 +261,10 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   /// Activates a signed-in account's identity: first the owner-only
-  /// legacy claim (see [claimLegacyData]), then the account's own
-  /// scope is loaded and its profile ensured (feature #3).
+  /// legacy claim (see [claimLegacyData]), then the owner-only
+  /// guest migration (see [migrateGuestDataToOwner]), then the
+  /// account's own scope is loaded and its profile ensured
+  /// (feature #3).
   Future<void> activateAccount(
     String uid, {
     String? email,
@@ -270,6 +272,7 @@ class Store extends ChangeNotifier implements PlayoffStore {
     String? phoneNumber,
   }) async {
     await claimLegacyData(uid, email: email);
+    await migrateGuestDataToOwner(uid, email: email);
     await activateIdentity(uid);
     await ensureProfile(
       displayName: displayName,
@@ -348,6 +351,57 @@ class Store extends ChangeNotifier implements PlayoffStore {
       await prefs.remove(_kLastModified);
     }
     return true;
+  }
+
+  /// Copies the GUEST workspace into the OWNER account's scope on
+  /// first owner sign-in (v1.4.1): a phone that used the app as
+  /// guest/offline (never signed in) holds its whole league under
+  /// guest-scoped keys, and the pre-v1.3.1 legacy claim above does
+  /// NOT cover those keys — without this step an owner sign-in
+  /// would switch to an empty owner scope and the guest data would
+  /// sit invisible behind it. OWNER-ONLY (same claim-guard as
+  /// [claimLegacyData]): the signing-in account's [email] must be
+  /// exactly [kOwnerEmail]; any other account — and phone logins,
+  /// which carry no email — get false. Only runs when the owner's
+  /// own scope is still empty, so existing account data is never
+  /// overwritten. Guest keys are COPIED, never removed: they stay
+  /// as a backup, and logging out still restores the guest
+  /// workspace exactly as it was. Returns true when at least one
+  /// key was copied.
+  Future<bool> migrateGuestDataToOwner(String uid, {String? email}) async {
+    if (email == null || email.trim() != kOwnerEmail) return false;
+    final prefs = await SharedPreferences.getInstance();
+    const dataKeys = [
+      _kTeams,
+      _kTournaments,
+      _kMatches,
+      _kReg,
+      _kDrafts,
+      _kManual,
+      _kTombstones,
+      _kTrash,
+      _kRestored,
+      _kProfile,
+    ];
+    // Owner scope must still be empty — any existing key refuses.
+    for (final base in dataKeys) {
+      if (prefs.getString('${base}__$uid') != null) return false;
+    }
+    if (prefs.getInt('${_kLastModified}__$uid') != null) return false;
+    var copied = false;
+    for (final base in dataKeys) {
+      final v = prefs.getString('${base}__guest');
+      if (v != null) {
+        await prefs.setString('${base}__$uid', v);
+        copied = true;
+      }
+    }
+    final lm = prefs.getInt('${_kLastModified}__guest');
+    if (lm != null) {
+      await prefs.setInt('${_kLastModified}__$uid', lm);
+      copied = true;
+    }
+    return copied;
   }
 
   /// Full data export for backups (§31). Versioned JSON map.
