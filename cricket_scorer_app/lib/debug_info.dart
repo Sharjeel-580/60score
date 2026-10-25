@@ -13,10 +13,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Must match pubspec.yaml's version. No version plugin is used on
-/// purpose: adding a native plugin changes the Firebase registrar
-/// set, which broke login in v1.4.0.
-const String kAppVersion = '1.4.3+26';
+/// Must match pubspec.yaml's version — bump this in the SAME change
+/// whenever pubspec.yaml's version changes, or the Debug info screen
+/// will report a stale version. This bit us in 1.4.4: the screen
+/// showed 1.4.3+26 while 1.4.4+27 was running, which made a real
+/// 1.4.4 crash look like a 1.4.3 crash. No version plugin is used
+/// on purpose: adding a native plugin changes the Firebase
+/// registrar set, which broke login in v1.4.0.
+const String kAppVersion = '1.4.5+28';
 
 class DebugInfo {
   static const _prefsKey = 'debug_last_error_v1';
