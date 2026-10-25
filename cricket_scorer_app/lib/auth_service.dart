@@ -120,6 +120,11 @@ class AuthService extends ChangeNotifier {
           _persistGuestFlag();
         }
         notifyListeners();
+      }, onError: (e) {
+        // This listener has no awaiter: a stream error without
+        // onError would be unhandled. Log and ignore, never
+        // propagate.
+        debugPrint('Auth stream error (ignored): $e');
       });
       // Wait (briefly) for the first auth event so the splash gate
       // decision sees a settled currentUser, restored session included.
