@@ -10,6 +10,7 @@ import '../account_profile.dart';
 import '../auth_service.dart';
 import '../store.dart';
 import '../theme.dart';
+import 'debug_info_screen.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -52,6 +53,21 @@ class ProfileScreen extends StatelessWidget {
           onPressed: () async {
             await Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => LoginScreen(store: store)),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        ListTile(
+          leading: const Icon(Icons.bug_report_outlined),
+          title: const Text('Debug info'),
+          subtitle: const Text(
+            'App version, last error, data size, sync status',
+          ),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DebugInfoScreen(store: store),
+              ),
             );
           },
         ),
@@ -163,6 +179,21 @@ class ProfileScreen extends StatelessWidget {
           'Stats are from your own tournaments and matches only — '
           'runs and wickets count completed matches.',
           style: TextStyle(color: Colors.white38, fontSize: 11.5),
+        ),
+        const SizedBox(height: 10),
+        ListTile(
+          leading: const Icon(Icons.bug_report_outlined),
+          title: const Text('Debug info'),
+          subtitle: const Text(
+            'App version, last error, data size, sync status',
+          ),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DebugInfoScreen(store: store),
+              ),
+            );
+          },
         ),
       ],
     );
