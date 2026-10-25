@@ -4,6 +4,7 @@ import '../auth_service.dart';
 import '../models.dart';
 import '../points_table_share.dart';
 import '../publish_service.dart';
+import '../scoring.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../tournament_engine.dart';
@@ -1202,8 +1203,26 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                                         ? const QBadge()
                                         : const QBadge(provisional: true),
                                   ],
+                                  // Manual-row marker (v1.4.4): a gold
+                                  // pencil means this row is edited.
+                                  if (tournament.pointsTableOverrides
+                                      .containsKey(rows[i].teamId)) ...[
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.edit,
+                                        size: 14, color: kGold),
+                                  ],
+                                  IconButton(
+                                    icon: const Icon(
+                                        Icons.edit_note_outlined,
+                                        size: 18),
+                                    tooltip: 'Edit points row',
+                                    onPressed: () =>
+                                        _editPointsRow(context, rows[i]),
+                                  ),
                                 ],
                               ),
+                              onTap: () =>
+                                  _editPointsRow(context, rows[i]),
                             ),
                             DataCell(Text('${rows[i].played}')),
                             DataCell(Text('${rows[i].won}')),
@@ -1286,6 +1305,119 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
             TournamentStatsTab(store: store, tournament: tournament),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Manual points-table row editor (v1.4.4): the whole displayed row
+  /// for one team. Pre-filled with the override when one exists, else
+  /// with the computed row. Save stores the override on the tournament
+  /// (travels with the existing blob sync); Reset removes it so the
+  /// row goes back to computed values. Counts parse leniently: a
+  /// blank, invalid or negative count saves as 0 — never a refusal.
+  /// NRR accepts any decimal (negative included).
+  Future<void> _editPointsRow(BuildContext context, PointsRow row) async {
+    final teamId = row.teamId;
+    final existing = tournament.pointsTableOverrides[teamId];
+    TextEditingController ctrl(String v) => TextEditingController(text: v);
+    final cP = ctrl('${existing?.played ?? row.played}');
+    final cW = ctrl('${existing?.won ?? row.won}');
+    final cL = ctrl('${existing?.lost ?? row.lost}');
+    final cT = ctrl('${existing?.tied ?? row.tied}');
+    final cNR = ctrl('${existing?.noResult ?? row.noResult}');
+    final cPts = ctrl('${existing?.points ?? row.points}');
+    final cNrr = ctrl(
+      (existing?.nrr ?? row.nrr).toStringAsFixed(3),
+    );
+    try {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('Edit points row — ${store.teamName(teamId)}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _rowField(cP, 'P (played)'),
+                _rowField(cW, 'W (won)'),
+                _rowField(cL, 'L (lost)'),
+                _rowField(cT, 'T (tied)'),
+                _rowField(cNR, 'NR (no result)'),
+                _rowField(cPts, 'Pts (points)'),
+                _rowField(
+                  cNrr,
+                  'NRR (decimal)',
+                  decimal: true,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Counts save as 0 when blank, invalid or negative. '
+                  'NRR accepts any decimal. The row is marked with a '
+                  'gold pencil while edited.',
+                  style: TextStyle(fontSize: 11, color: Colors.white54),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (existing != null)
+              TextButton(
+                onPressed: () => Navigator.pop(c, 'reset'),
+                child: const Text('Reset'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(c, null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, 'save'),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+      if (action == 'reset') {
+        tournament.pointsTableOverrides.remove(teamId);
+        await store.persist();
+        if (mounted) setState(() {});
+      } else if (action == 'save') {
+        int count(TextEditingController ctrl) {
+          final v = int.tryParse(ctrl.text.trim());
+          if (v == null || v < 0) return 0;
+          return v;
+        }
+
+        final nrr = double.tryParse(cNrr.text.trim()) ?? 0;
+        tournament.pointsTableOverrides[teamId] = PointsTableOverride(
+          played: count(cP),
+          won: count(cW),
+          lost: count(cL),
+          tied: count(cT),
+          noResult: count(cNR),
+          points: count(cPts),
+          nrr: nrr,
+        );
+        await store.persist();
+        if (mounted) setState(() {});
+      }
+    } finally {
+      for (final c in [cP, cW, cL, cT, cNR, cPts, cNrr]) {
+        c.dispose();
+      }
+    }
+  }
+
+  Widget _rowField(TextEditingController ctrl, String label,
+      {bool decimal = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextField(
+        controller: ctrl,
+        keyboardType: decimal
+            ? const TextInputType.numberWithOptions(
+                signed: true, decimal: true)
+            : TextInputType.number,
+        decoration: InputDecoration(labelText: label),
       ),
     );
   }
