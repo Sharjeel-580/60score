@@ -847,6 +847,31 @@ class Store extends ChangeNotifier implements PlayoffStore {
     }
   }
 
+  /// Ball-path persist (v1.4.3, smoothness): writes ONLY the
+  /// matches key. During scoring, the scored match is the only
+  /// thing that changes — teams (with inline player photos,
+  /// megabytes for a real league) and every other collection are
+  /// untouched, so re-encoding them per ball was the load that
+  /// froze the app. All other persist work (last-modified stamp,
+  /// listeners, cloud push, republish) runs exactly like [persist],
+  /// so the cloud save keeps running during scoring. Every other
+  /// path keeps using [persist] (full write); only the per-ball
+  /// path uses this. Playoff updates persist themselves (full
+  /// write) on the rare balls when they change something.
+  Future<void> persistMatchesOnly({bool skipSync = false}) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(
+      _scoped(_kMatches),
+      jsonEncode(matches.map((m) => m.toJson()).toList()),
+    );
+    await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    notifyListeners();
+    if (!skipSync) {
+      SyncService().schedulePush(this);
+      PublishService().scheduleRepublish(this);
+    }
+  }
+
   // ---------- lookups ----------
   Team? teamById(String id) {
     for (final t in teams) {
