@@ -2,11 +2,11 @@
 //
 // Aggregates one player's batting-position, dismissal, runs-bucket
 // and bowling breakdowns from a list of matches, for the Player
-// Insights charts. Like `computeCareerStats` in scoring.dart, only
-// **completed** matches count, batting/bowling totals read from the
-// stored figures (BatFig / BowlFig — the source of truth), and ball
-// events are preferred where they exist with a figure-based
-// fallback where they do not:
+// Insights charts. Like `computeCareerStats` in scoring.dart,
+// completed and no-result matches count (deduplicated per fixture),
+// batting/bowling totals read from the stored figures (BatFig /
+// BowlFig — the source of truth), and ball events are preferred
+// where they exist with a figure-based fallback where they do not:
 //
 // * Batting position: per innings, the order in which batters are
 //   first seen in the ball events (striker / non-striker first
@@ -32,6 +32,7 @@
 //   mankad count.)
 
 import 'models.dart';
+import 'scoring.dart' show dedupeMatches;
 
 /// Runs-bucket labels, in order. Per-innings runs (batted only)
 /// fall into exactly one bucket.
@@ -214,16 +215,17 @@ Map<String, int> _battingPositions(InningsState inn) {
   return {for (var i = 0; i < order.length; i++) order[i]: i + 1};
 }
 
-/// Aggregate [playerId]'s insights from [matches] (completed
-/// matches only). Returns honest empties — zero counts, empty
+/// Aggregate [playerId]'s insights from [matches] (completed and
+/// no-result matches, deduplicated per fixture — see [dedupeMatches]
+/// in scoring.dart). Returns honest empties — zero counts, empty
 /// maps/lists (runsBuckets keeps its six zeroed labels) — when the
 /// player has no data.
 PlayerInsights buildPlayerInsights(List<Match> matches, String playerId) {
   final batting = BattingInsights();
   final bowling = BowlingInsights();
 
-  for (final m in matches) {
-    if (m.status != 'completed') continue;
+  for (final m in dedupeMatches(matches)) {
+    if (m.status != 'completed' && m.status != 'noResult') continue;
     for (var idx = 0; idx < m.innings.length; idx++) {
       final inn = m.innings[idx];
 
