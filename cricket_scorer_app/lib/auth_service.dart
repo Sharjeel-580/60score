@@ -20,6 +20,8 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'crash_reporting.dart';
+
 /// Result of an auth attempt.
 enum AuthStatus {
   ok,
@@ -104,6 +106,8 @@ class AuthService extends ChangeNotifier {
     try {
       await Firebase.initializeApp();
       _firebaseReady = true;
+      // Crash traces from here on (never throws, no-op offline).
+      await initCrashReporting();
       FirebaseAuth.instance.authStateChanges().listen((user) {
         if (user != null && _guestMode) {
           // A real login supersedes the guest choice: after a later
