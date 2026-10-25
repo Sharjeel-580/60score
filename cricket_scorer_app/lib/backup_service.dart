@@ -77,16 +77,20 @@ Future<void> runDailyAutoBackup(Store store) async {
   } catch (_) {}
 }
 
-/// Writes one timestamped backup file. Returns its path, or '' on failure.
-Future<String> manualBackup(Store store) async {
+/// Writes one timestamped backup file. Returns the path on success;
+/// on failure the path is '' and [error] carries the reason (v1.4.5
+/// action feedback: the backup button shows this in a popup).
+typedef BackupResult = ({String path, String? error});
+
+Future<BackupResult> manualBackup(Store store) async {
   try {
     final dir = await _autoDir();
-    if (dir == null) return '';
+    if (dir == null) return (path: '', error: 'Storage unavailable');
     final path = '${dir.path}/60score_manual_${_stamp(DateTime.now())}.json';
     await File(path).writeAsString(jsonEncode(store.exportJson()));
-    return path;
-  } catch (_) {
-    return '';
+    return (path: path, error: null);
+  } catch (e) {
+    return (path: '', error: e.toString());
   }
 }
 
@@ -104,15 +108,23 @@ Future<List<FileSystemEntity>> listBackups() async {
 }
 
 /// Restores a backup file by MERGING (§31): same-id records are replaced,
-/// new records are added, nothing is deleted. Returns per-entity counts.
-Future<Map<String, int>> restoreBackup(Store store, String path) async {
+/// new records are added, nothing is deleted. Returns per-entity counts;
+/// on failure the counts are empty and [error] carries the reason
+/// (v1.4.5 action feedback: the restore button shows this in a popup.
+/// The atomic import guarantees a failed restore changed nothing).
+typedef RestoreResult = ({Map<String, int> counts, String? error});
+
+Future<RestoreResult> restoreBackup(Store store, String path) async {
   try {
     final raw = await File(path).readAsString();
     final data = jsonDecode(raw) as Map<String, dynamic>;
-    if (data['app'] != '60Score') return {};
-    return await store.importJson(data, merge: true);
-  } catch (_) {
-    return {};
+    if (data['app'] != '60Score') {
+      return (counts: <String, int>{}, error: 'Not a 60Score backup file.');
+    }
+    final Map<String, int> counts = await store.importJson(data, merge: true);
+    return (counts: counts, error: null);
+  } catch (e) {
+    return (counts: <String, int>{}, error: e.toString());
   }
 }
 
