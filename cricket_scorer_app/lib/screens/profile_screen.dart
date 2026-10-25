@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import '../account_profile.dart';
 import '../auth_service.dart';
 import '../store.dart';
-import '../sync_service.dart';
 import '../theme.dart';
 import 'debug_info_screen.dart';
 import 'login_screen.dart';
@@ -72,43 +71,7 @@ class ProfileScreen extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 8),
-        ListTile(
-          leading: const Icon(Icons.sync),
-          title: const Text('Sync now'),
-          subtitle: const Text(
-            'Push and pull once, manually — no auto sync',
-          ),
-          onTap: () => _syncNow(context),
-        ),
       ],
-    );
-  }
-
-  /// One manual sync round (v1.4.4 light version) with visible
-  /// feedback. Scoring close is the other sync moment; nothing
-  /// syncs on its own anymore.
-  Future<void> _syncNow(BuildContext context) async {
-    final result = await SyncService().syncNow(store);
-    if (!context.mounted) return;
-    final String message;
-    if (!result.ok) {
-      if (result.error == 'scoring') {
-        message = 'Scoring is open — sync is paused until scoring closes.';
-      } else if (result.error == 'login') {
-        message = 'Log in to sync your data.';
-      } else {
-        final err = (result.error ?? 'unknown error').trim();
-        message = 'Sync failed: '
-            '${err.length > 120 ? '${err.substring(0, 120)}…' : err}';
-      }
-    } else if (result.changed) {
-      message = 'Synced — new data received.';
-    } else {
-      message = 'Already up to date.';
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
     );
   }
 
@@ -231,15 +194,6 @@ class ProfileScreen extends StatelessWidget {
               ),
             );
           },
-        ),
-        const SizedBox(height: 8),
-        ListTile(
-          leading: const Icon(Icons.sync),
-          title: const Text('Sync now'),
-          subtitle: const Text(
-            'Push and pull once, manually — no auto sync',
-          ),
-          onTap: () => _syncNow(context),
         ),
       ],
     );
