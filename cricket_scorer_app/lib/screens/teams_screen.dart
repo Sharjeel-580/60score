@@ -106,7 +106,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
               MaterialPageRoute(
                 builder: (_) => TeamDetailScreen(store: store, team: t),
               ),
-            ).then((_) => store.persist()),
+            ).then((_) async {
+              // The .then future is discarded: a persist throw
+              // here would be an unhandled async error, so catch
+              // it like the per-ball _afterChange chain does.
+              try {
+                await store.persist();
+              } catch (e) {
+                debugPrint('Team detail persist failed: $e');
+              }
+            }),
           );
         },
       ),
