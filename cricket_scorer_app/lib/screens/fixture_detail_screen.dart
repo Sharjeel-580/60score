@@ -983,6 +983,7 @@ class _FixtureDetailScreenState extends State<FixtureDetailScreen> {
       teamIds,
       store.matches,
       pointsAdjustments: t?.pointsAdjustments ?? const {},
+      pointsTableOverrides: t?.pointsTableOverrides ?? const {},
     );
     return ScoreCard(
       child: InkWell(
