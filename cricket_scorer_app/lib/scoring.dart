@@ -159,6 +159,19 @@ bool applyBall(InningsState s, BallInput input) {
   if (s.strikerId == '' || s.nonStrikerId == '' || s.currentBowlerId == '') {
     return false;
   }
+  // No-ball law (v1.4.5): on a no-ball the batter can only be out
+  // run out (plus retired out / obstructing the field, which the
+  // code already supports as dismissals). Any other dismissal on a
+  // no-ball is rejected outright — the ball is not recorded and no
+  // undo step is pushed. The main UI only ever offers Run Out on a
+  // no-ball; this guards every other entry path the same way.
+  if (input.extraType == 'noBall' &&
+      input.isWicket &&
+      input.wicketType != 'runOut' &&
+      input.wicketType != 'retiredOut' &&
+      input.wicketType != 'obstructing') {
+    return false;
+  }
   _pushUndo(s);
 
   final strikerAtBall = s.strikerId;
@@ -317,6 +330,86 @@ bool undoLastBall(InningsState s) {
   final step = s.undoStack.removeLast();
   _restoreStep(s, step);
   return true;
+}
+
+/// Per-ball edit replay (v1.4.5, M4b): rebuilds an innings from a
+/// ball list by re-applying every ball through [applyBall], forcing
+/// each ball's recorded striker / non-striker / bowler context
+/// first (so wickets, strike rotation and over changes replay
+/// exactly as scored — [applyBall] never refuses on awaiting
+/// flags, it only needs the context set).
+///
+/// Returns a NEW innings on success, or null (leaving the original
+/// untouched) when any ball is rejected: an illegal dismissal on a
+/// no-ball, or an edited sequence that completes the innings before
+/// the last recorded ball (target / wickets reached early — the
+/// edit contradicts the recorded history, so it is refused rather
+/// than silently dropping balls).
+///
+/// Preserved across replay: XIs, limits, penalties, target,
+/// [endedEarly], and retired-hurt markers (those are not ball
+/// events, so they are carried over from the original figures).
+/// Wagon-wheel points are carried back onto the regenerated events
+/// in order (replay regenerates events, so zone/shotX/shotY would
+/// otherwise be lost). The undo stack is cleared — the edit
+/// invalidates pre-edit undo steps, same rule as scorecard edits.
+InningsState? replayInningsBalls(InningsState inn, List<BallEvent> events) {
+  final out = InningsState(
+    battingTeamId: inn.battingTeamId,
+    bowlingTeamId: inn.bowlingTeamId,
+    battingXI: List.of(inn.battingXI),
+    bowlingXI: List.of(inn.bowlingXI),
+    oversLimit: inn.oversLimit,
+    ballsPerOver: inn.ballsPerOver,
+  );
+  out.target = inn.target;
+  out.maxWickets = inn.maxWickets;
+  out.widePenalty = inn.widePenalty;
+  out.noBallPenalty = inn.noBallPenalty;
+  out.endedEarly = inn.endedEarly;
+  for (final e in events) {
+    out.strikerId = e.strikerId;
+    out.nonStrikerId = e.nonStrikerId;
+    out.currentBowlerId = e.bowlerId;
+    final ok = applyBall(
+      out,
+      BallInput(
+        extraType: e.extraType,
+        batRuns: e.batRuns,
+        extraRuns: e.extraRuns,
+        isWicket: e.isWicket,
+        wicketType: e.wicketType,
+        outPlayerId: e.outPlayerId,
+        fielderId: e.fielderId,
+        zone: e.zone,
+        shotX: e.shotX,
+        shotY: e.shotY,
+      ),
+    );
+    if (!ok) return null;
+  }
+  if (out.events.length == events.length) {
+    for (var i = 0; i < events.length; i++) {
+      out.events[i].zone = events[i].zone;
+      out.events[i].shotX = events[i].shotX;
+      out.events[i].shotY = events[i].shotY;
+    }
+  }
+  // Retired-hurt markers are not ball events: carry them over from
+  // the original figures (only onto figures that replayed not-out;
+  // a retired-hurt batter who never faced a ball in the replayed
+  // sequence still gets his marker figure, as in the original).
+  for (final entry in inn.batting.entries) {
+    if (entry.value.howOut == 'retired hurt') {
+      final fig = out.batting.putIfAbsent(entry.key, () => BatFig());
+      if (!fig.out) {
+        fig.batted = true;
+        fig.howOut = 'retired hurt';
+      }
+    }
+  }
+  out.undoStack = [];
+  return out;
 }
 
 // ---------------- Full dismissal set: non-ball actions ----------------
@@ -1445,6 +1538,67 @@ Map<String, CareerStats> computeCareerStats(
 /// long and digit-bearing. A bare name token never qualifies.
 bool _looksLikePlayerId(String token) =>
     token.length >= 8 && token.contains(RegExp(r'[0-9]'));
+
+/// Applies per-player stats overrides (v1.4.5, mirror of the
+/// points-table overrides): an override REPLACES the computed base
+/// counters for that player. Derived values (average, strike rate,
+/// economy, best figures, MVP) are NOT stored — they recompute from
+/// these counters via [CareerStats] getters. Overrides for unknown
+/// playerIds are skipped: an override only ever targets a row that
+/// exists. The input map is mutated in place (its objects are freshly
+/// computed per view, same as [applyManualStats]).
+void applyPlayerStatsOverrides(
+  Map<String, CareerStats> stats,
+  Map<String, PlayerStatsOverride> overrides,
+) {
+  for (final e in overrides.entries) {
+    final c = stats[e.key];
+    if (c == null) continue;
+    final o = e.value;
+    c.matches = o.matches;
+    c.inningsBatted = o.inningsBatted;
+    c.notOuts = o.notOuts;
+    c.runs = o.runs;
+    c.ballsFaced = o.ballsFaced;
+    c.highScore = o.highScore;
+    c.hundreds = o.hundreds;
+    c.fifties = o.fifties;
+    c.fours = o.fours;
+    c.sixes = o.sixes;
+    c.ballsBowled = o.ballsBowled;
+    c.runsConceded = o.runsConceded;
+    c.wickets = o.wickets;
+    c.bestWickets = o.bestWickets;
+    c.bestRuns = o.bestRuns;
+    c.catches = o.catches;
+    c.stumpings = o.stumpings;
+    c.runOuts = o.runOuts;
+  }
+}
+
+/// Copies every base counter from [src] to [dst] (derived getters
+/// follow automatically). Used to refresh a displayed row object
+/// after a stats reset, when its fresh computed values are known.
+void copyBaseCounters(CareerStats dst, CareerStats src) {
+  dst.matches = src.matches;
+  dst.inningsBatted = src.inningsBatted;
+  dst.notOuts = src.notOuts;
+  dst.runs = src.runs;
+  dst.ballsFaced = src.ballsFaced;
+  dst.highScore = src.highScore;
+  dst.hundreds = src.hundreds;
+  dst.fifties = src.fifties;
+  dst.fours = src.fours;
+  dst.sixes = src.sixes;
+  dst.ballsBowled = src.ballsBowled;
+  dst.runsConceded = src.runsConceded;
+  dst.wickets = src.wickets;
+  dst.bestWickets = src.bestWickets;
+  dst.bestRuns = src.bestRuns;
+  dst.catches = src.catches;
+  dst.stumpings = src.stumpings;
+  dst.runOuts = src.runOuts;
+}
 
 /// Fold manually-entered past scores into career totals.
 void applyManualStats(
