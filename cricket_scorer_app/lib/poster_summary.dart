@@ -259,7 +259,7 @@ PosterTeamSection _sectionFor(
     scoreText: '${inn.totalRuns}-${inn.wickets}',
     oversText: oversText(inn.legalBalls, inn.ballsPerOver),
     batting: [
-      for (final e in batEntries.take(4))
+      for (final e in batEntries.take(3))
         PosterBatLine(
           name: '${store.playerName(e.key)}${e.value.out ? '' : ' *'}',
           runs: e.value.runs,
@@ -1141,6 +1141,32 @@ class MatchPosterCard extends StatelessWidget {
   }
 
   Widget _footer() {
+    // One line, all three parts in full, never an ellipsis. The old
+    // layout gave the date, venue and tournament name equal flex,
+    // so the long tournament name was squeezed to a third of the
+    // row and rendered as "SUPER SIXTY LEAGUE SEASO...". Now each
+    // part takes its intrinsic width and the whole row only scales
+    // down (never truncates) if a future name is longer than the
+    // card — for the league's real names everything fits at full
+    // size: the row is ~380 logical wide inside the 500-wide card.
+    Widget part(IconData icon, String text) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: _kPosterGoldDeep, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            text.toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      );
+    }
+
     final parts = <Widget>[];
     void add(IconData icon, String text) {
       if (text.isEmpty) return;
@@ -1152,22 +1178,7 @@ class MatchPosterCard extends StatelessWidget {
           ),
         );
       }
-      parts.add(Icon(icon, color: _kPosterGoldDeep, size: 12));
-      parts.add(const SizedBox(width: 4));
-      parts.add(
-        Flexible(
-          child: Text(
-            text.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
+      parts.add(part(icon, text));
     }
 
     add(Icons.calendar_month, data.dateLabel);
@@ -1176,10 +1187,15 @@ class MatchPosterCard extends StatelessWidget {
       Icons.emoji_events,
       [data.tournamentName, data.seasonLabel].where((s) => s.isNotEmpty).join(' '),
     );
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: parts,
+    return SizedBox(
+      width: double.infinity,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: parts,
+        ),
+      ),
     );
   }
 }
