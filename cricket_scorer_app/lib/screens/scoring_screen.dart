@@ -39,10 +39,10 @@ class _ScoringScreenState extends State<ScoringScreen> {
   @override
   void initState() {
     super.initState();
-    // Scoring guard (user design): while this screen is open, no
-    // remote snapshot may be applied at all — local persist and
-    // the cloud push keep running, and a full sync runs when
-    // scoring ends (see _afterChange and dispose).
+    // Scoring guard (user design): while this screen is open, NO
+    // network runs at all (v1.4.4 light version) — a push owed
+    // during scoring is deferred, never dropped, and a full sync
+    // runs when scoring ends (see _afterChange and dispose).
     SyncService().scoringActive = true;
     // Feature 7 (D batch): load the persisted voice-commentary
     // setting (default OFF) so the AppBar toggle shows the truth.
@@ -64,8 +64,9 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   @override
   void dispose() {
-    // Scoring guard: scoring closed — reopen live sync and run a
-    // full sync (push + pull) so both sides converge.
+    // Scoring guard: scoring closed — run a full sync (push + pull)
+    // so both sides converge. (v1.4.4: live sync no longer exists;
+    // this close-time sync and manual "Sync now" are the only ones.)
     if (SyncService().scoringActive) {
       SyncService().scoringActive = false;
       unawaited(SyncService().syncAfterScoring(store));
@@ -100,10 +101,10 @@ class _ScoringScreenState extends State<ScoringScreen> {
       debugPrint('Scoring _afterChange failed: $e');
     }
     // Scoring guard: scoring ends when the match leaves live
-    // status — reopen live sync and run a full sync at once, so
-    // the completed result converges everywhere immediately.
-    // Undo after completion returns the match to live, which
-    // re-arms the guard for the resumed scoring.
+    // status — run a full sync at once, so the completed result
+    // converges everywhere immediately. Undo after completion
+    // returns the match to live, which re-arms the guard for the
+    // resumed scoring.
     if (wasLive && match.status != 'live') {
       SyncService().scoringActive = false;
       unawaited(SyncService().syncAfterScoring(store));
