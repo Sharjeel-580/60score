@@ -1,12 +1,11 @@
 // 60Score account login — Ocean theme.
 // Three methods: Email/password, Google, Phone OTP.
-// Login is OPTIONAL: the app works fully offline; an account enables
-// cross-device data sync.
+// Login is OPTIONAL: the app works fully offline; an account is
+// kept for profile display (data stays on this phone).
 import 'package:flutter/material.dart';
 
 import '../auth_service.dart';
 import '../store.dart';
-import '../sync_service.dart';
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -87,12 +86,11 @@ class _LoginScreenState extends State<LoginScreen>
               phoneNumber: user.phoneNumber,
             );
           }
-          await SyncService().pull(store);
-          // v1.4.4 light version: the one-time sign-in pull above
-          // stays (a fresh login must load the account's backup),
-          // but the live listener is NOT started anymore — no
-          // background traffic or remote apply after sign-in.
-          // Later syncs happen at scoring close or manually.
+          // v1.4.5 fully local: the one-time sign-in pull is
+          // DISABLED — sign-in fetches nothing from the network.
+          // Login itself and the profile display stay untouched;
+          // only its sync is gone. The account's local data scope
+          // above is all a fresh sign-in loads.
         }
       } catch (e) {
         if (!mounted) return;
