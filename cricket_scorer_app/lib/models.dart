@@ -85,6 +85,53 @@ class Team {
   );
 }
 
+/// A manual points-table row override (v1.4.4): the whole displayed row
+/// for one team, edited by hand on the points table screen. When present,
+/// the engine replaces that team's computed row with these values.
+/// Stored on the tournament, so it travels with the existing blob sync.
+class PointsTableOverride {
+  int played;
+  int won;
+  int lost;
+  int tied;
+  int noResult;
+  int points;
+  double nrr;
+
+  PointsTableOverride({
+    this.played = 0,
+    this.won = 0,
+    this.lost = 0,
+    this.tied = 0,
+    this.noResult = 0,
+    this.points = 0,
+    this.nrr = 0,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'played': played,
+    'won': won,
+    'lost': lost,
+    'tied': tied,
+    'noResult': noResult,
+    'points': points,
+    'nrr': nrr,
+  };
+
+  /// Tolerant: missing keys read as 0, so old data keeps working.
+  factory PointsTableOverride.fromJson(Map<String, dynamic> j) {
+    return PointsTableOverride(
+      played: (j['played'] as num?)?.toInt() ?? 0,
+      won: (j['won'] as num?)?.toInt() ?? 0,
+      lost: (j['lost'] as num?)?.toInt() ?? 0,
+      tied: (j['tied'] as num?)?.toInt() ?? 0,
+      noResult: (j['noResult'] as num?)?.toInt() ?? 0,
+      points: (j['points'] as num?)?.toInt() ?? 0,
+      nrr: (j['nrr'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
 class Tournament {
   String id;
   String name;
@@ -92,6 +139,9 @@ class Tournament {
   String venue;
   String logoBase64; // optional tournament logo (base64 JPEG), '' if none
   Map<String, int> pointsAdjustments; // teamId -> extra (custom) points
+  /// Manual points-table row overrides (v1.4.4): teamId -> edited row.
+  /// Empty means every row is computed. Removed per team via Reset.
+  Map<String, PointsTableOverride> pointsTableOverrides;
   /// Final (locked) playoff qualification: ordered team IDs, rank 1..4.
   /// Empty until the league stage is finalized. Derived by the playoff
   /// engine — never edited by hand.
@@ -117,12 +167,14 @@ class Tournament {
     this.venue = '',
     this.logoBase64 = '',
     Map<String, int>? pointsAdjustments,
+    Map<String, PointsTableOverride>? pointsTableOverrides,
     List<String>? qualifiedTeamIds,
     this.qualificationFinalized = false,
     this.published = false,
     this.oversLimit = 8,
   }) : teamIds = teamIds ?? [],
        pointsAdjustments = pointsAdjustments ?? {},
+       pointsTableOverrides = pointsTableOverrides ?? {},
        qualifiedTeamIds = qualifiedTeamIds ?? [];
 
   Map<String, dynamic> toJson() => {
@@ -132,6 +184,9 @@ class Tournament {
     'venue': venue,
     'logoBase64': logoBase64,
     'pointsAdjustments': pointsAdjustments,
+    'pointsTableOverrides': {
+      for (final e in pointsTableOverrides.entries) e.key: e.value.toJson(),
+    },
     'qualifiedTeamIds': qualifiedTeamIds,
     'qualificationFinalized': qualificationFinalized,
     'published': published,
@@ -143,6 +198,26 @@ class Tournament {
     ((j['pointsAdjustments'] as Map?) ?? {}).forEach((k, v) {
       adj[k as String] = (v as num).toInt();
     });
+    // Tolerant: a missing or malformed overrides map (old tournaments,
+    // old cloud data) loads as empty, and one bad entry never kills
+    // the whole tournament.
+    final overrides = <String, PointsTableOverride>{};
+    final rawOverrides = j['pointsTableOverrides'];
+    if (rawOverrides is Map) {
+      rawOverrides.forEach((k, v) {
+        try {
+          if (v is Map<String, dynamic>) {
+            overrides[k as String] = PointsTableOverride.fromJson(v);
+          } else if (v is Map) {
+            overrides[k as String] = PointsTableOverride.fromJson(
+              v.map((kk, vv) => MapEntry(kk as String, vv)),
+            );
+          }
+        } catch (_) {
+          // Skip just this entry.
+        }
+      });
+    }
     return Tournament(
       id: j['id'] as String,
       name: j['name'] as String,
@@ -150,6 +225,7 @@ class Tournament {
       venue: j['venue'] as String? ?? '',
       logoBase64: j['logoBase64'] as String? ?? '',
       pointsAdjustments: adj,
+      pointsTableOverrides: overrides,
       qualifiedTeamIds:
           ((j['qualifiedTeamIds'] as List?) ?? [])
               .map((e) => e as String)
@@ -279,6 +355,20 @@ class BatFig {
 
   BatFig();
 
+  /// Cheap field copy (no JSON): used by the undo reverse step so a
+  /// stored step never aliases the live figure.
+  BatFig copy() {
+    final f = BatFig();
+    f.runs = runs;
+    f.balls = balls;
+    f.fours = fours;
+    f.sixes = sixes;
+    f.out = out;
+    f.batted = batted;
+    f.howOut = howOut;
+    return f;
+  }
+
   Map<String, dynamic> toJson() => {
     'runs': runs,
     'balls': balls,
@@ -311,6 +401,19 @@ class BowlFig {
   int noBalls = 0;
 
   BowlFig();
+
+  /// Cheap field copy (no JSON): used by the undo reverse step so a
+  /// stored step never aliases the live figure.
+  BowlFig copy() {
+    final f = BowlFig();
+    f.legalBalls = legalBalls;
+    f.runs = runs;
+    f.wickets = wickets;
+    f.maidens = maidens;
+    f.wides = wides;
+    f.noBalls = noBalls;
+    return f;
+  }
 
   Map<String, dynamic> toJson() => {
     'legalBalls': legalBalls,
@@ -356,6 +459,78 @@ class FallOfWicket {
   );
 }
 
+/// One undo reverse step (v1.4.4 light version): the innings state
+/// BEFORE one action (a ball, a retirement, a between-balls
+/// dismissal), stored as plain Dart values — never as a JSON
+/// snapshot string, and never carrying the event list.
+///
+/// Why this shape: the only innings field that grows per ball is
+/// [InningsState.events] (and fallOfWickets per wicket). Storing
+/// those lists per step made the old stack grow quadratically.
+/// A step instead stores the pre-action scalars, COPIES of the
+/// batting/bowling figure maps (bounded by squad size, constant
+/// per step), and the pre-action list LENGTHS. Undo restores the
+/// scalars/figures and truncates the lists back to those lengths,
+/// which is exact even when a between-action (picking the next
+/// batter/bowler) mutated a figure after the step was pushed.
+/// A step is consumed on restore: its maps are handed to the live
+/// innings, never aliased into another step.
+class UndoStep {
+  int totalRuns;
+  int wickets;
+  int legalBalls;
+  String strikerId;
+  String nonStrikerId;
+  String currentBowlerId;
+  String lastBowlerId;
+  bool awaitingBatter;
+  bool awaitingBowler;
+  Map<String, BatFig> batting;
+  Map<String, BowlFig> bowling;
+  int widesRuns;
+  int noBallRuns;
+  int byeRuns;
+  int legByeRuns;
+  int noBallCount;
+  int wideCount;
+  int eventsLength;
+  int fallOfWicketsLength;
+  int currentOverBowlerRuns;
+  int currentOverTeamRuns;
+  int target;
+  int maxWickets;
+  bool widePenalty;
+  bool noBallPenalty;
+
+  UndoStep({
+    required this.totalRuns,
+    required this.wickets,
+    required this.legalBalls,
+    required this.strikerId,
+    required this.nonStrikerId,
+    required this.currentBowlerId,
+    required this.lastBowlerId,
+    required this.awaitingBatter,
+    required this.awaitingBowler,
+    required this.batting,
+    required this.bowling,
+    required this.widesRuns,
+    required this.noBallRuns,
+    required this.byeRuns,
+    required this.legByeRuns,
+    required this.noBallCount,
+    required this.wideCount,
+    required this.eventsLength,
+    required this.fallOfWicketsLength,
+    required this.currentOverBowlerRuns,
+    required this.currentOverTeamRuns,
+    required this.target,
+    required this.maxWickets,
+    required this.widePenalty,
+    required this.noBallPenalty,
+  });
+}
+
 class InningsState {
   String battingTeamId;
   String bowlingTeamId;
@@ -382,8 +557,8 @@ class InningsState {
   int wideCount = 0;
   List<BallEvent> events = [];
   List<FallOfWicket> fallOfWickets = [];
-  List<String> undoStack =
-      []; // JSON snapshots of this innings before each ball
+  List<UndoStep> undoStack =
+      []; // pre-action reverse steps (v1.4.4), never persisted
   int currentOverBowlerRuns = 0; // for maiden detection
   int currentOverTeamRuns = 0; // all team runs this over (maiden detection)
   int target = 0; // 0 = no target (first innings)
@@ -499,7 +674,12 @@ class InningsState {
         s.fallOfWickets.add(FallOfWicket.fromJson(e as Map<String, dynamic>));
       } catch (_) {}
     }
-    s.undoStack = ((j['undoStack'] as List?) ?? []).whereType<String>().toList();
+    // Undo is session-only (v1.4.4): a legacy payload may still carry
+    // the old string-snapshot stack, but it is dropped on load —
+    // restoring it would reintroduce the snapshot balloon, and an
+    // old session's undo history is meaningless in a new session.
+    // A missing key likewise yields an empty stack. Never throws.
+    s.undoStack = [];
     s.currentOverBowlerRuns =
         (j['currentOverBowlerRuns'] as num?)?.toInt() ?? 0;
     s.currentOverTeamRuns = (j['currentOverTeamRuns'] as num?)?.toInt() ?? 0;
