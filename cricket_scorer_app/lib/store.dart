@@ -420,6 +420,17 @@ class Store extends ChangeNotifier implements PlayoffStore {
 
   /// Restore by MERGING backup data (§31): same-id records are replaced,
   /// new records are added, nothing is deleted. Returns counts per entity.
+  /// Atomic restore (v1.4.5, M3): decodes EVERYTHING into temp
+  /// structures first and applies only on full success. The old code
+  /// merged each list into the live lists as it decoded, so a
+  /// corrupt entry halfway through left a partial merge live (and
+  /// with merge=false the live lists were already emptied). Now a
+  /// decode failure touches nothing live: the temps are discarded
+  /// and the store reloads from disk, then the error is rethrown so
+  /// the restore UI can say the restore failed. A persist failure
+  /// after a successful apply reloads from disk the same way.
+  /// Profile guard (unchanged): a present-but-corrupt profile entry
+  /// is ignored and the current profile kept on the merge path.
   Future<Map<String, int>> importJson(
     Map<String, dynamic> data, {
     bool merge = true,
@@ -446,56 +457,71 @@ class Store extends ChangeNotifier implements PlayoffStore {
       return replaced + added;
     }
 
+    // Decode phase: temp structures only, nothing live touched.
+    late final List<Team> tmpTeams;
+    late final List<Tournament> tmpTournaments;
+    late final List<Match> tmpMatches;
+    late final List<RegPlayer> tmpRegPlayers;
+    late final List<Draft> tmpDrafts;
+    late final List<ManualStatEntry> tmpManualStats;
+    AccountProfile? tmpProfile;
+    var profileParsed = false;
+    try {
+      tmpTeams = dec('teams', Team.fromJson);
+      tmpTournaments = dec('tournaments', Tournament.fromJson);
+      tmpMatches = dec('matches', Match.fromJson);
+      tmpRegPlayers = dec('regPlayers', RegPlayer.fromJson);
+      tmpDrafts = dec('drafts', Draft.fromJson);
+      tmpManualStats = dec('manualStats', ManualStatEntry.fromJson);
+      final rawProfile = data['profile'];
+      if (rawProfile is Map<String, dynamic>) {
+        try {
+          tmpProfile = AccountProfile.fromJson(rawProfile);
+          profileParsed = true;
+        } catch (_) {
+          // Corrupt profile entry: ignore it (guard as before).
+          tmpProfile = null;
+          profileParsed = false;
+        }
+      }
+    } catch (_) {
+      // Nothing live changed yet, but reload from disk anyway so the
+      // live state is provably the stored state, then report failure.
+      await load();
+      rethrow;
+    }
+
+    // Apply phase: only runs after every decode succeeded.
     final counts = <String, int>{};
     if (!merge) {
-      teams = [];
-      tournaments = [];
-      matches = [];
-      regPlayers = [];
-      drafts = [];
-      manualStats = [];
-      profile = null;
+      teams = tmpTeams;
+      tournaments = tmpTournaments;
+      matches = tmpMatches;
+      regPlayers = tmpRegPlayers;
+      drafts = tmpDrafts;
+      manualStats = tmpManualStats;
+      // Replace path mirrors the old semantics: the profile becomes
+      // the backup's profile, or null when the backup has none (or a
+      // corrupt one) — the old code had already emptied it above.
+      profile = tmpProfile;
+      counts['teams'] = tmpTeams.length;
+      counts['tournaments'] = tmpTournaments.length;
+      counts['matches'] = tmpMatches.length;
+      counts['regPlayers'] = tmpRegPlayers.length;
+      counts['drafts'] = tmpDrafts.length;
+      counts['manualStats'] = tmpManualStats.length;
+    } else {
+      if (profileParsed) profile = tmpProfile;
+      counts['teams'] = mergeList(teams, tmpTeams, (t) => t.id);
+      counts['tournaments'] =
+          mergeList(tournaments, tmpTournaments, (t) => t.id);
+      counts['matches'] = mergeList(matches, tmpMatches, (m) => m.id);
+      counts['regPlayers'] =
+          mergeList(regPlayers, tmpRegPlayers, (r) => r.id);
+      counts['drafts'] = mergeList(drafts, tmpDrafts, (d) => d.id);
+      counts['manualStats'] =
+          mergeList(manualStats, tmpManualStats, (e) => e.id);
     }
-    // A backup may carry the account profile; adopt it when present
-    // (older backups have none and leave the current profile alone).
-    final rawProfile = data['profile'];
-    if (rawProfile is Map<String, dynamic>) {
-      try {
-        profile = AccountProfile.fromJson(rawProfile);
-      } catch (_) {
-        // Corrupt profile entry: ignore it, keep the current one.
-      }
-    }
-    counts['teams'] = mergeList(
-      teams,
-      dec('teams', Team.fromJson),
-      (t) => t.id,
-    );
-    counts['tournaments'] = mergeList(
-      tournaments,
-      dec('tournaments', Tournament.fromJson),
-      (t) => t.id,
-    );
-    counts['matches'] = mergeList(
-      matches,
-      dec('matches', Match.fromJson),
-      (m) => m.id,
-    );
-    counts['regPlayers'] = mergeList(
-      regPlayers,
-      dec('regPlayers', RegPlayer.fromJson),
-      (r) => r.id,
-    );
-    counts['drafts'] = mergeList(
-      drafts,
-      dec('drafts', Draft.fromJson),
-      (d) => d.id,
-    );
-    counts['manualStats'] = mergeList(
-      manualStats,
-      dec('manualStats', ManualStatEntry.fromJson),
-      (e) => e.id,
-    );
     // Restoring a record from a backup file is an explicit restore
     // (the admin-restore path): any record that exists locally
     // again loses its tombstone, or the restore would be undone by
@@ -515,7 +541,13 @@ class Store extends ChangeNotifier implements PlayoffStore {
     // The same consistency rule for Trash: a record that exists
     // locally again must not also sit in Trash.
     _trash.removeWhere((e) => _recordExistsLocally(e.kind, e.id));
-    await persist();
+    final saved = await persist();
+    if (!saved) {
+      // The apply is in memory only — disk still holds the old
+      // state, so reload to keep live == stored, then report failure.
+      await load();
+      throw StateError('Restore save failed — storage write incomplete.');
+    }
     return counts;
   }
 
@@ -834,17 +866,28 @@ class Store extends ChangeNotifier implements PlayoffStore {
   }
 
   @override
-  Future<void> persist({bool skipSync = false}) async {
-    await _saveAll();
-    await setLastModified(DateTime.now().millisecondsSinceEpoch);
+  /// Full save. Returns true when every key landed on disk, false
+  /// when any write failed (v1.4.5 action feedback: callers that
+  /// must tell the user — backup/restore/edit saves — check this
+  /// instead of relying on a throw that nobody awaited).
+  Future<bool> persist({bool skipSync = false}) async {
+    try {
+      await _saveAll();
+      await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      return false;
+    }
     notifyListeners();
     if (!skipSync) {
-      // Fire-and-forget cloud push when logged in (no-op when offline).
+      // Offline-first (v1.4.5): no automatic cloud push — this only
+      // marks the store dirty; the next explicit sync point pushes.
       SyncService().schedulePush(this);
-      // Keep any published tournament snapshots fresh for followers
-      // (no-op when logged out or nothing is published).
+      // Fully local (v1.4.5): publish is off, so the republish
+      // call below is a no-op — kept so the save shape stays
+      // identical if publish is ever re-enabled.
       PublishService().scheduleRepublish(this);
     }
+    return true;
   }
 
   /// Ball-path persist (v1.4.3, smoothness): writes ONLY the
@@ -853,23 +896,131 @@ class Store extends ChangeNotifier implements PlayoffStore {
   /// megabytes for a real league) and every other collection are
   /// untouched, so re-encoding them per ball was the load that
   /// froze the app. All other persist work (last-modified stamp,
-  /// listeners, cloud push, republish) runs exactly like [persist],
-  /// so the cloud save keeps running during scoring. Every other
+  /// listeners, republish) runs exactly like [persist]; the cloud
+  /// push does NOT run here anymore (v1.4.5 offline-first: saves
+  /// only mark the push debt, sync points push). Every other
   /// path keeps using [persist] (full write); only the per-ball
   /// path uses this. Playoff updates persist themselves (full
   /// write) on the rare balls when they change something.
-  Future<void> persistMatchesOnly({bool skipSync = false}) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(
-      _scoped(_kMatches),
-      jsonEncode(matches.map((m) => m.toJson()).toList()),
-    );
-    await setLastModified(DateTime.now().millisecondsSinceEpoch);
+  Future<bool> persistMatchesOnly({bool skipSync = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(
+        _scoped(_kMatches),
+        jsonEncode(matches.map((m) => m.toJson()).toList()),
+      );
+      await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      return false;
+    }
     notifyListeners();
     if (!skipSync) {
       SyncService().schedulePush(this);
       PublishService().scheduleRepublish(this);
     }
+    return true;
+  }
+
+  /// Tournament-edit persist (v1.4.5, stability): writes ONLY the
+  /// tournaments key. Tournament edits (points-table row overrides,
+  /// points adjustments) touch nothing else, but the old path used
+  /// full [persist] ([_saveAll]) — re-encoding ALL data including
+  /// the teams key with inline player photos (megabytes for a real
+  /// league) plus a cloud push and a republish, right after the
+  /// edit. That spike is the prime suspect for the silent closes
+  /// the user hit on 1.4.4 just after points-table edits (no Dart
+  /// error was recorded, pointing to an OS-level kill). Same shape
+  /// as [persistMatchesOnly]: last-modified stamp, listeners and
+  /// republish still run — only the local re-encode shrinks to the
+  /// one changed key, and the cloud push does NOT run here anymore
+  /// (v1.4.5 offline-first: the edit only marks the push debt;
+  /// the next explicit sync point pushes).
+  Future<bool> persistTournamentsOnly({bool skipSync = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(
+        _scoped(_kTournaments),
+        jsonEncode(tournaments.map((t) => t.toJson()).toList()),
+      );
+      await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      return false;
+    }
+    notifyListeners();
+    if (!skipSync) {
+      SyncService().schedulePush(this);
+      PublishService().scheduleRepublish(this);
+    }
+    return true;
+  }
+
+  /// Teams-only persist (v1.4.5, M1): same shape as
+  /// [persistTournamentsOnly] — writes ONLY the teams key (with
+  /// inline player photos, the heaviest single key). Team screens
+  /// (list, detail, renames, player add/remove/edit) touch nothing
+  /// else, so re-encoding every collection per team edit was pure
+  /// load. Returns true/false like the other granular saves.
+  Future<bool> persistTeamsOnly({bool skipSync = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(
+        _scoped(_kTeams),
+        jsonEncode(teams.map((t) => t.toJson()).toList()),
+      );
+      await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      return false;
+    }
+    notifyListeners();
+    if (!skipSync) {
+      SyncService().schedulePush(this);
+      PublishService().scheduleRepublish(this);
+    }
+    return true;
+  }
+
+  /// Drafts-only persist (v1.4.5, M1): writes ONLY the drafts key.
+  /// Draft-screen actions (pick / skip / undo) mutate the draft
+  /// object and nothing else.
+  Future<bool> persistDraftsOnly({bool skipSync = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(
+        _scoped(_kDrafts),
+        jsonEncode(drafts.map((d) => d.toJson()).toList()),
+      );
+      await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      return false;
+    }
+    notifyListeners();
+    if (!skipSync) {
+      SyncService().schedulePush(this);
+      PublishService().scheduleRepublish(this);
+    }
+    return true;
+  }
+
+  /// Registered-players-only persist (v1.4.5, M1): writes ONLY the
+  /// regPlayers key. The registration import path appends to this
+  /// list and nothing else.
+  Future<bool> persistRegPlayersOnly({bool skipSync = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(
+        _scoped(_kReg),
+        jsonEncode(regPlayers.map((r) => r.toJson()).toList()),
+      );
+      await setLastModified(DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      return false;
+    }
+    notifyListeners();
+    if (!skipSync) {
+      SyncService().schedulePush(this);
+      PublishService().scheduleRepublish(this);
+    }
+    return true;
   }
 
   // ---------- lookups ----------
