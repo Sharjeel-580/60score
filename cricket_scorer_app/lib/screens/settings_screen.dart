@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../auth_service.dart';
-import '../sync_service.dart';
 import 'about_screen.dart';
 import 'backup_screen.dart';
 import 'login_screen.dart';
@@ -127,8 +126,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (context, _) {
                 final auth = AuthService();
                 if (auth.isLoggedIn) {
-                  final sync = SyncService();
-                  final lastSync = sync.lastSyncAt;
                   return Column(
                     children: [
                       ListTile(
@@ -144,30 +141,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const Divider(height: 1),
                       ListTile(
-                        leading: const Icon(Icons.cloud_sync,
+                        leading: const Icon(Icons.storage_outlined,
                             color: kCyan),
-                        title: const Text('Cloud sync',
+                        title: const Text('Local data',
                             style: TextStyle(color: kWhite)),
-                        subtitle: Text(
-                          sync.lastError != null
-                              ? 'Last attempt failed — will retry '
-                                  'automatically'
-                              : lastSync == null
-                                  ? 'Data syncs automatically when online'
-                                  : 'Last synced: '
-                                      '${lastSync.day}/${lastSync.month} '
-                                      '${lastSync.hour}:'
-                                      '${lastSync.minute.toString().padLeft(2, '0')}',
-                          style: const TextStyle(
+                        // Fully local (v1.4.5): there is no cloud
+                        // sync anymore — no auto sync, no manual
+                        // sync, no auto retry. The old subtitles
+                        // ('syncs automatically', 'will retry
+                        // automatically') were false and are gone.
+                        subtitle: const Text(
+                          'Fully local — your data stays on this phone',
+                          style: TextStyle(
                               color: Colors.white54, fontSize: 12),
-                        ),
-                        trailing: TextButton(
-                          child: const Text('Sync now'),
-                          onPressed: () async {
-                            await sync.pull(store);
-                            await store.persist();
-                            if (mounted) setState(() {});
-                          },
                         ),
                       ),
                       const Divider(height: 1),
