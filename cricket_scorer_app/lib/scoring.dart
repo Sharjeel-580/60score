@@ -1,7 +1,5 @@
 // Pure-Dart scoring engine + statistics for CricScore Offline.
 // No Flutter imports: everything here is unit-testable.
-import 'dart:convert';
-
 import 'models.dart';
 
 class BallInput {
@@ -30,50 +28,86 @@ class BallInput {
   });
 }
 
-String _snapshot(InningsState s) {
-  final j = s.toJson()..remove('undoStack');
-  return jsonEncode(j);
-}
-
-/// Push one undo snapshot, keeping the in-memory history bounded to the
-/// last 50 snapshots. The stack is never persisted (see InningsState.toJson),
-/// so a long innings can no longer grow every per-ball save quadratically.
-/// Undo still works within a session; only restart-persistent undo is lost.
+/// Push one undo reverse step, keeping the in-memory history bounded
+/// to the last 50 steps (v1.4.4 light version). The step is the
+/// innings state BEFORE the action about to run: scalars, copies of
+/// the batting/bowling figure maps, and the pre-action event / fall
+/// lengths. It never serializes the innings and never stores the
+/// event list, so a step's size is bounded by squad size and stays
+/// constant no matter how long the innings runs — the old full
+/// snapshot string stack (which grew with every ball) is gone.
+/// The stack is never persisted (see InningsState.toJson), so undo
+/// still works within a session; only restart-persistent undo is
+/// lost (unchanged from v1.4.3).
 void _pushUndo(InningsState s) {
-  s.undoStack.add(_snapshot(s));
+  s.undoStack.add(UndoStep(
+    totalRuns: s.totalRuns,
+    wickets: s.wickets,
+    legalBalls: s.legalBalls,
+    strikerId: s.strikerId,
+    nonStrikerId: s.nonStrikerId,
+    currentBowlerId: s.currentBowlerId,
+    lastBowlerId: s.lastBowlerId,
+    awaitingBatter: s.awaitingBatter,
+    awaitingBowler: s.awaitingBowler,
+    batting: {for (final e in s.batting.entries) e.key: e.value.copy()},
+    bowling: {for (final e in s.bowling.entries) e.key: e.value.copy()},
+    widesRuns: s.widesRuns,
+    noBallRuns: s.noBallRuns,
+    byeRuns: s.byeRuns,
+    legByeRuns: s.legByeRuns,
+    noBallCount: s.noBallCount,
+    wideCount: s.wideCount,
+    eventsLength: s.events.length,
+    fallOfWicketsLength: s.fallOfWickets.length,
+    currentOverBowlerRuns: s.currentOverBowlerRuns,
+    currentOverTeamRuns: s.currentOverTeamRuns,
+    target: s.target,
+    maxWickets: s.maxWickets,
+    widePenalty: s.widePenalty,
+    noBallPenalty: s.noBallPenalty,
+  ));
   if (s.undoStack.length > 50) {
     s.undoStack.removeRange(0, s.undoStack.length - 50);
   }
 }
 
-void _restore(InningsState s, String snap) {
-  final j = jsonDecode(snap) as Map<String, dynamic>;
-  final t = InningsState.fromJson(j);
-  s.totalRuns = t.totalRuns;
-  s.wickets = t.wickets;
-  s.legalBalls = t.legalBalls;
-  s.strikerId = t.strikerId;
-  s.nonStrikerId = t.nonStrikerId;
-  s.currentBowlerId = t.currentBowlerId;
-  s.lastBowlerId = t.lastBowlerId;
-  s.awaitingBatter = t.awaitingBatter;
-  s.awaitingBowler = t.awaitingBowler;
-  s.batting = t.batting;
-  s.bowling = t.bowling;
-  s.widesRuns = t.widesRuns;
-  s.noBallRuns = t.noBallRuns;
-  s.byeRuns = t.byeRuns;
-  s.legByeRuns = t.legByeRuns;
-  s.noBallCount = t.noBallCount;
-  s.wideCount = t.wideCount;
-  s.events = t.events;
-  s.fallOfWickets = t.fallOfWickets;
-  s.currentOverBowlerRuns = t.currentOverBowlerRuns;
-  s.currentOverTeamRuns = t.currentOverTeamRuns;
-  s.maxWickets = t.maxWickets;
-  s.widePenalty = t.widePenalty;
-  s.noBallPenalty = t.noBallPenalty;
-  s.target = t.target;
+/// Apply a stored reverse step: restore the pre-action scalars and
+/// figure maps, and truncate the event / fall lists back to their
+/// pre-action lengths. The step is consumed (it was already removed
+/// from the stack), so its maps become the live maps — no aliasing
+/// survives into another step.
+void _restoreStep(InningsState s, UndoStep step) {
+  s.totalRuns = step.totalRuns;
+  s.wickets = step.wickets;
+  s.legalBalls = step.legalBalls;
+  s.strikerId = step.strikerId;
+  s.nonStrikerId = step.nonStrikerId;
+  s.currentBowlerId = step.currentBowlerId;
+  s.lastBowlerId = step.lastBowlerId;
+  s.awaitingBatter = step.awaitingBatter;
+  s.awaitingBowler = step.awaitingBowler;
+  s.batting = step.batting;
+  s.bowling = step.bowling;
+  s.widesRuns = step.widesRuns;
+  s.noBallRuns = step.noBallRuns;
+  s.byeRuns = step.byeRuns;
+  s.legByeRuns = step.legByeRuns;
+  s.noBallCount = step.noBallCount;
+  s.wideCount = step.wideCount;
+  if (s.events.length > step.eventsLength) {
+    s.events.removeRange(step.eventsLength, s.events.length);
+  }
+  if (s.fallOfWickets.length > step.fallOfWicketsLength) {
+    s.fallOfWickets.removeRange(
+        step.fallOfWicketsLength, s.fallOfWickets.length);
+  }
+  s.currentOverBowlerRuns = step.currentOverBowlerRuns;
+  s.currentOverTeamRuns = step.currentOverTeamRuns;
+  s.maxWickets = step.maxWickets;
+  s.widePenalty = step.widePenalty;
+  s.noBallPenalty = step.noBallPenalty;
+  s.target = step.target;
 }
 
 /// Set the two openers and first bowler for a fresh innings.
@@ -280,8 +314,8 @@ bool applyBall(InningsState s, BallInput input) {
 
 bool undoLastBall(InningsState s) {
   if (s.undoStack.isEmpty) return false;
-  final snap = s.undoStack.removeLast();
-  _restore(s, snap);
+  final step = s.undoStack.removeLast();
+  _restoreStep(s, step);
   return true;
 }
 
@@ -294,7 +328,7 @@ bool undoLastBall(InningsState s) {
 /// runs keep accumulating in the same figure. If the innings ends
 /// while he is retired hurt he simply counts as not out.
 /// Only a batsman currently at the crease can retire hurt.
-/// Pushes an undo snapshot, so Undo reverses the retirement.
+/// Pushes an undo reverse step, so Undo reverses the retirement.
 bool retireBatsmanHurt(InningsState s, String playerId) {
   if (s.isComplete) return false;
   if (playerId.isEmpty) return false;
@@ -322,7 +356,7 @@ bool retireBatsmanHurt(InningsState s, String playerId) {
 /// consistent with the wicket count (the partnerships derivation
 /// tolerates it: event-based partnerships are unaffected because
 /// no ball event is added, and the FoW-based fallback treats it
-/// like any other fall). Pushes an undo snapshot.
+/// like any other fall). Pushes an undo reverse step.
 bool dismissBatsmanWithoutBall(
   InningsState s,
   String playerId,
@@ -1016,11 +1050,15 @@ class PointsRow {
   int played = 0, won = 0, lost = 0, tied = 0, noResult = 0, points = 0;
   int runsFor = 0, ballsFor = 0, runsAgainst = 0, ballsAgainst = 0;
   int ballsPerOver = 6;
+  /// Manual NRR override (v1.4.4): when set, [nrr] returns this value
+  /// instead of the computed ICC figure. Set only by a row override.
+  double? nrrOverride;
   PointsRow(this.teamId);
 
   /// ICC net run rate (per over): aggregate runs per over scored minus
   /// aggregate runs per over conceded, over the whole tournament.
   double get nrr {
+    if (nrrOverride != null) return nrrOverride!;
     if (ballsFor == 0 || ballsAgainst == 0) return 0;
     final oversFor = ballsFor / ballsPerOver;
     final oversAgainst = ballsAgainst / ballsPerOver;
@@ -1113,6 +1151,7 @@ List<PointsRow> computePointsTable(
   List<String> teamIds,
   List<Match> matches, {
   Map<String, int> pointsAdjustments = const {},
+  Map<String, PointsTableOverride> pointsTableOverrides = const {},
 }) {
   final rows = {for (final id in teamIds) id: PointsRow(id)};
   for (final m in dedupeMatches(matches)) {
@@ -1196,6 +1235,21 @@ List<PointsRow> computePointsTable(
   pointsAdjustments.forEach((teamId, extra) {
     rows[teamId]?.points += extra;
   });
+  // Manual row overrides (v1.4.4): applied AFTER normal computation, so
+  // an edited row replaces its computed values wholesale (counts,
+  // points and NRR alike). Overrides for unknown team ids are ignored.
+  // Sorting below then runs on the overridden values as usual.
+  for (final row in rows.values) {
+    final o = pointsTableOverrides[row.teamId];
+    if (o == null) continue;
+    row.played = o.played;
+    row.won = o.won;
+    row.lost = o.lost;
+    row.tied = o.tied;
+    row.noResult = o.noResult;
+    row.points = o.points;
+    row.nrrOverride = o.nrr;
+  }
   final list = rows.values.toList();
   list.sort((x, y) {
     if (y.points != x.points) return y.points.compareTo(x.points);
