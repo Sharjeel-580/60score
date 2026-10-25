@@ -4,8 +4,10 @@
 // balls, 4s, 6s, out + dismissal text), bowling figures and extras
 // can all be edited AFTER the match was saved and even after it was
 // shared. Edits are written into the stored match record — the
-// innings totals are recomputed from the figures, the result text
-// is recomputed, and because the points table, NRR and the career
+// innings totals are recomputed from the figures (unless the team
+// total itself was typed directly, which overrides the computed
+// total), the result text is recomputed, and because the points
+// table, NRR and the career
 // statistics are all derived from the stored figures at read time,
 // one correction (say, an added six) shows up in the player's
 // score, the team total and his stats everywhere on its own.
@@ -91,6 +93,11 @@ class _InnEdit {
   final Map<String, _BowlEdit> bowl = {};
   final _ExtrasEdit extras = _ExtrasEdit();
 
+  /// Directly edited team total (null until validated on save):
+  /// when set, it overrides the total recomputed from the figures.
+  final TextEditingController total = TextEditingController();
+  int? totalOverride;
+
   void dispose() {
     for (final e in bat.values) {
       e.dispose();
@@ -99,6 +106,7 @@ class _InnEdit {
       e.dispose();
     }
     extras.dispose();
+    total.dispose();
   }
 }
 
@@ -177,6 +185,8 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
     ie.extras.noBalls.text = '${inn.noBallRuns}';
     ie.extras.byes.text = '${inn.byeRuns}';
     ie.extras.legByes.text = '${inn.legByeRuns}';
+    ie.total.text = '${inn.totalRuns}';
+    ie.totalOverride = null;
   }
 
   /// Dismissal text shown for editing: resolve the stored id tokens
@@ -436,6 +446,15 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
     inn.noBallRuns = noBalls;
     inn.byeRuns = byes;
     inn.legByeRuns = legByes;
+    // Directly edited team total: validated here, applied on save
+    // AFTER the totals are recomputed from the figures, so the typed
+    // total wins over the computed one.
+    final total = _intOf(ie.total);
+    if (total == null) {
+      return '${store.teamName(inn.battingTeamId)}: team total must be '
+          'a number (0 or more).';
+    }
+    ie.totalOverride = total;
     return null;
   }
 
@@ -449,9 +468,14 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
       }
     }
     setState(() => _saving = true);
-    // Recompute every derived number from the corrected figures.
-    for (final inn in _edit.innings) {
+    // Recompute every derived number from the corrected figures,
+    // then apply any directly edited team total over the computed
+    // one (the typed total is the correction, not the figures).
+    for (var i = 0; i < _edit.innings.length; i++) {
+      final inn = _edit.innings[i];
       recomputeInningsTotals(inn);
+      final override = _inns[i].totalOverride;
+      if (override != null) inn.totalRuns = override;
       // The undo history describes the pre-edit balls; it must not
       // resurrect them over the corrected record.
       inn.undoStack = [];
@@ -514,9 +538,10 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
         padding: const EdgeInsets.all(12),
         children: [
           const Text(
-            'Correct any figure — the innings totals, the result, '
-            'the points table and the player stats all update from '
-            'the corrected record when you save.',
+            'Correct any figure — or type the team total directly '
+            'to override it. The result, the points table and the '
+            'player stats all update from the corrected record when '
+            'you save.',
             style: TextStyle(color: Colors.white60, fontSize: 13),
           ),
           const SizedBox(height: 12),
@@ -569,6 +594,25 @@ class _ScorecardEditScreenState extends State<ScorecardEditScreen> {
                   style: const TextStyle(
                     color: kGold,
                     fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Text(
+                  'Team total',
+                  style: TextStyle(fontSize: 13, color: Colors.white70),
+                ),
+                const SizedBox(width: 10),
+                _numField('Total', ie.total),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Edit directly to override the total computed '
+                    'from the figures above.',
+                    style: TextStyle(fontSize: 11, color: Colors.white38),
                   ),
                 ),
               ],
