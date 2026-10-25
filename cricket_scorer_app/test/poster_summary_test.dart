@@ -1,8 +1,9 @@
 // Poster-style Match Summary (v1.3.8): data shaping over the match
-// figures (top-4 batting / top-3 bowling selection, POTM resolution
+// figures (top-3 batting / top-3 bowling selection, POTM resolution
 // and chip derivation), the team-logo mapping, and a layout smoke
 // test of the 540x675 card (1080x1350 at pixelRatio 2).
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cricket_scorer_app/models.dart';
 import 'package:cricket_scorer_app/poster_summary.dart';
@@ -134,14 +135,15 @@ void main() {
       expect(data.teams[1].oversText, '8.0');
     });
 
-    test('top batting: top 4 by runs, not-out star, 5th man cut', () {
+    test('top batting: top 3 by runs, not-out star, 4th man cut', () {
       final bat = data.teams[0].batting;
-      expect(bat.map((l) => l.name),
-          ['Saqib 17 *', 'Zohaib 31', 'Afroz', 'Raja Zaheer']);
+      expect(bat.map((l) => l.name), ['Saqib 17 *', 'Zohaib 31', 'Afroz']);
+      expect(bat, hasLength(3));
       expect(bat.first.runs, 35);
       expect(bat.first.balls, 12);
       expect(bat.first.strikeRateText, '291.7');
       final dolphins = data.teams[1].batting;
+      expect(dolphins, hasLength(3));
       expect(dolphins.first.name, 'Nazakat 16 *');
       expect(dolphins.first.runs, 102);
       expect(dolphins.first.strikeRateText, '268.4');
@@ -381,6 +383,46 @@ void main() {
     expect(
       tester.getSize(find.byType(MatchPosterCard)),
       const Size(540, 675),
+    );
+  });
+
+  testWidgets('footer shows the full tournament name, never truncated',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final data = buildPosterSummaryData(_leagueStore(), _match01())!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(child: MatchPosterCard(data: data)),
+        ),
+      ),
+    );
+    // Let the bundled logo assets decode.
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull);
+    // The league footer (date + venue + tournament name) renders
+    // in full: the old equal-flex footer squeezed the tournament
+    // name to "SUPER SIXTY LEAGUE SEASO..." with an ellipsis.
+    // (The venue also appears in the header, so scope to the
+    // footer's FittedBox.)
+    final footer = find.byType(FittedBox);
+    expect(footer, findsOneWidget);
+    final textFinder = find.descendant(
+      of: footer,
+      matching: find.text('SUPER SIXTY LEAGUE SEASON 2K26'),
+    );
+    expect(textFinder, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(textFinder);
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(
+      find.descendant(of: footer, matching: find.text('22 OCT 2026')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: footer, matching: find.text('75 LOKRI CLUB')),
+      findsOneWidget,
     );
   });
 
