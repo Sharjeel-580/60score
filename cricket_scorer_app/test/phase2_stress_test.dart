@@ -164,9 +164,11 @@ void main() {
       );
       expect(jsonEncode(re).length, lessThan(hugeSize ~/ 10));
 
-      // The cap engages on legacy data: one more ball caps the
-      // loaded 200-entry stack to 50.
-      expect(restored.innings[0].undoStack.length, 200);
+      // v1.4.4: the legacy string stack is DROPPED on load (undo is
+      // session-only), so the restored stack is empty — not 200.
+      // One more ball then starts a fresh 1-entry step stack,
+      // still capped at 50.
+      expect(restored.innings[0].undoStack.length, 0);
       expect(
         applyBall(restored.innings[0], BallInput(batRuns: 1)),
         isTrue,
