@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../dls.dart';
 import '../models.dart';
@@ -27,6 +28,10 @@ class _ScoringScreenState extends State<ScoringScreen> {
   Store get store => widget.store;
   Match get match => widget.match;
 
+  /// One-time voice-commentary hint: shown until dismissed once,
+  /// then never again (persisted flag). The default stays OFF.
+  bool _showVoiceHint = false;
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +40,17 @@ class _ScoringScreenState extends State<ScoringScreen> {
     TtsService.instance.loadEnabled().then((_) {
       if (mounted) setState(() {});
     });
+    SharedPreferences.getInstance().then((prefs) {
+      if (prefs.getBool('voice_hint_seen') != true && mounted) {
+        setState(() => _showVoiceHint = true);
+      }
+    });
+  }
+
+  Future<void> _dismissVoiceHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('voice_hint_seen', true);
+    if (mounted) setState(() => _showVoiceHint = false);
   }
 
   InningsState get inn {
@@ -86,12 +102,18 @@ class _ScoringScreenState extends State<ScoringScreen> {
 
   // ---------- dialogs ----------
 
+  /// Player picker. Returns the index into the filtered list, or -1
+  /// when the "Add new player" tile was tapped (only when
+  /// [addNewTeamId] is given: the scoring pickers offer it, the
+  /// dismissal pickers do not).
   Future<int?> _pickPlayer(
     String title,
     List<String> ids, {
     String? excludeId,
+    String? addNewTeamId,
   }) async {
     final list = ids.where((id) => id != excludeId).toList();
+    final hasAdd = addNewTeamId != null;
     return showDialog<int>(
       context: context,
       builder: (c) => AlertDialog(
@@ -100,15 +122,75 @@ class _ScoringScreenState extends State<ScoringScreen> {
           width: double.maxFinite,
           child: ListView.builder(
             shrinkWrap: true,
-            itemCount: list.length,
-            itemBuilder: (c, i) => ListTile(
-              title: Text(nameOf(list[i])),
-              onTap: () => Navigator.pop(c, i),
-            ),
+            itemCount: list.length + (hasAdd ? 1 : 0),
+            itemBuilder: (c, i) {
+              if (i == list.length) {
+                return ListTile(
+                  leading: const Icon(Icons.person_add, color: kGold),
+                  title: const Text('Add new player…'),
+                  onTap: () => Navigator.pop(c, -1),
+                );
+              }
+              return ListTile(
+                title: Text(nameOf(list[i])),
+                onTap: () => Navigator.pop(c, i),
+              );
+            },
           ),
         ),
       ),
-    ).then((idx) => idx == null ? null : list.indexOf(list[idx]));
+    ).then(
+      (idx) => idx == null || idx < 0 ? idx : list.indexOf(list[idx]),
+    );
+  }
+
+  /// Ask for a name and create a brand-new player in [teamId]'s
+  /// squad, then add him to this match's XI (11-player cap).
+  /// Returns the new player id, or null when cancelled / XI full.
+  Future<String?> _addNewPlayerToXi(String teamId) async {
+    final team = teamOf(teamId);
+    if (team == null) return null;
+    if (match.xiFor(teamId).length >= 11) {
+      _snack('Playing XI is full (11 players).');
+      return null;
+    }
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Add new player — ${team.name}'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Player name',
+            hintText: 'e.g. Ahmed Raza',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, nameController.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return null;
+    final id = Store.newId('player');
+    team.players.add(Player(id: id, name: name));
+    if (!addToMatchXI(match, teamId, id)) {
+      team.players.removeWhere((p) => p.id == id);
+      _snack('Playing XI is full (11 players).');
+      return null;
+    }
+    await store.persist();
+    if (mounted) setState(() {});
+    return id;
   }
 
   Future<void> _chooseOpeners() async {
@@ -125,23 +207,54 @@ class _ScoringScreenState extends State<ScoringScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Fresh XI lists on every rebuild: a player added
+              // mid-dialog appears in the dropdowns at once.
               _playerDropdown(
                 'Striker',
-                battingXI,
+                inn.battingXI,
                 striker,
                 (v) => setD(() => striker = v),
               ),
               _playerDropdown(
                 'Non-striker',
-                battingXI,
+                inn.battingXI,
                 nonStriker,
                 (v) => setD(() => nonStriker = v),
               ),
               _playerDropdown(
                 'Bowler',
-                bowlingXI,
+                inn.bowlingXI,
                 bowler,
                 (v) => setD(() => bowler = v),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final id = await _addNewPlayerToXi(
+                          inn.battingTeamId,
+                        );
+                        if (id != null) setD(() {});
+                      },
+                      icon: const Icon(Icons.person_add, size: 18),
+                      label: const Text('Add new batter'),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final id = await _addNewPlayerToXi(
+                          inn.bowlingTeamId,
+                        );
+                        if (id != null) setD(() {});
+                      },
+                      icon: const Icon(Icons.person_add, size: 18),
+                      label: const Text('Add new bowler'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -214,24 +327,139 @@ class _ScoringScreenState extends State<ScoringScreen> {
       // Last man stands: a dismissed batter may return as the partner.
       available = inn.battingXI.where((id) => !atCrease.contains(id)).toList();
     }
-    final idx = await _pickPlayer('Next batter', available);
-    if (idx != null) {
-      setNextBatter(inn, available[idx]);
-      await _afterChange();
+    final idx = await _pickPlayer(
+      'Next batter',
+      available,
+      addNewTeamId: inn.battingTeamId,
+    );
+    if (idx == -1) {
+      final newId = await _addNewPlayerToXi(inn.battingTeamId);
+      if (newId != null) await _placeNextBatter(inn, newId);
+    } else if (idx != null) {
+      await _placeNextBatter(inn, available[idx]);
     }
   }
 
-  Future<void> _chooseBowler() async {
+  /// Place the next batter, confirming the end after a run-out:
+  /// the scorer picks whether the new batter takes strike or goes
+  /// to the non-striker's end (batters crossed). Every other
+  /// dismissal keeps the auto behavior (fill the empty end).
+  Future<void> _placeNextBatter(InningsState inn, String playerId) async {
+    final last = inn.events.isNotEmpty ? inn.events.last : null;
+    final runOut = last != null && last.isWicket && last.wicketType == 'runOut';
+    if (runOut) {
+      final toNonStrikerEnd = await _askRunOutEnd();
+      if (toNonStrikerEnd == null) return; // dismissed: place nothing
+      if (toNonStrikerEnd) {
+        if (inn.nonStrikerId.isNotEmpty) {
+          // Not-out batter moves to strike; new batter takes his end.
+          inn.strikerId = inn.nonStrikerId;
+          inn.nonStrikerId = '';
+        }
+      } else if (inn.strikerId.isNotEmpty && inn.nonStrikerId.isEmpty) {
+        // New batter on strike (e.g. after a last-ball run-out the
+        // ends already swapped): move the not-out batter across.
+        inn.nonStrikerId = inn.strikerId;
+        inn.strikerId = '';
+      }
+    }
+    setNextBatter(inn, playerId);
+    await _afterChange();
+  }
+
+  /// Run-out end confirm: null when the dialog is dismissed.
+  Future<bool?> _askRunOutEnd() {
+    return showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Run out — new batter?'),
+        content: const Text(
+          'Is the new batter on strike, or at the non-striker end '
+          '(batters crossed before the run out)?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('On strike'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Non-striker end'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _chooseBowler({String title = 'Bowler for next over'}) async {
     final inn = this.inn;
     final available = inn.bowlingXI
         .where((id) => id != inn.lastBowlerId)
         .toList();
-    final idx = await _pickPlayer('Bowler for next over', available);
-    if (idx != null) {
+    final idx = await _pickPlayer(
+      title,
+      available,
+      addNewTeamId: inn.bowlingTeamId,
+    );
+    if (idx == -1) {
+      final newId = await _addNewPlayerToXi(inn.bowlingTeamId);
+      if (newId != null) {
+        if (!setBowler(inn, newId)) {
+          _snack('That bowler bowled the previous over');
+          return;
+        }
+        await _afterChange();
+      }
+    } else if (idx != null) {
       if (!setBowler(inn, available[idx])) {
         _snack('That bowler bowled the previous over');
         return;
       }
+      await _afterChange();
+    }
+  }
+
+  /// Events of the over currently in progress: every event recorded
+  /// after the last completed over boundary.
+  List<BallEvent> _currentOverEvents(InningsState inn) {
+    final bpo = inn.ballsPerOver;
+    if (bpo <= 0) return const [];
+    final threshold = inn.legalBalls - (inn.legalBalls % bpo);
+    var legalBefore = 0;
+    final out = <BallEvent>[];
+    for (final e in inn.events) {
+      if (legalBefore >= threshold) out.add(e);
+      if (e.legalBall) legalBefore++;
+    }
+    return out;
+  }
+
+  /// The bowler may only be corrected while the current over has
+  /// not started: a bowler is picked but no ball of his over has
+  /// been bowled yet. Once any event of the over exists, the bowler
+  /// is locked and undo is the correction path.
+  bool _canChangeBowler(InningsState inn) =>
+      match.status == 'live' &&
+      !inn.isComplete &&
+      !inn.awaitingBowler &&
+      inn.currentBowlerId.isNotEmpty &&
+      _currentOverEvents(inn).isEmpty;
+
+  /// Re-open the bowler picker to correct a wrong pick. A bowler
+  /// who never bowled a ball leaves no empty figure row behind.
+  Future<void> _changeBowler() async {
+    final inn = this.inn;
+    final previous = inn.currentBowlerId;
+    final oldFig = inn.bowling[previous];
+    await _chooseBowler(title: 'Change bowler');
+    if (inn.currentBowlerId != previous &&
+        oldFig != null &&
+        oldFig.legalBalls == 0 &&
+        oldFig.runs == 0 &&
+        oldFig.wickets == 0 &&
+        oldFig.wides == 0 &&
+        oldFig.noBalls == 0) {
+      inn.bowling.remove(previous);
       await _afterChange();
     }
   }
@@ -858,6 +1086,33 @@ class _ScoringScreenState extends State<ScoringScreen> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          if (_showVoiceHint)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    // Distinct from the AppBar speaker toggle icon,
+                    // so widget tests (and users) never confuse them.
+                    const Icon(Icons.record_voice_over, color: kGold),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Voice commentary is toggled by the speaker '
+                        'icon above (currently off by default). It '
+                        'speaks on wickets, milestones and over '
+                        'summaries.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _dismissVoiceHint,
+                      child: const Text('Got it'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -942,7 +1197,21 @@ class _ScoringScreenState extends State<ScoringScreen> {
           else if (inn.isComplete)
             _inningsBreakCard()
           else if (match.status == 'live')
-            _scoringPad(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_canChangeBowler(inn))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: _changeBowler,
+                      icon: const Icon(Icons.swap_horiz, size: 18),
+                      label: const Text('Change bowler'),
+                    ),
+                  ),
+                _scoringPad(),
+              ],
+            ),
         ],
       ),
     );
