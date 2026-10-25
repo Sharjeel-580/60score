@@ -20,8 +20,6 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'crash_reporting.dart';
-
 /// Result of an auth attempt.
 enum AuthStatus {
   ok,
@@ -46,6 +44,13 @@ class AuthService extends ChangeNotifier {
 
   bool _firebaseReady = false;
   bool get firebaseReady => _firebaseReady;
+
+  /// The exception thrown by Firebase.initializeApp(), if it failed.
+  /// Kept (instead of swallowed) so a failed init is diagnosable on
+  /// the login screen instead of looking like a logged-out state.
+  /// Null when init succeeded or has not run yet.
+  String? _initError;
+  String? get initError => _initError;
 
   // ---------- Guest mode ----------
   // "Continue as Guest" on the login gate is remembered on-device: a
@@ -106,8 +111,7 @@ class AuthService extends ChangeNotifier {
     try {
       await Firebase.initializeApp();
       _firebaseReady = true;
-      // Crash traces from here on (never throws, no-op offline).
-      await initCrashReporting();
+      _initError = null;
       FirebaseAuth.instance.authStateChanges().listen((user) {
         if (user != null && _guestMode) {
           // A real login supersedes the guest choice: after a later
@@ -125,9 +129,12 @@ class AuthService extends ChangeNotifier {
             .first
             .timeout(const Duration(seconds: 2));
       } catch (_) {}
-    } catch (_) {
-      // No google-services.json (or other init failure): stay offline.
+    } catch (e) {
+      // Init failed (missing config, native/device-side failure):
+      // stay offline, but KEEP the reason so the login screen can
+      // show it instead of the generic not-set-up banner.
       _firebaseReady = false;
+      _initError = e.toString();
     }
     _initDone = true;
     if (!_readyCompleter.isCompleted) _readyCompleter.complete();
@@ -136,6 +143,12 @@ class AuthService extends ChangeNotifier {
 
   AuthResult _guard() {
     if (!_firebaseReady) {
+      // A real init failure shows its own reason; only a never-run
+      // init keeps the generic offline banner.
+      if (_initError != null) {
+        return AuthResult(
+            AuthStatus.unavailable, 'Cloud setup failed: $_initError');
+      }
       return const AuthResult(AuthStatus.unavailable,
           'Cloud account is not set up yet. The app works fully offline.');
     }
