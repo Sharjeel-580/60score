@@ -107,13 +107,15 @@ class _TeamsScreenState extends State<TeamsScreen> {
                 builder: (_) => TeamDetailScreen(store: store, team: t),
               ),
             ).then((_) async {
-              // The .then future is discarded: a persist throw
-              // here would be an unhandled async error, so catch
-              // it like the per-ball _afterChange chain does.
-              try {
-                await store.persist();
-              } catch (e) {
-                debugPrint('Team detail persist failed: $e');
+              // M1: only the team changed → teams-only save. A failed
+              // save is shown, not swallowed into a debug print.
+              final saved = await store.persistTeamsOnly();
+              if (!saved && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Team changes could not be saved.'),
+                  ),
+                );
               }
             }),
           );
@@ -149,7 +151,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
         await store.upsertTeam(Team(id: Store.newId('team'), name: name));
       } else {
         existing.name = name;
-        await store.persist();
+        await store.persistTeamsOnly();
       }
     }
   }
@@ -197,7 +199,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   team.players.add(r.toTeamPlayer(Store.newId('player')));
                 }
               }
-              await store.persist();
+              await store.persistTeamsOnly();
               setState(() {});
             },
           ),
@@ -224,7 +226,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               );
               if (name != null && name.isNotEmpty) {
                 setState(() => team.name = name);
-                await store.persist();
+                await store.persistTeamsOnly();
               }
             },
           ),
@@ -319,7 +321,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                       );
                       if (confirm != true) return;
                       setState(() => team.players.removeAt(i));
-                      await store.persist();
+                      await store.persistTeamsOnly();
                     },
                   ),
                 );
@@ -435,7 +437,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                                     return;
                                   }
                                   team.players.add(r.toTeamPlayer());
-                                  await store.persist();
+                                  await store.persistTeamsOnly();
                                   if (ctx.mounted) Navigator.pop(ctx);
                                   if (context.mounted) {
                                     setState(() {});
@@ -650,7 +652,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       p.isKeeper = wk;
       if (existing == null) team.players.add(p);
       setState(() {});
-      await store.persist();
+      await store.persistTeamsOnly();
     }
   }
 }
