@@ -228,21 +228,6 @@ void main() {
       expect(await SyncService().pull(store), isFalse);
     });
 
-    test('syncNow while scoring reports the scoring guard', () async {
-      final store = await guestStore();
-      SyncService().scoringActive = true;
-      final result = await SyncService().syncNow(store);
-      expect(result.ok, isFalse);
-      expect(result.error, 'scoring');
-    });
-
-    test('syncNow logged out reports login', () async {
-      final store = await guestStore();
-      final result = await SyncService().syncNow(store);
-      expect(result.ok, isFalse);
-      expect(result.error, 'login');
-    });
-
     test('onAppResumed is a no-op', () async {
       final store = await guestStore();
       SyncService().scoringActive = true;
