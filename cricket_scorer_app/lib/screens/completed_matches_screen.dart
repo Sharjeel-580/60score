@@ -40,9 +40,13 @@ class _CompletedMatchesScreenState extends State<CompletedMatchesScreen> {
     if (mounted) setState(() {});
   }
 
+  // v1.4.5: no-result matches are finished matches too — they belong
+  // in the Completed view alongside completed ones. Live/scheduled
+  // matches stay excluded. The status itself is untouched.
   List<Match> get _completed {
-    final list =
-        store.matches.where((m) => m.status == 'completed').toList();
+    final list = store.matches
+        .where((m) => m.status == 'completed' || m.status == 'noResult')
+        .toList();
     list.sort((a, b) => b.dateIso.compareTo(a.dateIso));
     return list;
   }
@@ -153,7 +157,7 @@ class _CompletedMatchesScreenState extends State<CompletedMatchesScreen> {
               ],
             ),
           ),
-          const StatusPill('completed'),
+          StatusPill(m.status),
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 20),
             color: kSilver,
