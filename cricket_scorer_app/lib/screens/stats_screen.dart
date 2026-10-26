@@ -100,8 +100,10 @@ Widget _rankCircle(int rank) {
   );
 }
 
-/// One tappable leaderboard row: rank, team avatar, name + team, stat
-/// columns, chevron -> player profile (existing screen).
+/// One tappable leaderboard row: rank, team avatar, name + team,
+/// headline stat only, chevron -> player profile (existing screen,
+/// which shows every computed stat). The 1.4.5 edit affordance stays
+/// on the row: gold-pencil marker for edited rows + edit button.
 Widget _leaderboardRow(
   BuildContext context,
   Store store,
@@ -161,7 +163,9 @@ Widget _leaderboardRow(
           ),
           for (final col in columns)
             SizedBox(
-              width: 40,
+              // Headline-only rows get a wider box so long labels
+              // (e.g. "Dismissals") fit without squeezing the name.
+              width: columns.length == 1 ? 64 : 40,
               child: Column(
                 children: [
                   Text(
@@ -808,48 +812,24 @@ class _StatsScreenState extends State<StatsScreen> {
 
   List<Widget> _playersView() {
     final career = _career();
-    final batCols = [
-      _StatCol('Runs', (c) => '${c.runs}'),
-      _StatCol('Inns', (c) => '${c.inningsBatted}'),
-      _StatCol('Avg', (c) => c.battingAverage.toStringAsFixed(1)),
-      _StatCol('SR', (c) => c.battingSR.toStringAsFixed(1)),
-    ];
-    final bowlCols = [
-      _StatCol('Wkts', (c) => '${c.wickets}'),
-      _StatCol('Overs', (c) => oversText(c.ballsBowled, 6)),
-      _StatCol('Econ', (c) => c.economy.toStringAsFixed(1)),
-      _StatCol(
-        'Avg',
-        (c) => c.wickets == 0 ? '-' : c.bowlingAverage.toStringAsFixed(1),
-      ),
-    ];
-    final arCols = [
-      _StatCol('Runs', (c) => '${c.runs}'),
-      _StatCol('Wkts', (c) => '${c.wickets}'),
-      _StatCol('MVP', (c) => c.mvpPoints.toStringAsFixed(0)),
-      _StatCol('SR', (c) => c.battingSR.toStringAsFixed(1)),
-    ];
-    final fieldCols = [
-      _StatCol('Ct', (c) => '${c.catches}'),
-      _StatCol('St', (c) => '${c.stumpings}'),
-      _StatCol('RO', (c) => '${c.runOuts}'),
+    // Standing rule (1.4.6): main-list rows show ONLY the headline
+    // stat; full detail lives on the player profile opened by tapping
+    // the row. The old 4-column rows plus the single-tournament edit
+    // icons overflowed a 360dp phone and collapsed the name column
+    // to zero width, so names vanished in single-tournament view.
+    final batHeadline = [_StatCol('Runs', (c) => '${c.runs}')];
+    final bowlHeadline = [_StatCol('Wkts', (c) => '${c.wickets}')];
+    final arHeadline = [
       _StatCol('MVP', (c) => c.mvpPoints.toStringAsFixed(0)),
     ];
-    final hsCols = [
-      _StatCol('HS', (c) => '${c.highScore}'),
-      _StatCol('Runs', (c) => '${c.runs}'),
-      _StatCol('Inns', (c) => '${c.inningsBatted}'),
-      _StatCol('SR', (c) => c.battingSR.toStringAsFixed(1)),
-    ];
-    final bestCols = [
-      _StatCol('Best', (c) => c.bestFigures),
-      _StatCol('Wkts', (c) => '${c.wickets}'),
-      _StatCol('Econ', (c) => c.economy.toStringAsFixed(1)),
+    final fieldHeadline = [
       _StatCol(
-        'Avg',
-        (c) => c.wickets == 0 ? '-' : c.bowlingAverage.toStringAsFixed(1),
+        'Dismissals',
+        (c) => '${c.catches + c.stumpings + c.runOuts}',
       ),
     ];
+    final hsHeadline = [_StatCol('HS', (c) => '${c.highScore}')];
+    final bestHeadline = [_StatCol('Best', (c) => c.bestFigures)];
 
     final byRuns = _inTeam(career.values.toList())
       ..sort((a, b) => b.runs.compareTo(a.runs));
@@ -905,13 +885,13 @@ class _StatsScreenState extends State<StatsScreen> {
           title: 'Top Batsmen',
           subtitle: 'Most Runs',
           leaders: byRuns.where((c) => c.runs > 0).take(5).toList(),
-          columns: batCols,
+          columns: batHeadline,
           onViewAll: () => pushFull(
             title: 'Top Batsmen',
             subtitle: 'Most Runs',
             icon: Icons.sports_cricket,
             leaders: byRuns.where((c) => c.runs > 0).toList(),
-            columns: batCols,
+            columns: batHeadline,
           ),
         ),
       );
@@ -922,13 +902,13 @@ class _StatsScreenState extends State<StatsScreen> {
           title: 'Top Bowlers',
           subtitle: 'Most Wickets',
           leaders: byWkts.where((c) => c.wickets > 0).take(5).toList(),
-          columns: bowlCols,
+          columns: bowlHeadline,
           onViewAll: () => pushFull(
             title: 'Top Bowlers',
             subtitle: 'Most Wickets',
             icon: Icons.sports_baseball,
             leaders: byWkts.where((c) => c.wickets > 0).toList(),
-            columns: bowlCols,
+            columns: bowlHeadline,
           ),
         ),
       );
@@ -940,13 +920,13 @@ class _StatsScreenState extends State<StatsScreen> {
           title: 'Top Batsmen',
           subtitle: 'Most Runs',
           leaders: byRuns.where((c) => c.runs > 0).take(10).toList(),
-          columns: batCols,
+          columns: batHeadline,
           onViewAll: () => pushFull(
             title: 'Top Batsmen',
             subtitle: 'Most Runs',
             icon: Icons.sports_cricket,
             leaders: byRuns.where((c) => c.runs > 0).toList(),
-            columns: batCols,
+            columns: batHeadline,
           ),
         ),
       );
@@ -958,13 +938,13 @@ class _StatsScreenState extends State<StatsScreen> {
           title: 'Top Bowlers',
           subtitle: 'Most Wickets',
           leaders: byWkts.where((c) => c.wickets > 0).take(10).toList(),
-          columns: bowlCols,
+          columns: bowlHeadline,
           onViewAll: () => pushFull(
             title: 'Top Bowlers',
             subtitle: 'Most Wickets',
             icon: Icons.sports_baseball,
             leaders: byWkts.where((c) => c.wickets > 0).toList(),
-            columns: bowlCols,
+            columns: bowlHeadline,
           ),
         ),
       );
@@ -979,13 +959,13 @@ class _StatsScreenState extends State<StatsScreen> {
           title: 'Top All Rounders',
           subtitle: 'MVP Points',
           leaders: ars.take(10).toList(),
-          columns: arCols,
+          columns: arHeadline,
           onViewAll: () => pushFull(
             title: 'Top All Rounders',
             subtitle: 'MVP Points',
             icon: Icons.star,
             leaders: ars,
-            columns: arCols,
+            columns: arHeadline,
           ),
         ),
       );
@@ -1000,13 +980,13 @@ class _StatsScreenState extends State<StatsScreen> {
           title: 'Top Fielders',
           subtitle: 'Most Dismissals',
           leaders: fielders.take(10).toList(),
-          columns: fieldCols,
+          columns: fieldHeadline,
           onViewAll: () => pushFull(
             title: 'Top Fielders',
             subtitle: 'Most Dismissals',
             icon: Icons.sports_handball,
             leaders: fielders,
-            columns: fieldCols,
+            columns: fieldHeadline,
           ),
         ),
       );
@@ -1016,8 +996,8 @@ class _StatsScreenState extends State<StatsScreen> {
       _moreStatsSection(
         byHS: byHS,
         byBowl: byBowl,
-        hsCols: hsCols,
-        bestCols: bestCols,
+        hsHeadline: hsHeadline,
+        bestHeadline: bestHeadline,
       ),
     );
     return out;
@@ -1285,8 +1265,8 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _moreStatsSection({
     required List<CareerStats> byHS,
     required List<CareerStats> byBowl,
-    required List<_StatCol> hsCols,
-    required List<_StatCol> bestCols,
+    required List<_StatCol> hsHeadline,
+    required List<_StatCol> bestHeadline,
   }) {
     final t = _pointsTournament();
     return Column(
@@ -1298,7 +1278,9 @@ class _StatsScreenState extends State<StatsScreen> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            childAspectRatio: 2.5,
+            // 1.4.6: taller cells — the old 2.5 ratio clipped the
+            // two-line subtitles on narrow phones (vertical overflow).
+            childAspectRatio: 2.0,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
           ),
@@ -1332,7 +1314,7 @@ class _StatsScreenState extends State<StatsScreen> {
                     subtitle: 'Individual & Team',
                     icon: Icons.star,
                     leaders: byHS.where((c) => c.highScore > 0).toList(),
-                    columns: hsCols,
+                    columns: hsHeadline,
                     editTournament: _editTournament(),
                     scopeMatches: _filteredMatches(),
                   ),
@@ -1353,7 +1335,7 @@ class _StatsScreenState extends State<StatsScreen> {
                     subtitle: 'Figures & Economy',
                     icon: Icons.sports_cricket,
                     leaders: byBowl.where((c) => c.bestWickets > 0).toList(),
-                    columns: bestCols,
+                    columns: bestHeadline,
                     editTournament: _editTournament(),
                     scopeMatches: _filteredMatches(),
                   ),
@@ -1419,6 +1401,8 @@ class _StatsScreenState extends State<StatsScreen> {
                   children: [
                     Text(
                       title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13,
@@ -2629,6 +2613,7 @@ class PlayerProfileScreen extends StatelessWidget {
           row('Catches', '${c.catches}'),
           row('Stumpings', '${c.stumpings}'),
           row('Run outs', '${c.runOuts}'),
+          row('Dismissals', '${c.dismissals}'),
           row('MVP points', c.mvpPoints.toStringAsFixed(0)),
           if (manual.isNotEmpty) ...[
             const Divider(height: 24),
