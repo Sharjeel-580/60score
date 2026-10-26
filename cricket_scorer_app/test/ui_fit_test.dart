@@ -103,8 +103,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
-    // Score field: the second text field (quota is first).
-    await tester.enterText(find.byType(TextField).at(1), '150');
     // Reveal-by-drag (ListView builds lazily; scrollUntilVisible
     // trips over the focused field's inner Scrollable here).
     Future<void> reveal(Finder f) async {
@@ -113,6 +111,16 @@ void main() {
         await tester.pumpAndSettle();
       }
     }
+
+    // Score field (labelled 'Your team score' in the default mode).
+    // It sits below the fold at 360dp once the qualification button
+    // above it is counted, so scroll it into view before typing.
+    await reveal(find.text('Your team score'));
+    final scoreField = find.ancestor(
+      of: find.text('Your team score'),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(scoreField, '150');
 
     await reveal(find.byType(GoldButton));
     await tester.tap(find.byType(GoldButton));
