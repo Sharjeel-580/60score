@@ -325,10 +325,9 @@ void main() {
   });
 
   group('live receive + prompt push (v1.3.4)', () {
-    test('push debounce is ~1s, retry cadence is short', () {
-      expect(SyncService.pushDebounce, const Duration(seconds: 1));
-      expect(SyncService.retryInterval, const Duration(seconds: 20));
-    });
+    // v1.4.5 offline-first: the debounce + retry timers are retired
+    // (pushes run only at sync points); that contract is pinned in
+    // test/offline_first_test.dart, not here.
 
     test('a newer snapshot from another device is applied', () {
       expect(
