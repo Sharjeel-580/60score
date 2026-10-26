@@ -111,11 +111,16 @@ void main() {
         pattern: const [0, 1, 2, 4, 6, 0, 1, 3],
       );
       expect(sizes.length, 8);
-      // Linear growth: the second half adds less than the first
-      // half's total, and the total stays well below the 4x a
-      // quadratic (persisted undo) history would produce.
+      // Linear growth (v1.4.5 recalibration): each ball adds one
+      // event plus one BOUNDED delta undo step, so the second half
+      // adds roughly one first-half total — more than the old
+      // zero-stack bound, but still linear. A quadratic history
+      // (one full-innings snapshot per ball, as pre-1.4.3) would
+      // make the second half add ~3x the first half's total, so
+      // the <2x bound plus the <3x total bound below still guard
+      // exactly against that blowup.
       expect(sizes[7] > sizes[3], isTrue);
-      expect(sizes[7] - sizes[3], lessThan(sizes[3]));
+      expect(sizes[7] - sizes[3], lessThan(2 * sizes[3]));
       expect(sizes[7], lessThan(3 * sizes[3]));
     });
   });
@@ -158,16 +163,18 @@ void main() {
       expect(restored.innings[0].totalRuns, total);
 
       final re = restored.toJson();
+      // v1.4.5: the re-persisted record DOES carry 'undoStack' —
+      // but as an empty list, because the legacy string stack was
+      // dropped on load. The huge snapshot payload is gone.
       expect(
-        (re['innings'] as List)[0],
-        isNot(contains('undoStack')),
+        ((re['innings'] as List)[0] as Map)['undoStack'],
+        isEmpty,
       );
       expect(jsonEncode(re).length, lessThan(hugeSize ~/ 10));
 
-      // v1.4.4: the legacy string stack is DROPPED on load (undo is
-      // session-only), so the restored stack is empty — not 200.
-      // One more ball then starts a fresh 1-entry step stack,
-      // still capped at 50.
+      // v1.4.5: the legacy string stack is DROPPED on load, so the
+      // restored stack is empty — not 200. One more ball then
+      // starts a fresh 1-entry step stack, still capped at 50.
       expect(restored.innings[0].undoStack.length, 0);
       expect(
         applyBall(restored.innings[0], BallInput(batRuns: 1)),
