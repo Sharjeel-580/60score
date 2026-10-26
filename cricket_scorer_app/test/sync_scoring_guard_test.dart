@@ -170,12 +170,13 @@ void main() {
       expect(rm.innings[0].events.length, 24);
       // 4 overs x (0+1+4+6+2+0) = 4 x 13 = 52.
       expect(rm.innings[0].totalRuns, 52);
-      // Phase-1 property still holds after reload: no undo stack
-      // in the persisted record.
-      expect(
-        (rm.toJson()['innings'] as List)[0],
-        isNot(contains('undoStack')),
-      );
+      // v1.4.5: the undo stack IS persisted (delta steps, capped
+      // 50), so undo survives the reload — the reverse of the old
+      // Phase-1 rule. 24 balls scored, 24 steps restored.
+      expect(rm.innings[0].undoStack.length, 24);
+      expect(undoLastBall(rm.innings[0]), isTrue);
+      expect(rm.innings[0].legalBalls, 23);
+      expect(rm.innings[0].events.length, 23);
     });
   });
 }
