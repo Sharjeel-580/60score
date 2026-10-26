@@ -391,5 +391,166 @@ void main() {
       final q = guaranteedQualifiers(table, upcoming);
       expect(q, contains(_tids[0]));
     });
+
+    test('Super 4: incomplete league leaves semifinal slots TBA', () async {
+      final store = setup([]);
+      // Complete every league fixture except one.
+      final league =
+          store.matches.where((m) => m.stage == 'league').toList();
+      for (var i = 0; i < league.length - 1; i++) {
+        final m = league[i];
+        final res = leagueResult(
+          id: m.id,
+          a: m.teamAId,
+          b: m.teamBId,
+          aRuns: 130,
+          aWkts: 4,
+          aBalls: 60,
+          bRuns: 120,
+          bWkts: 7,
+          bBalls: 60,
+        );
+        store.matches.remove(m);
+        store.matches.add(res);
+      }
+      final update = await applyPlayoffUpdate(store, _tournamentId);
+      expect(update.changed, isFalse);
+      expect(
+        store.tournamentById(_tournamentId)!.qualificationFinalized,
+        isFalse,
+      );
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
+      final sf2 = store.matches.firstWhere((m) => m.id == 'sf2');
+      expect(sf1.teamAId, isEmpty);
+      expect(sf1.teamBId, isEmpty);
+      expect(sf2.teamAId, isEmpty);
+      expect(sf2.teamBId, isEmpty);
+    });
+
+    test('Super 4: noResult league matches count as terminal', () async {
+      final store = setup([]);
+      for (final m
+          in store.matches.where((m) => m.stage == 'league').toList()) {
+        final res = leagueResult(
+          id: m.id,
+          a: m.teamAId,
+          b: m.teamBId,
+          aRuns: 130,
+          aWkts: 4,
+          aBalls: 60,
+          bRuns: 120,
+          bWkts: 7,
+          bBalls: 60,
+          status: 'noResult',
+        );
+        store.matches.remove(m);
+        store.matches.add(res);
+      }
+      final update = await applyPlayoffUpdate(store, _tournamentId);
+      expect(update.changed, isTrue);
+      expect(update.finalQualifiers.length, 4);
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
+      final sf2 = store.matches.firstWhere((m) => m.id == 'sf2');
+      expect(sf1.teamAId, update.finalQualifiers[0]);
+      expect(sf1.teamBId, update.finalQualifiers[3]);
+      expect(sf2.teamAId, update.finalQualifiers[1]);
+      expect(sf2.teamBId, update.finalQualifiers[2]);
+    });
+
+    test('Super 4: cancelled league matches do NOT trigger auto-fill',
+        () async {
+      final store = setup([]);
+      // Complete every league fixture except one, which is cancelled.
+      final league =
+          store.matches.where((m) => m.stage == 'league').toList();
+      for (var i = 0; i < league.length - 1; i++) {
+        final m = league[i];
+        final res = leagueResult(
+          id: m.id,
+          a: m.teamAId,
+          b: m.teamBId,
+          aRuns: 130,
+          aWkts: 4,
+          aBalls: 60,
+          bRuns: 120,
+          bWkts: 7,
+          bBalls: 60,
+        );
+        store.matches.remove(m);
+        store.matches.add(res);
+      }
+      final cancelled = league.last;
+      final cancelledRes = leagueResult(
+        id: cancelled.id,
+        a: cancelled.teamAId,
+        b: cancelled.teamBId,
+        aRuns: 0,
+        aWkts: 0,
+        aBalls: 0,
+        bRuns: 0,
+        bWkts: 0,
+        bBalls: 0,
+        status: 'cancelled',
+      );
+      store.matches.remove(cancelled);
+      store.matches.add(cancelledRes);
+      final update = await applyPlayoffUpdate(store, _tournamentId);
+      expect(update.changed, isFalse);
+      expect(
+        store.tournamentById(_tournamentId)!.qualificationFinalized,
+        isFalse,
+      );
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
+      final sf2 = store.matches.firstWhere((m) => m.id == 'sf2');
+      expect(sf1.teamAId, isEmpty);
+      expect(sf1.teamBId, isEmpty);
+      expect(sf2.teamAId, isEmpty);
+      expect(sf2.teamBId, isEmpty);
+    });
+
+    test('Super 4: filled slots are never auto-overwritten', () async {
+      final store = setup([]);
+      Future<void> completeLeague({required bool bWins}) async {
+        for (final m
+            in store.matches.where((m) => m.stage == 'league').toList()) {
+          final res = leagueResult(
+            id: m.id,
+            a: m.teamAId,
+            b: m.teamBId,
+            aRuns: bWins ? 120 : 130,
+            aWkts: 4,
+            aBalls: 60,
+            bRuns: bWins ? 130 : 120,
+            bWkts: 7,
+            bBalls: 60,
+          );
+          store.matches.remove(m);
+          store.matches.add(res);
+        }
+      }
+
+      await completeLeague(bWins: false);
+      final first = await applyPlayoffUpdate(store, _tournamentId);
+      expect(first.changed, isTrue);
+      final sf1 = store.matches.firstWhere((m) => m.id == 'sf1');
+      final sf2 = store.matches.firstWhere((m) => m.id == 'sf2');
+      final sf1A = sf1.teamAId;
+      final sf1B = sf1.teamBId;
+      final sf2A = sf2.teamAId;
+      final sf2B = sf2.teamBId;
+      expect(sf1A, isNotEmpty);
+      // Reverse every result: the final table flips, but the filled
+      // slots must stick even on a forced correction pass.
+      await completeLeague(bWins: true);
+      await applyPlayoffUpdate(store, _tournamentId, force: true);
+      expect(
+        store.tournamentById(_tournamentId)!.qualifiedTeamIds,
+        isNot(equals(first.finalQualifiers)),
+      );
+      expect(sf1.teamAId, sf1A);
+      expect(sf1.teamBId, sf1B);
+      expect(sf2.teamAId, sf2A);
+      expect(sf2.teamBId, sf2B);
+    });
   });
 }
