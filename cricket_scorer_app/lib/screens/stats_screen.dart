@@ -252,14 +252,17 @@ void _refreshRowAfterReset(
   copyBaseCounters(c, fresh);
 }
 
-/// Per-player stats edit (v1.4.5, mirror of the points-table row
-/// edit): the dialog is pre-filled from the existing override, else
-/// the computed row. Save stores the override on the tournament
-/// (travels with the existing blob sync, tournaments key only);
-/// Reset removes it so the row goes back to computed values.
-/// Counts parse leniently: a blank, invalid or negative count saves
-/// as 0 — never a refusal. Only base counters are editable; averages,
-/// strike rates, economy and best figures recompute from them.
+/// Per-player stats edit (v1.4.5, delta semantics since v1.4.7):
+/// the dialog is pre-filled from the DISPLAYED row (computed +
+/// delta). Save stores the difference between the typed values
+/// and the computed row as the new delta — additive counters —
+/// while highScore/bestWickets/bestRuns save as absolute floors
+/// (max semantics), so later matches keep flowing into the edited
+/// row. Reset removes the override so the row goes back to
+/// computed values. Counts parse leniently: a blank, invalid or
+/// negative count saves as 0 — never a refusal. Only base counters
+/// are editable; averages, strike rates, economy and best figures
+/// recompute from them.
 Future<void> _editPlayerStatsRow(
   BuildContext context,
   Store store,
@@ -277,29 +280,26 @@ Future<void> _editPlayerStatsRow(
     return v;
   }
 
-  final cMatches = ctrl('${existing?.matches ?? c.matches}');
-  final cInnings = ctrl('${existing?.inningsBatted ?? c.inningsBatted}');
-  final cNotOuts = ctrl('${existing?.notOuts ?? c.notOuts}');
-  final cRuns = ctrl('${existing?.runs ?? c.runs}');
-  final cBalls = ctrl('${existing?.ballsFaced ?? c.ballsFaced}');
-  final cHS = ctrl('${existing?.highScore ?? c.highScore}');
-  final c100s = ctrl('${existing?.hundreds ?? c.hundreds}');
-  final c50s = ctrl('${existing?.fifties ?? c.fifties}');
-  final c4s = ctrl('${existing?.fours ?? c.fours}');
-  final c6s = ctrl('${existing?.sixes ?? c.sixes}');
-  final cBallsBowled =
-      ctrl('${existing?.ballsBowled ?? c.ballsBowled}');
-  final cRunsConceded =
-      ctrl('${existing?.runsConceded ?? c.runsConceded}');
-  final cWkts = ctrl('${existing?.wickets ?? c.wickets}');
-  final cBestWkts = ctrl('${existing?.bestWickets ?? c.bestWickets}');
+  final cMatches = ctrl('${c.matches}');
+  final cInnings = ctrl('${c.inningsBatted}');
+  final cNotOuts = ctrl('${c.notOuts}');
+  final cRuns = ctrl('${c.runs}');
+  final cBalls = ctrl('${c.ballsFaced}');
+  final cHS = ctrl('${c.highScore}');
+  final c100s = ctrl('${c.hundreds}');
+  final c50s = ctrl('${c.fifties}');
+  final c4s = ctrl('${c.fours}');
+  final c6s = ctrl('${c.sixes}');
+  final cBallsBowled = ctrl('${c.ballsBowled}');
+  final cRunsConceded = ctrl('${c.runsConceded}');
+  final cWkts = ctrl('${c.wickets}');
+  final cBestWkts = ctrl('${c.bestWickets}');
   // Computed bestRuns is a huge sentinel when no wickets exist —
   // never show that in the field.
-  final cBestRuns = ctrl(
-      '${existing?.bestRuns ?? (c.wickets > 0 ? c.bestRuns : 0)}');
-  final cCatches = ctrl('${existing?.catches ?? c.catches}');
-  final cStumpings = ctrl('${existing?.stumpings ?? c.stumpings}');
-  final cRunOuts = ctrl('${existing?.runOuts ?? c.runOuts}');
+  final cBestRuns = ctrl('${c.wickets > 0 ? c.bestRuns : 0}');
+  final cCatches = ctrl('${c.catches}');
+  final cStumpings = ctrl('${c.stumpings}');
+  final cRunOuts = ctrl('${c.runOuts}');
   final allCtrls = [
     cMatches,
     cInnings,
@@ -387,9 +387,11 @@ Future<void> _editPlayerStatsRow(
       if (saved) {
         _refreshRowAfterReset(store, tournament.id, c, scopeMatches);
       } else {
+        // Revert the map entry only: the displayed row object
+        // still shows the old (override-adjusted) values, so
+        // touching it here would double-apply the old delta.
         if (prev != null) {
           tournament.playerStatsOverrides[c.playerId] = prev;
-          applyPlayerStatsOverrides({c.playerId: c}, {c.playerId: prev});
         }
       }
       if (context.mounted) {
@@ -402,42 +404,63 @@ Future<void> _editPlayerStatsRow(
         );
       }
     } else if (action == 'save') {
+      // v1.4.7: store DELTAS between the typed (displayed) values
+      // and the computed row for additive counters, so later
+      // matches keep updating this row. MAX-type fields save as
+      // absolute floors. Computed baseline matches the display
+      // order: compute, then manual stats, then overrides.
+      final computedMap = computeCareerStats(
+        scopeMatches ?? store.matches,
+        tournamentId: tournament.id,
+      );
+      applyManualStats(computedMap, store.manualStats);
+      final base = computedMap[c.playerId] ?? CareerStats(c.playerId);
       final o = PlayerStatsOverride(
-        matches: count(cMatches),
-        inningsBatted: count(cInnings),
-        notOuts: count(cNotOuts),
-        runs: count(cRuns),
-        ballsFaced: count(cBalls),
+        matches: count(cMatches) - base.matches,
+        inningsBatted: count(cInnings) - base.inningsBatted,
+        notOuts: count(cNotOuts) - base.notOuts,
+        runs: count(cRuns) - base.runs,
+        ballsFaced: count(cBalls) - base.ballsFaced,
         highScore: count(cHS),
-        hundreds: count(c100s),
-        fifties: count(c50s),
-        fours: count(c4s),
-        sixes: count(c6s),
-        ballsBowled: count(cBallsBowled),
-        runsConceded: count(cRunsConceded),
-        wickets: count(cWkts),
+        hundreds: count(c100s) - base.hundreds,
+        fifties: count(c50s) - base.fifties,
+        fours: count(c4s) - base.fours,
+        sixes: count(c6s) - base.sixes,
+        ballsBowled: count(cBallsBowled) - base.ballsBowled,
+        runsConceded: count(cRunsConceded) - base.runsConceded,
+        wickets: count(cWkts) - base.wickets,
         bestWickets: count(cBestWkts),
         bestRuns: count(cBestRuns),
-        catches: count(cCatches),
-        stumpings: count(cStumpings),
-        runOuts: count(cRunOuts),
+        catches: count(cCatches) - base.catches,
+        stumpings: count(cStumpings) - base.stumpings,
+        runOuts: count(cRunOuts) - base.runOuts,
       );
       final prev = tournament.playerStatsOverrides[c.playerId];
       tournament.playerStatsOverrides[c.playerId] = o;
+      tournament.overridesDeltaMigrated = true;
       final saved = await store.persistTournamentsOnly();
       if (!saved) {
-        // Revert so the display never claims a save that did not
-        // land on disk.
+        // Revert the map entry only, so the display never claims
+        // a save that did not land on disk. The displayed row
+        // object still shows the old values — do not touch it,
+        // or the old delta would be applied twice.
         if (prev != null) {
           tournament.playerStatsOverrides[c.playerId] = prev;
-          applyPlayerStatsOverrides({c.playerId: c}, {c.playerId: prev});
         } else {
           tournament.playerStatsOverrides.remove(c.playerId);
         }
       } else {
         // Keep the displayed row truthful (pushed leaderboards hold
-        // pre-edit objects): apply the saved values to it directly.
-        applyPlayerStatsOverrides({c.playerId: c}, {c.playerId: o});
+        // pre-edit objects): recompute it from the computed row
+        // plus the new override, then copy it over.
+        final freshMap = computeCareerStats(
+          scopeMatches ?? store.matches,
+          tournamentId: tournament.id,
+        );
+        applyManualStats(freshMap, store.manualStats);
+        applyPlayerStatsOverrides(freshMap, {c.playerId: o});
+        final fresh = freshMap[c.playerId];
+        if (fresh != null) copyBaseCounters(c, fresh);
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
