@@ -14,6 +14,7 @@ import 'draft.dart';
 import 'entity_sync.dart';
 import 'models.dart';
 import 'publish_service.dart';
+import 'scoring.dart';
 import 'sync_service.dart';
 import 'tournament_engine.dart';
 
@@ -232,9 +233,76 @@ class Store extends ChangeNotifier implements PlayoffStore {
       return !_recordExistsLocally(
           key.substring(0, sep), key.substring(sep + 1));
     });
+    // v1.4.7: convert any pre-v1.4.7 wholesale overrides to deltas
+    // (see [migrateOverridesToDeltas]). Not persisted here on
+    // purpose: re-deriving from still-absolute on-disk data is
+    // idempotent, and the next tournaments persist (any edit save,
+    // or the import path below) writes the migrated form with the
+    // flag. Any save of an override always carries flag=true, so a
+    // saved delta can never be re-migrated as an absolute.
+    migrateOverridesToDeltas();
     welcomeDone = prefs.getBool(_kWelcome) ?? false;
     loaded = true;
     notifyListeners();
+  }
+
+  /// One-time v1.4.7 migration: stored wholesale overrides
+  /// (pre-v1.4.7 absolute values, as the user typed them) become
+  /// per-field deltas against the currently computed rows, so an
+  /// edited row keeps updating with later matches instead of
+  /// freezing. Displayed values are exactly unchanged at migration
+  /// (see [pointsOverrideToDelta] / [playerStatsOverrideToDelta]
+  /// for the max-field exception, where an already-overtaken manual
+  /// best rises to computed — which is the new rule anyway).
+  ///
+  /// Safe to call repeatedly: flagged tournaments are skipped, and
+  /// re-deriving from still-absolute on-disk data yields the same
+  /// deltas. Returns true if any tournament was processed. Called
+  /// from [load] and at the end of the import/restore apply phase.
+  /// The migrated form reaches disk on the next tournaments persist
+  /// (the import path persists immediately; edit saves persist the
+  /// tournaments key with the flag).
+  bool migrateOverridesToDeltas() {
+    var changed = false;
+    for (final t in tournaments) {
+      if (t.overridesDeltaMigrated) continue;
+      if (t.pointsTableOverrides.isNotEmpty) {
+        // Computed WITHOUT overrides but WITH pointsAdjustments:
+        // exactly the baseline the delta must offset.
+        final computed = computePointsTable(
+          t.id,
+          t.teamIds,
+          matches,
+          pointsAdjustments: t.pointsAdjustments,
+        );
+        for (final e in t.pointsTableOverrides.entries) {
+          PointsRow? row;
+          for (final r in computed) {
+            if (r.teamId == e.key) row = r;
+          }
+          if (row != null) {
+            t.pointsTableOverrides[e.key] =
+                pointsOverrideToDelta(e.value, row);
+          }
+        }
+      }
+      if (t.playerStatsOverrides.isNotEmpty) {
+        // Baseline matches the display order: compute, then manual
+        // stats, then overrides.
+        final computed = computeCareerStats(matches, tournamentId: t.id);
+        applyManualStats(computed, manualStats);
+        for (final e in t.playerStatsOverrides.entries) {
+          final c = computed[e.key];
+          if (c != null) {
+            t.playerStatsOverrides[e.key] =
+                playerStatsOverrideToDelta(e.value, c);
+          }
+        }
+      }
+      t.overridesDeltaMigrated = true;
+      changed = true;
+    }
+    return changed;
   }
 
   /// Switches the active identity: pending cloud writes for the old
@@ -541,6 +609,11 @@ class Store extends ChangeNotifier implements PlayoffStore {
     // The same consistency rule for Trash: a record that exists
     // locally again must not also sit in Trash.
     _trash.removeWhere((e) => _recordExistsLocally(e.kind, e.id));
+    // v1.4.7: an imported backup may carry pre-v1.4.7 wholesale
+    // overrides — convert them before the persist below, so the
+    // restored data displays exactly as it did, and the persisted
+    // form is already deltas with the flag set.
+    migrateOverridesToDeltas();
     final saved = await persist();
     if (!saved) {
       // The apply is in memory only — disk still holds the old
