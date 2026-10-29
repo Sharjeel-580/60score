@@ -120,6 +120,39 @@ class _SummaryCard extends StatelessWidget {
     };
   }
 
+  /// Aggregate bowling figures for the POTM across all innings, plus
+  /// whether he bowled at all. A bowler with only wides/no-balls
+  /// (legalBalls == 0) counts as not having bowled, matching the
+  /// mini-table filter.
+  ({int wickets, int balls, int runs, bool bowled}) _potmBowling(
+    String pid,
+  ) {
+    var wickets = 0, balls = 0, runs = 0;
+    for (final inn in match.innings) {
+      final bf = inn.bowling[pid];
+      if (bf != null && bf.legalBalls > 0) {
+        wickets += bf.wickets;
+        balls += bf.legalBalls;
+        runs += bf.runs;
+      }
+    }
+    return (
+      wickets: wickets,
+      balls: balls,
+      runs: runs,
+      bowled: balls > 0,
+    );
+  }
+
+  /// Whether the POTM batted anywhere in the match.
+  bool _potmBatted(String pid) {
+    for (final inn in match.innings) {
+      final bf = inn.batting[pid];
+      if (bf != null && bf.batted) return true;
+    }
+    return false;
+  }
+
   DateTime? _matchDate() {
     if (match.dateIso.isEmpty) return null;
     return DateTime.tryParse(match.dateIso.split('T').first);
@@ -690,7 +723,7 @@ class _SummaryCard extends StatelessWidget {
   }
 
   /// Batting + bowling mini-tables for one innings, poster shape:
-  /// top 4 batters by runs, top 3 bowlers by wickets desc then runs
+  /// top 3 batters by runs, top 3 bowlers by wickets desc then runs
   /// asc. Fewer rows when the match has fewer performers — never
   /// padded.
   Widget _teamTableCard(InningsState inn) {
@@ -858,7 +891,7 @@ class _SummaryCard extends StatelessWidget {
             ),
           ),
           tableHead(const ['BATSMAN', 'R', 'B', '4s', '6s', 'SR']),
-          for (final e in batters.take(4)) batRow(e.key, e.value),
+          for (final e in batters.take(3)) batRow(e.key, e.value),
           const Divider(height: 12, color: Colors.white10),
           const Text(
             'BOWLING',
@@ -888,14 +921,34 @@ class _SummaryCard extends StatelessWidget {
     final sr = s['balls']! == 0
         ? '-'
         : (s['runs']! * 100 / s['balls']!).toStringAsFixed(1);
-
-    final statRows = <List<String>>[
-      ['${s['runs']}', 'RUNS'],
-      ['${s['balls']}', 'BALLS'],
-      ['${s['fours']}', 'FOURS'],
-      ['${s['sixes']}', 'SIXES'],
-      [sr, 'STRIKE RATE'],
-    ];
+    // v1.4.7: an all-rounder POTM shows BOTH disciplines together.
+    // Batting rows for batters (and as the fallback for a
+    // figure-less POTM, same zeros as before); bowling rows when
+    // he bowled. A pure bowler shows bowling only, a pure batter
+    // batting only — never a misleading zero set for the other
+    // discipline.
+    final bowl = _potmBowling(pid);
+    final batted = _potmBatted(pid);
+    final statRows = <List<String>>[];
+    if (batted || !bowl.bowled) {
+      statRows.addAll([
+        ['${s['runs']}', 'RUNS'],
+        ['${s['balls']}', 'BALLS'],
+        ['${s['fours']}', 'FOURS'],
+        ['${s['sixes']}', 'SIXES'],
+        [sr, 'STRIKE RATE'],
+      ]);
+    }
+    if (bowl.bowled) {
+      final econ =
+          (bowl.runs * match.ballsPerOver / bowl.balls).toStringAsFixed(1);
+      statRows.addAll([
+        ['${bowl.wickets}', 'WICKETS'],
+        [oversText(bowl.balls, match.ballsPerOver), 'OVERS'],
+        ['${bowl.runs}', 'RUNS'],
+        [econ, 'ECONOMY'],
+      ]);
+    }
 
     return Container(
       padding: const EdgeInsets.all(14),
