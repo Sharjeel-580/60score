@@ -1324,25 +1324,29 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
     );
   }
 
-  /// Manual points-table row editor (v1.4.4): the whole displayed row
-  /// for one team. Pre-filled with the override when one exists, else
-  /// with the computed row. Save stores the override on the tournament
-  /// (travels with the existing blob sync); Reset removes it so the
-  /// row goes back to computed values. Counts parse leniently: a
-  /// blank, invalid or negative count saves as 0 — never a refusal.
-  /// NRR accepts any decimal (negative included).
+  /// Manual points-table row editor (v1.4.4, delta semantics since
+  /// v1.4.7): the dialog shows the DISPLAYED row (computed + delta)
+  /// and Save stores the difference between the typed values and
+  /// the computed row as the new delta, so later matches keep
+  /// flowing into the edited row. Reset removes the override so
+  /// the row goes back to computed values. Counts parse leniently:
+  /// a blank, invalid or negative count saves as 0 — never a
+  /// refusal. NRR accepts any decimal (negative included).
   Future<void> _editPointsRow(BuildContext context, PointsRow row) async {
     final teamId = row.teamId;
     final existing = tournament.pointsTableOverrides[teamId];
     TextEditingController ctrl(String v) => TextEditingController(text: v);
-    final cP = ctrl('${existing?.played ?? row.played}');
-    final cW = ctrl('${existing?.won ?? row.won}');
-    final cL = ctrl('${existing?.lost ?? row.lost}');
-    final cT = ctrl('${existing?.tied ?? row.tied}');
-    final cNR = ctrl('${existing?.noResult ?? row.noResult}');
-    final cPts = ctrl('${existing?.points ?? row.points}');
+    // Pre-fill from the DISPLAYED row: under delta semantics the
+    // stored override is a delta, not a display value, so reading
+    // it here would show the correction instead of the row.
+    final cP = ctrl('${row.played}');
+    final cW = ctrl('${row.won}');
+    final cL = ctrl('${row.lost}');
+    final cT = ctrl('${row.tied}');
+    final cNR = ctrl('${row.noResult}');
+    final cPts = ctrl('${row.points}');
     final cNrr = ctrl(
-      (existing?.nrr ?? row.nrr).toStringAsFixed(3),
+      row.nrr.toStringAsFixed(3),
     );
     try {
       final action = await showDialog<String>(
@@ -1420,15 +1424,32 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
 
         final nrr = double.tryParse(cNrr.text.trim()) ?? 0;
         final prev = tournament.pointsTableOverrides[teamId];
+        // v1.4.7: store the DELTA between the typed (displayed)
+        // values and the computed row — never the typed values
+        // themselves — so later matches keep updating this row.
+        // Computed WITHOUT overrides but WITH pointsAdjustments,
+        // matching the baseline the display uses.
+        PointsRow? computed;
+        for (final r in computePointsTable(
+          tournament.id,
+          tournament.teamIds,
+          store.matches,
+          pointsAdjustments: tournament.pointsAdjustments,
+        )) {
+          if (r.teamId == teamId) computed = r;
+        }
+        final base = computed ??
+            PointsRow(teamId); // no matches yet: computed is all zero
         tournament.pointsTableOverrides[teamId] = PointsTableOverride(
-          played: count(cP),
-          won: count(cW),
-          lost: count(cL),
-          tied: count(cT),
-          noResult: count(cNR),
-          points: count(cPts),
-          nrr: nrr,
+          played: count(cP) - base.played,
+          won: count(cW) - base.won,
+          lost: count(cL) - base.lost,
+          tied: count(cT) - base.tied,
+          noResult: count(cNR) - base.noResult,
+          points: count(cPts) - base.points,
+          nrr: nrr - base.nrr,
         );
+        tournament.overridesDeltaMigrated = true;
         final saved = await store.persistTournamentsOnly();
         if (mounted) {
           if (!saved) {
