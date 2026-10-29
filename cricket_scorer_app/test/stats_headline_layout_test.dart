@@ -30,13 +30,9 @@ Store _storeWithData({bool withOverride = false}) {
   final t = Tournament(id: 't1', name: 'Super Sixty', teamIds: ['ta', 'tb']);
   if (withOverride) {
     // Single-tournament override (by design it only applies in this
-    // view): the row must show the overridden runs + gold marker.
-    t.playerStatsOverrides['a1'] = PlayerStatsOverride(
-      matches: 1,
-      inningsBatted: 1,
-      runs: 59,
-      ballsFaced: 30,
-    );
+    // view): since v1.4.7 stored values are DELTAS, so the row
+    // shows computed 62 + delta (-3) = 59, with the gold marker.
+    t.playerStatsOverrides['a1'] = PlayerStatsOverride(runs: -3);
   }
   s.tournaments = [t];
   final m = Match(
