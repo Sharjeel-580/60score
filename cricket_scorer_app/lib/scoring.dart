@@ -1328,20 +1328,25 @@ List<PointsRow> computePointsTable(
   pointsAdjustments.forEach((teamId, extra) {
     rows[teamId]?.points += extra;
   });
-  // Manual row overrides (v1.4.4): applied AFTER normal computation, so
-  // an edited row replaces its computed values wholesale (counts,
-  // points and NRR alike). Overrides for unknown team ids are ignored.
-  // Sorting below then runs on the overridden values as usual.
+  // Manual row overrides (v1.4.4, delta semantics since v1.4.7):
+  // applied AFTER normal computation (pointsAdjustments included),
+  // so an edited row is computed + delta — the hand correction is
+  // preserved AND later matches keep flowing in. Overrides for
+  // unknown team ids are ignored. Sorting below then runs on the
+  // adjusted values as usual.
   for (final row in rows.values) {
     final o = pointsTableOverrides[row.teamId];
     if (o == null) continue;
-    row.played = o.played;
-    row.won = o.won;
-    row.lost = o.lost;
-    row.tied = o.tied;
-    row.noResult = o.noResult;
-    row.points = o.points;
-    row.nrrOverride = o.nrr;
+    row.played += o.played;
+    row.won += o.won;
+    row.lost += o.lost;
+    row.tied += o.tied;
+    row.noResult += o.noResult;
+    row.points += o.points;
+    // nrrOverride holds the DISPLAYED NRR (computed + delta); the
+    // getter returns it verbatim, so setting it here is what makes
+    // the adjusted NRR visible. A zero delta leaves it unchanged.
+    row.nrrOverride = row.nrr + o.nrr;
   }
   final list = rows.values.toList();
   list.sort((x, y) {
@@ -1539,14 +1544,24 @@ Map<String, CareerStats> computeCareerStats(
 bool _looksLikePlayerId(String token) =>
     token.length >= 8 && token.contains(RegExp(r'[0-9]'));
 
-/// Applies per-player stats overrides (v1.4.5, mirror of the
-/// points-table overrides): an override REPLACES the computed base
-/// counters for that player. Derived values (average, strike rate,
-/// economy, best figures, MVP) are NOT stored — they recompute from
-/// these counters via [CareerStats] getters. Overrides for unknown
-/// playerIds are skipped: an override only ever targets a row that
-/// exists. The input map is mutated in place (its objects are freshly
-/// computed per view, same as [applyManualStats]).
+/// Applies per-player stats overrides (v1.4.5, delta semantics since
+/// v1.4.7): additive base counters are ADDED to the computed row, so
+/// a hand correction survives AND later matches keep flowing in.
+/// MAX-type fields ([highScore], [bestWickets], [bestRuns]) are NOT
+/// deltas — a "best" is not a sum, so the displayed value is
+/// max(computed, stored): a manual best is never lost, but a newer
+/// computed best can overtake it. Derived values (average, strike
+/// rate, economy, best figures, MVP) are NOT stored — they recompute
+/// from these counters via [CareerStats] getters. Overrides for
+/// unknown playerIds are skipped: an override only ever targets a
+/// row that exists. The input map is mutated in place (its objects
+/// are freshly computed per view, same as [applyManualStats]).
+///
+/// Sentinel guard: a computed row with no wickets carries
+/// bestRuns = 1 << 30, which must never leak into a max() — it is
+/// treated as 0 here. A stored manual best is only meaningful
+/// alongside its wickets; when neither side has wickets the
+/// displayed bestRuns stays 0 (bestFigures shows '-' anyway).
 void applyPlayerStatsOverrides(
   Map<String, CareerStats> stats,
   Map<String, PlayerStatsOverride> overrides,
@@ -1555,25 +1570,88 @@ void applyPlayerStatsOverrides(
     final c = stats[e.key];
     if (c == null) continue;
     final o = e.value;
-    c.matches = o.matches;
-    c.inningsBatted = o.inningsBatted;
-    c.notOuts = o.notOuts;
-    c.runs = o.runs;
-    c.ballsFaced = o.ballsFaced;
-    c.highScore = o.highScore;
-    c.hundreds = o.hundreds;
-    c.fifties = o.fifties;
-    c.fours = o.fours;
-    c.sixes = o.sixes;
-    c.ballsBowled = o.ballsBowled;
-    c.runsConceded = o.runsConceded;
-    c.wickets = o.wickets;
-    c.bestWickets = o.bestWickets;
-    c.bestRuns = o.bestRuns;
-    c.catches = o.catches;
-    c.stumpings = o.stumpings;
-    c.runOuts = o.runOuts;
+    c.matches += o.matches;
+    c.inningsBatted += o.inningsBatted;
+    c.notOuts += o.notOuts;
+    c.runs += o.runs;
+    c.ballsFaced += o.ballsFaced;
+    c.hundreds += o.hundreds;
+    c.fifties += o.fifties;
+    c.fours += o.fours;
+    c.sixes += o.sixes;
+    c.ballsBowled += o.ballsBowled;
+    c.runsConceded += o.runsConceded;
+    c.wickets += o.wickets;
+    c.catches += o.catches;
+    c.stumpings += o.stumpings;
+    c.runOuts += o.runOuts;
+    // MAX-type fields: absolute floors, never deltas (see doc above).
+    // Capture the computed bestRuns effectiveness BEFORE mutating
+    // bestWickets, or the sentinel guard below would read the
+    // already-adjusted wickets.
+    final computedBestRuns = c.bestWickets > 0 ? c.bestRuns : 0;
+    if (o.highScore > c.highScore) c.highScore = o.highScore;
+    if (o.bestWickets > c.bestWickets) c.bestWickets = o.bestWickets;
+    if (o.bestRuns > computedBestRuns) c.bestRuns = o.bestRuns;
   }
+}
+
+/// Converts a stored wholesale (pre-v1.4.7) points-table override —
+/// absolute values as the user typed them — into a v1.4.7 delta
+/// against [computed], the row computed WITHOUT overrides but WITH
+/// pointsAdjustments (exactly what [computePointsTable] produces
+/// with an empty overrides map). Displayed values are exactly
+/// unchanged: computed + delta == the old absolute values.
+PointsTableOverride pointsOverrideToDelta(
+  PointsTableOverride old,
+  PointsRow computed,
+) {
+  return PointsTableOverride(
+    played: old.played - computed.played,
+    won: old.won - computed.won,
+    lost: old.lost - computed.lost,
+    tied: old.tied - computed.tied,
+    noResult: old.noResult - computed.noResult,
+    points: old.points - computed.points,
+    nrr: old.nrr - computed.nrr,
+  );
+}
+
+/// Converts a stored wholesale (pre-v1.4.7) player-stats override
+/// into a v1.4.7 delta against [computed], the row computed WITHOUT
+/// overrides (including manual stats, matching the display order:
+/// compute, then manual stats, then overrides). Additive counters
+/// become old − computed, so displayed values are exactly
+/// unchanged. MAX-type fields are already absolute floors under the
+/// new semantics and pass through untouched — with one honest
+/// exception: if computed already overtook the manual best, the
+/// displayed best rises to computed (that IS the new rule: a newer
+/// computed best can overtake), so exact preservation holds for
+/// max fields only when the manual best was still ahead.
+PlayerStatsOverride playerStatsOverrideToDelta(
+  PlayerStatsOverride old,
+  CareerStats computed,
+) {
+  return PlayerStatsOverride(
+    matches: old.matches - computed.matches,
+    inningsBatted: old.inningsBatted - computed.inningsBatted,
+    notOuts: old.notOuts - computed.notOuts,
+    runs: old.runs - computed.runs,
+    ballsFaced: old.ballsFaced - computed.ballsFaced,
+    highScore: old.highScore,
+    hundreds: old.hundreds - computed.hundreds,
+    fifties: old.fifties - computed.fifties,
+    fours: old.fours - computed.fours,
+    sixes: old.sixes - computed.sixes,
+    ballsBowled: old.ballsBowled - computed.ballsBowled,
+    runsConceded: old.runsConceded - computed.runsConceded,
+    wickets: old.wickets - computed.wickets,
+    bestWickets: old.bestWickets,
+    bestRuns: old.bestRuns,
+    catches: old.catches - computed.catches,
+    stumpings: old.stumpings - computed.stumpings,
+    runOuts: old.runOuts - computed.runOuts,
+  );
 }
 
 /// Copies every base counter from [src] to [dst] (derived getters
