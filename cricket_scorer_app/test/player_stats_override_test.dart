@@ -1,6 +1,8 @@
-// Per-player stats overrides (v1.4.5, mirror of the points-table
-// overrides): an override replaces the computed base counters, and
-// derived values recompute from them via CareerStats getters.
+// Per-player stats overrides (v1.4.5, delta semantics since
+// v1.4.7): additive counters display as computed + delta, so later
+// matches keep updating an edited row; highScore/bestWickets/
+// bestRuns display as max(computed, manual floor). Derived values
+// recompute from the displayed counters via CareerStats getters.
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +15,8 @@ import 'package:cricket_scorer_app/store.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('override replaces computed row and derived values recompute', () {
+  test('override adjusts computed row (delta) and derived values recompute',
+      () {
     final c = CareerStats('p1')
       ..matches = 4
       ..inningsBatted = 4
@@ -26,21 +29,24 @@ void main() {
       ..bestWickets = 2
       ..bestRuns = 20;
     final map = {'p1': c};
+    // Deltas chosen so additive counters land on the old wholesale
+    // values: computed runs 100 + delta 200 = 300, matches 4 + 6
+    // = 10, and so on.
     applyPlayerStatsOverrides(map, {
       'p1': PlayerStatsOverride(
-        matches: 10,
-        inningsBatted: 8,
+        matches: 6,
+        inningsBatted: 4,
         notOuts: 2,
-        runs: 300,
-        ballsFaced: 150,
+        runs: 200,
+        ballsFaced: 100,
         highScore: 120,
         hundreds: 1,
         fifties: 2,
         fours: 30,
         sixes: 10,
-        ballsBowled: 120,
-        runsConceded: 90,
-        wickets: 6,
+        ballsBowled: 60,
+        runsConceded: 30,
+        wickets: 4,
         bestWickets: 4,
         bestRuns: 15,
         catches: 3,
@@ -48,18 +54,21 @@ void main() {
         runOuts: 2,
       ),
     });
-    // Base counters replaced.
+    // Base counters adjusted by the deltas.
     expect(c.matches, 10);
     expect(c.runs, 300);
     expect(c.ballsFaced, 150);
     expect(c.wickets, 6);
-    // Derived values recompute from the stored counters.
+    // Derived values recompute from the displayed counters.
     expect(c.dismissals, 6);
     expect(c.battingAverage, 50);
     expect(c.battingSR, 200);
     expect(c.economy, 4.5);
     expect(c.bowlingAverage, 15);
-    expect(c.bestFigures, '4/15');
+    // MAX fields: bestWickets floor 4 beats computed 2, but the
+    // bestRuns floor 15 does NOT beat computed 20 — the displayed
+    // best figure is 4/20, not 4/15.
+    expect(c.bestFigures, '4/20');
     expect(c.highScore, 120);
   });
 
