@@ -1,8 +1,9 @@
-// Points-table row overrides (v1.4.4): a hand-edited row replaces the
-// computed row, sorts on the overridden values, and Reset (removing
-// the override) restores computed values. The override map lives on
-// the tournament and must round-trip through JSON; old tournament
-// JSON without the field must still load.
+// Points-table row overrides (v1.4.4, delta semantics since v1.4.7):
+// a hand-edited row is computed + delta, sorts on the adjusted
+// values, and keeps updating with later matches. Reset (removing
+// the override) restores computed values. The override map lives
+// on the tournament and must round-trip through JSON; old
+// tournament JSON without the field must still load.
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cricket_scorer_app/models.dart';
@@ -100,29 +101,32 @@ void main() {
   PointsRow rowOf(List<PointsRow> rows, String teamId) =>
       rows.firstWhere((r) => r.teamId == teamId);
 
-  test('override replaces a row and sorts on overridden values', () {
+  test('override adjusts a row (delta) and sorts on adjusted values',
+      () {
     final t = tourn(['ta', 'tb', 'tc']);
     final base = leaguePointsTable(t, matches);
     expect(rowOf(base, 'tb').points, 0);
     expect(rowOf(base, 'tb').played, 1);
-
+    // tb computed: played 1, lost 1, points 0, NRR -6.25 (lost
+    // 150-100 over 8 overs each). Deltas below give displayed
+    // played 5, won 5, points 10, NRR 2.5.
     t.pointsTableOverrides['tb'] = PointsTableOverride(
-      played: 5,
+      played: 4,
       won: 5,
       lost: 0,
       tied: 0,
       noResult: 0,
       points: 10,
-      nrr: 2.5,
+      nrr: 8.75,
     );
     final edited = leaguePointsTable(t, matches);
     final tb = rowOf(edited, 'tb');
     expect(tb.played, 5);
     expect(tb.won, 5);
-    expect(tb.lost, 0);
+    expect(tb.lost, 1);
     expect(tb.points, 10);
-    expect(tb.nrr, 2.5);
-    // Highest overridden points sorts first.
+    expect(tb.nrr, closeTo(2.5, 1e-9));
+    // Highest adjusted points sorts first.
     expect(edited.first.teamId, 'tb');
     // Other teams are untouched.
     expect(rowOf(edited, 'ta').points, 2);
@@ -130,22 +134,23 @@ void main() {
     expect(rowOf(edited, 'tc').points, 2);
   });
 
-  test('override wins over a points adjustment', () {
+  test('override delta stacks on top of a points adjustment', () {
     final t = tourn(['ta', 'tb', 'tc']);
     t.pointsAdjustments['tb'] = 1;
     t.pointsTableOverrides['tb'] = PointsTableOverride(
-      played: 1,
+      played: 0,
       won: 0,
-      lost: 1,
+      lost: 0,
       tied: 0,
       noResult: 0,
       points: 7,
       nrr: -1.25,
     );
     final rows = leaguePointsTable(t, matches);
-    // Adjustment (+1) would give 1; the override replaces it with 7.
-    expect(rowOf(rows, 'tb').points, 7);
-    expect(rowOf(rows, 'tb').nrr, -1.25);
+    // Computed 0 + adjustment (+1) + delta (+7) = 8; the delta
+    // does NOT replace the adjustment.
+    expect(rowOf(rows, 'tb').points, 8);
+    expect(rowOf(rows, 'tb').nrr, closeTo(-7.5, 1e-9));
   });
 
   test('reset (removing the override) restores computed values', () {
