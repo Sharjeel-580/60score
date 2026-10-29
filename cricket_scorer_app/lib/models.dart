@@ -85,10 +85,16 @@ class Team {
   );
 }
 
-/// A manual points-table row override (v1.4.4): the whole displayed row
-/// for one team, edited by hand on the points table screen. When present,
-/// the engine replaces that team's computed row with these values.
-/// Stored on the tournament, so it travels with the existing blob sync.
+/// A manual points-table row override (v1.4.4, delta semantics since
+/// v1.4.7): per-field ADJUSTMENTS added to the computed row, not a
+/// replacement. Displayed = computed + delta, recomputed after every
+/// match, so a hand correction survives AND later matches keep
+/// flowing in. The [nrr] field is an NRR delta added to the computed
+/// ICC figure. Pre-v1.4.7 stored rows held absolute values; those
+/// are converted to deltas once by [Store.migrateOverridesToDeltas]
+/// (see [Tournament.overridesDeltaMigrated]) — never read an old
+/// absolute row as a delta. Stored on the tournament, so it travels
+/// with the existing blob sync.
 class PointsTableOverride {
   int played;
   int won;
@@ -132,12 +138,19 @@ class PointsTableOverride {
   }
 }
 
-/// Manual per-player stats override (v1.4.5): edited BASE counters
-/// only. Mirror of [PointsTableOverride]: the row is fully replaced
-/// by these counters, and derived values (average, strike rate,
-/// economy, best figures, MVP) recompute from them via [CareerStats]
-/// getters — they are never stored. Pre-filled from the computed row
-/// by the edit dialog; removed per player via Reset.
+/// Manual per-player stats override (v1.4.5, delta semantics since
+/// v1.4.7): additive base counters are DELTAS added to the computed
+/// row (displayed = computed + delta), so later matches keep flowing
+/// into an edited row. MAX-type fields ([highScore], [bestWickets],
+/// [bestRuns]) are NOT deltas — they are absolute floors and the
+/// displayed value is max(computed, stored), because a "best" is not
+/// a sum and a manual best must never be lost to a delta. Derived
+/// values (average, strike rate, economy, best figures, MVP)
+/// recompute from the adjusted counters via [CareerStats] getters —
+/// they are never stored. Pre-filled from the displayed row by the
+/// edit dialog; removed per player via Reset. Pre-v1.4.7 stored rows
+/// held absolute values; those are converted to deltas once by
+/// [Store.migrateOverridesToDeltas].
 class PlayerStatsOverride {
   int matches;
   int inningsBatted;
@@ -241,6 +254,16 @@ class Tournament {
   /// player via Reset. Derived values are NOT stored — they
   /// recompute from these counters via CareerStats getters.
   Map<String, PlayerStatsOverride> playerStatsOverrides;
+  /// v1.4.7 migration marker: true once [pointsTableOverrides] and
+  /// [playerStatsOverrides] hold DELTAS (not pre-v1.4.7 absolute
+  /// values). Constructor default is true — a tournament born under
+  /// v1.4.7+ only ever stores deltas. JSON decoded from older data
+  /// lacks the key and reads false, which triggers the one-time
+  /// [Store.migrateOverridesToDeltas] conversion. Never flip this
+  /// to false on a tournament whose overrides are already deltas:
+  /// the next load would re-derive deltas from deltas and corrupt
+  /// every edited row.
+  bool overridesDeltaMigrated;
   /// Final (locked) playoff qualification: ordered team IDs, rank 1..4.
   /// Empty until the league stage is finalized. Derived by the playoff
   /// engine — never edited by hand.
@@ -272,6 +295,7 @@ class Tournament {
     this.qualificationFinalized = false,
     this.published = false,
     this.oversLimit = 8,
+    this.overridesDeltaMigrated = true,
   }) : teamIds = teamIds ?? [],
        pointsAdjustments = pointsAdjustments ?? {},
        pointsTableOverrides = pointsTableOverrides ?? {},
@@ -291,6 +315,7 @@ class Tournament {
     'playerStatsOverrides': {
       for (final e in playerStatsOverrides.entries) e.key: e.value.toJson(),
     },
+    'overridesDeltaMigrated': overridesDeltaMigrated,
     'qualifiedTeamIds': qualifiedTeamIds,
     'qualificationFinalized': qualificationFinalized,
     'published': published,
@@ -349,6 +374,7 @@ class Tournament {
       pointsAdjustments: adj,
       pointsTableOverrides: overrides,
       playerStatsOverrides: statOverrides,
+      overridesDeltaMigrated: j['overridesDeltaMigrated'] as bool? ?? false,
       qualifiedTeamIds:
           ((j['qualifiedTeamIds'] as List?) ?? [])
               .map((e) => e as String)
