@@ -20,7 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 1.4.4 crash look like a 1.4.3 crash. No version plugin is used
 /// on purpose: adding a native plugin changes the Firebase
 /// registrar set, which broke login in v1.4.0.
-const String kAppVersion = '1.4.7+30';
+const String kAppVersion = '1.4.8+31';
 
 class DebugInfo {
   static const _prefsKey = 'debug_last_error_v1';
