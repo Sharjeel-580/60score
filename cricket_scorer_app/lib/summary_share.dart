@@ -54,7 +54,7 @@ Future<void> shareMatchSummaryImage(
           type: MaterialType.transparency,
           child: RepaintBoundary(
             key: key,
-            child: _SummaryCard(store: store, match: match),
+            child: SummaryShareCard(store: store, match: match),
           ),
         ),
       ),
@@ -93,10 +93,74 @@ Future<void> shareMatchSummaryImage(
   }
 }
 
-class _SummaryCard extends StatelessWidget {
+/// Aggregate bowling figures for one player across a match's innings.
+///
+/// Primary lookup is by exact player id. If no bowling is found under
+/// [pid], fall back to bowling entries whose display name matches the
+/// POTM's display name — the duplicate-identity safety net (v1.4.8):
+/// one human recorded under two ids, e.g. a mid-match "Add new
+/// player" that re-typed an existing squad name, so the POTM's
+/// batting sat under his squad id while his bowling sat under the
+/// fresh id and the 1.4.7 panel showed batting only.
+///
+/// Fallback rules (chosen deliberately):
+/// - It only runs when [nameOf] resolves [pid] to a real stored
+///   name: never when it returns the 'Player' placeholder or the
+///   raw id itself, so unknown ids can never match each other.
+/// - Name comparison is trimmed and case-insensitive.
+/// - When several pids share that name, ALL of their figures are
+///   summed: within one match those pids are duplicates of the same
+///   human, so summing gives his true bowling. Showing nothing (the
+///   1.4.7 bug) is strictly worse, and the primary exact-id path
+///   always wins when it finds anything, so the fallback never
+///   changes a correct record.
+/// - A bowler with only wides/no-balls (legalBalls == 0) counts as
+///   not having bowled, matching the mini-table filter.
+({int wickets, int balls, int runs, bool bowled}) aggregatePotmBowling(
+  List<InningsState> innings,
+  String pid,
+  String Function(String id) nameOf,
+) {
+  var wickets = 0, balls = 0, runs = 0;
+  for (final inn in innings) {
+    final bf = inn.bowling[pid];
+    if (bf != null && bf.legalBalls > 0) {
+      wickets += bf.wickets;
+      balls += bf.legalBalls;
+      runs += bf.runs;
+    }
+  }
+  if (balls > 0) {
+    return (wickets: wickets, balls: balls, runs: runs, bowled: true);
+  }
+  // Duplicate-identity fallback (see doc comment above).
+  final potmName = nameOf(pid).trim();
+  if (potmName.isEmpty || potmName == 'Player' || potmName == pid) {
+    return (wickets: 0, balls: 0, runs: 0, bowled: false);
+  }
+  final wanted = potmName.toLowerCase();
+  for (final inn in innings) {
+    for (final e in inn.bowling.entries) {
+      if (e.value.legalBalls <= 0) continue;
+      if (nameOf(e.key).trim().toLowerCase() != wanted) continue;
+      wickets += e.value.wickets;
+      balls += e.value.legalBalls;
+      runs += e.value.runs;
+    }
+  }
+  return (
+    wickets: wickets,
+    balls: balls,
+    runs: runs,
+    bowled: balls > 0,
+  );
+}
+
+class SummaryShareCard extends StatelessWidget {
   final Store store;
   final Match match;
-  const _SummaryCard({required this.store, required this.match});
+  const SummaryShareCard(
+      {super.key, required this.store, required this.match});
 
   Player? _playerOf(String pid) => store.findPlayer(pid);
 
@@ -121,28 +185,14 @@ class _SummaryCard extends StatelessWidget {
   }
 
   /// Aggregate bowling figures for the POTM across all innings, plus
-  /// whether he bowled at all. A bowler with only wides/no-balls
-  /// (legalBalls == 0) counts as not having bowled, matching the
-  /// mini-table filter.
+  /// whether he bowled at all. Delegates to [aggregatePotmBowling]
+  /// (exact-id lookup, then the duplicate-identity name fallback).
+  /// A bowler with only wides/no-balls (legalBalls == 0) counts as
+  /// not having bowled, matching the mini-table filter.
   ({int wickets, int balls, int runs, bool bowled}) _potmBowling(
     String pid,
-  ) {
-    var wickets = 0, balls = 0, runs = 0;
-    for (final inn in match.innings) {
-      final bf = inn.bowling[pid];
-      if (bf != null && bf.legalBalls > 0) {
-        wickets += bf.wickets;
-        balls += bf.legalBalls;
-        runs += bf.runs;
-      }
-    }
-    return (
-      wickets: wickets,
-      balls: balls,
-      runs: runs,
-      bowled: balls > 0,
-    );
-  }
+  ) =>
+      aggregatePotmBowling(match.innings, pid, store.playerName);
 
   /// Whether the POTM batted anywhere in the match.
   bool _potmBatted(String pid) {
@@ -778,13 +828,21 @@ class _SummaryCard extends StatelessWidget {
           children: [
             Expanded(
               flex: 4,
-              child: Text(
-                '${store.playerName(pid)}${f.out ? '' : ' *'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
+              // v1.4.8: shrink long names to fit instead of cutting
+              // them mid-word at the card edge. FittedBox.scaleDown
+              // with a non-wrapping visible-overflow Text scales the
+              // whole name down; ellipsis alone would truncate it.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${store.playerName(pid)}${f.out ? '' : ' *'}',
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
@@ -820,13 +878,18 @@ class _SummaryCard extends StatelessWidget {
           children: [
             Expanded(
               flex: 4,
-              child: Text(
-                store.playerName(pid),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
+              // v1.4.8: shrink long names to fit (see batRow).
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  store.playerName(pid),
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             ),
@@ -870,14 +933,19 @@ class _SummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            store.teamName(inn.battingTeamId).toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: accent,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
+          // v1.4.8: shrink long team names to fit (see batRow).
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              store.teamName(inn.battingTeamId).toUpperCase(),
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -972,34 +1040,42 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.emoji_events, color: kGold, size: 24),
-              SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'PLAYER',
-                    style: TextStyle(
-                      color: kGold,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 22,
+          // v1.4.8: shrink the header to fit the narrow panel
+          // instead of overflowing it (caught by the long-name
+          // layout test: the icon + letter-spaced subtitle exceed
+          // the panel width under wide font metrics, and the same
+          // overflow would occur on-device with enlarged fonts).
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.emoji_events, color: kGold, size: 24),
+                SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'PLAYER',
+                      style: TextStyle(
+                        color: kGold,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 22,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'OF THE MATCH',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      letterSpacing: 2,
+                    Text(
+                      'OF THE MATCH',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        letterSpacing: 2,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           PlayerAvatar(
@@ -1061,14 +1137,25 @@ class _SummaryCard extends StatelessWidget {
                       fontSize: 18,
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    row[1],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      letterSpacing: 0.5,
+                  // v1.4.8: the label flexes and ellipsizes instead
+                  // of overflowing the narrow panel (caught by the
+                  // long-name layout test: value + label exceed the
+                  // panel width under wide font metrics, and the
+                  // same overflow would occur on-device with
+                  // enlarged fonts). The value always stays fully
+                  // visible; only the label may truncate.
+                  Expanded(
+                    child: Text(
+                      row[1],
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
