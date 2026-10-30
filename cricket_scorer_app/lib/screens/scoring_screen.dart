@@ -216,9 +216,13 @@ class _ScoringScreenState extends State<ScoringScreen> {
     );
   }
 
-  /// Ask for a name and create a brand-new player in [teamId]'s
-  /// squad, then add him to this match's XI (11-player cap).
-  /// Returns the new player id, or null when cancelled / XI full.
+  /// Ask for a name and add the player to [teamId]'s squad (if new)
+  /// and to this match's XI (11-player cap). Returns the player id,
+  /// or null when cancelled / XI full.
+  ///
+  /// v1.4.8: a name already in the squad is REUSED, never re-minted
+  /// (duplicate identity: batting under the squad id, bowling under
+  /// the fresh id). Only a new or ambiguous name mints a fresh id.
   Future<String?> _addNewPlayerToXi(String teamId) async {
     final team = teamOf(teamId);
     if (team == null) return null;
@@ -253,6 +257,19 @@ class _ScoringScreenState extends State<ScoringScreen> {
       ),
     );
     if (name == null || name.isEmpty) return null;
+    // v1.4.8: never mint a second id for a name already in the
+    // squad (duplicate identity — see uniqueSquadPlayerByName).
+    final existing = uniqueSquadPlayerByName(team, name);
+    if (existing != null) {
+      if (match.xiFor(teamId).contains(existing.id)) return existing.id;
+      if (!addToMatchXI(match, teamId, existing.id)) {
+        _snack('Playing XI is full (11 players).');
+        return null;
+      }
+      await store.persist();
+      if (mounted) setState(() {});
+      return existing.id;
+    }
     final id = Store.newId('player');
     team.players.add(Player(id: id, name: name));
     if (!addToMatchXI(match, teamId, id)) {
