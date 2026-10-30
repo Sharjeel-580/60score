@@ -1,5 +1,7 @@
 // Backup & Restore screen (§31). Manual backups, export to Downloads,
-// automatic-backup listing, and merge-style restore.
+// automatic-backup listing, merge-style restore, and import of a backup
+// file transferred from another phone (v1.4.8).
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../backup_service.dart';
@@ -149,9 +151,56 @@ class _BackupScreenState extends State<BackupScreen> {
       ),
     );
     if (ok != true) return;
+    await _runRestore(row.path);
+  }
+
+  /// v1.4.8: import a backup file transferred from another phone
+  /// (WhatsApp / Drive / Bluetooth into Downloads). The picker is
+  /// .json-only; cancelling it does nothing, silently.
+  Future<void> _doImportFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (!mounted) return;
+    if (result == null || result.files.isEmpty) return;
+    final path = result.files.single.path;
+    if (path == null) {
+      await _popup(
+        'Restore failed',
+        'Could not read the selected file.\n\nNothing was changed.',
+      );
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Restore this backup?'),
+        content: const Text(
+          'Restore merges with current data — nothing is deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _runRestore(path);
+  }
+
+  /// Shared restore execution for listed backups and imported files:
+  /// busy flag, merge restore, popup feedback, list reload.
+  Future<void> _runRestore(String path) async {
     if (!mounted) return;
     setState(() => _busy = true);
-    final result = await restoreBackup(widget.store, row.path);
+    final result = await restoreBackup(widget.store, path);
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -193,6 +242,13 @@ class _BackupScreenState extends State<BackupScreen> {
                   icon: Icons.download,
                   kind: ScoreButtonKind.ghost,
                   onPressed: _busy ? null : _doExportDownloads,
+                ),
+                const SizedBox(height: 10),
+                ScoreButton(
+                  label: 'Import backup file',
+                  icon: Icons.upload,
+                  kind: ScoreButtonKind.ghost,
+                  onPressed: _busy ? null : _doImportFile,
                 ),
               ],
             ),
