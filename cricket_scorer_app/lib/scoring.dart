@@ -870,6 +870,29 @@ bool replaceBatsman(InningsState s, String outId, String inId) {
 /// when the player is already in the XI or the XI is full: a Playing
 /// XI holds at most 11 players (v1.3.7; an over-long XI would push
 /// the auto wickets derivation, XI − 1, back to the impossible 11).
+/// Find the UNIQUE squad player whose name matches [name]
+/// (trimmed, case-insensitive), or null when there is no match or
+/// when several squad players share the name.
+///
+/// v1.4.8 duplicate-identity guard: the live-scoring "Add new
+/// player" flow used to mint a fresh id for a re-typed existing
+/// name, giving one human two ids (batting under the squad id,
+/// bowling under the fresh id). Callers reuse the returned player
+/// instead of minting; an ambiguous (multi-match) name returns null
+/// so the caller never guesses — it falls back to minting, as
+/// before.
+Player? uniqueSquadPlayerByName(Team team, String name) {
+  final wanted = name.trim().toLowerCase();
+  if (wanted.isEmpty) return null;
+  Player? found;
+  for (final p in team.players) {
+    if (p.name.trim().toLowerCase() != wanted) continue;
+    if (found != null) return null; // ambiguous: never guess
+    found = p;
+  }
+  return found;
+}
+
 bool addToMatchXI(Match m, String teamId, String playerId) {
   if (playerId.isEmpty) return false;
   final current = m.xiFor(teamId);
